@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales Application · B</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/base.css">
+<link rel="stylesheet" href="shared/sa.css">
+<style>
+  /* B · Full-page steps */
+  .wrap { max-width: 1600px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+  .b-grid { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 1024px) { .b-grid { grid-template-columns: 248px minmax(0, 1fr); } }
+  .b-steps { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 60px; }
+  .b-steps button { display: grid; grid-template-columns: 28px 1fr; gap: 2px 12px; align-items: center; width: 100%; padding: 10px; border: 0; background: none; border-radius: 4px; text-align: start; }
+  .b-steps button:hover { background: var(--primary-10); }
+  .b-steps button[aria-current="step"] { background: var(--primary-10); }
+  .b-steps .d { grid-row: span 2; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--cadet-base); background: var(--white); }
+  .b-steps .done .d { background: var(--success); border-color: var(--success); color: var(--white); }
+  .b-steps [aria-current="step"] .d { border-color: var(--primary); color: var(--primary); }
+  .b-steps .t { font-weight: 600; }
+  .b-steps .s { font-size: 12px; color: var(--muted-fg); }
+  .b-steps .s.todo { color: var(--mango-70); }
+  .b-stepper { display: none; }
+  @media (max-width: 1023px) {
+    .b-steps-card { display: none; }
+    .b-stepper { display: flex; flex-direction: column; gap: 8px; }
+    .b-stepper .bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+    .b-stepper .bar span { display: block; height: 100%; background: var(--primary); }
+    .b-stepper .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  }
+  .b-panel { display: flex; flex-direction: column; min-width: 0; }
+  .b-panel > .sec { min-height: 420px; }
+  .b-foot { position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 12px 24px; background: var(--white); border: 1px solid var(--border-subtle); border-block-start-color: var(--border); border-radius: 0 0 var(--radius) var(--radius); flex-wrap: wrap; }
+  .b-foot .sp { flex: 1; min-width: 160px; font-size: 13px; color: var(--muted-fg); }
+  .b-foot .sp.ok { color: var(--lemon-80); }
+  @media (max-width: 767px) { .b-foot { padding: 12px 16px; } .b-foot .sp { order: -1; flex-basis: 100%; } .b-foot .btn { flex: 1; } }
+  .eyebrow { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); }
+
+  /* service catalog */
+  .cat-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); padding: 2px; gap: 2px; background: var(--white); }
+  .seg button { height: 34px; padding-inline: 14px; border: 0; background: none; border-radius: 3px; color: var(--cadet-base); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .seg button:hover { background: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--primary-10); color: var(--primary); font-weight: 600; }
+  .seg .c { font-size: 11px; background: var(--white); border: 1px solid var(--ocean-20); border-radius: 99px; padding: 0 6px; }
+  .srch { position: relative; flex: 1; min-width: 200px; max-width: 320px; }
+  .srch .inp { padding-inline-start: 36px; }
+  .srch svg { position: absolute; inset-inline-start: 12px; top: 12px; color: var(--cadet-base); }
+  .tiles { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .tile { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); text-align: start; min-height: 64px; }
+  .tile:hover { border-color: var(--primary); }
+  .tile[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-10); }
+  .tile .bx { width: 18px; height: 18px; border-radius: 3px; border: 1.5px solid var(--cadet-07); display: grid; place-items: center; flex-shrink: 0; margin-block-start: 1px; color: var(--white); }
+  .tile[aria-pressed="true"] .bx { background: var(--primary); border-color: var(--primary); }
+  .tile b { display: block; font-weight: 600; }
+  .tile span.h { display: block; font-size: 12px; color: var(--muted-fg); }
+
+  /* selected services list */
+  .sel-g { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); }
+  .sel-gh { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--bg); border-block-end: 1px solid var(--border); flex-wrap: wrap; }
+  .sel-gh b { flex: 1; }
+  .sel-gh .fld { flex-direction: row; align-items: center; gap: 8px; }
+  .sel-gh .inp { width: 90px; height: 36px; }
+  .srow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 12px 16px; border-block-start: 1px solid var(--border); }
+  .sel-gh + .srow { border-block-start: 0; }
+  .srow .tt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .srow .tt b { font-weight: 600; }
+  .srow .tt span { font-size: 12px; color: var(--muted-fg); }
+  .srow .acts { display: flex; gap: 4px; align-items: center; }
+  @media (max-width: 767px) { .srow { grid-template-columns: minmax(0, 1fr) auto; } .srow .st { grid-column: 1; grid-row: 2; justify-self: start; } }
+
+  /* setup drawer */
+  .ln { border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; }
+  .ln-h { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-block-end: 1px solid var(--border-subtle); flex-wrap: wrap; }
+  .ln-h .sel { width: 220px; height: 36px; }
+  .ln-h .sp { flex: 1; }
+  .rr { display: grid; grid-template-columns: minmax(120px, 1fr) 112px 112px; gap: 8px 12px; align-items: center; padding: 10px 16px; border-block-start: 1px solid var(--border-subtle); }
+  .rr:first-of-type { border-block-start: 0; }
+  .rr .money { height: 36px; }
+  .rr .vd { grid-column: 1 / -1; margin-block-start: -4px; }
+  @media (max-width: 767px) { .rr { grid-template-columns: 1fr 1fr; } .rr > span:first-child { grid-column: 1 / -1; } }
+
+  /* review */
+  .rv { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 1280px) { .rv { grid-template-columns: minmax(0, 1fr) 340px; } }
+  .rv-sec { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .rv-sec .hd { display: flex; align-items: center; gap: 8px; }
+  .rv-sec .hd b { flex: 1; }
+</style>
+</head>
+<body>
+<script src="shared/agent-icons.js"></script>
+<script src="shared/sa-core.js"></script>
+<script>
+(function () {
+  const VARIANTS = [{ key: 'final', href: 'application.html', label: 'Final' }, { key: 'a', href: 'variant-a.html', label: 'A · Sections + rail' }, { key: 'b', href: 'variant-b.html', label: 'B · Steps' }, { key: 'c', href: 'variant-c.html', label: 'C · Services first' }];
+  const { icon, esc } = SA;
+  let tab = 'Online', q = '', setup = null; // setup = { id, api }
+  const cl = k => SA.checklist().find(i => i.k === k);
+  const STEPS = [
+    { t: 'Merchant & criteria', next: 'Continue to Services', ok: () => cl('merchant').done && cl('type').done && cl('acts').done, todo: () => SA.checklist().filter(i => ['merchant', 'type', 'acts'].includes(i.k) && !i.done).length },
+    { t: 'Services & pricing', next: 'Continue to Documents', ok: () => cl('svc1').done && cl('pricing').done && cl('just').done, todo: () => SA.servicesIssues().length + (SA.flagged().some(f => !(SA.S.just[f.key] || '').trim()) ? 1 : 0) },
+    { t: 'Documents', next: 'Continue to Payout Method', ok: () => cl('docs').done, todo: () => SA.documentsIssues().length },
+    { t: 'Payout method', opt: true, next: 'Continue to Contracts', ok: () => cl('payout').done, todo: () => SA.payoutsIssues().length },
+    { t: 'Contracts', next: 'Review application', ok: () => cl('contracts').done, todo: () => SA.contractsIssues().length },
+    { t: 'Review & submit', ok: () => !SA.openItems().length, todo: () => SA.openItems().length }
+  ];
+  const cur = () => Math.min(SA.S.step || 0, STEPS.length - 1);
+  const stepSub = (s, i) => i === 5 ? (s.ok() ? 'Ready to submit' : `${s.todo()} left`) : s.ok() ? (s.opt && !SA.S.payouts.length ? 'Optional · skipped' : 'Complete') : s.opt ? 'Optional' : (i > 0 && !SA.S.order.length && i < 5 ? 'Add a service first' : `${s.todo()} to do`);
+
+  function stepsNav() {
+    return `<ol class="b-steps">${STEPS.map((s, i) => { const done = i < 5 && s.ok() && (i !== 3 || SA.S.payouts.length); return `<li><button type="button" class="${done ? 'done' : ''}" data-act="step" data-i="${i}" ${i === cur() ? 'aria-current="step"' : ''}><span class="d">${done ? icon('tick', 'ic-14', 2.5) : i + 1}</span><span class="t">${s.t}</span><span class="s ${!s.ok() && !s.opt && i !== cur() ? 'todo' : ''}">${stepSub(s, i)}</span></button></li>`; }).join('')}</ol>`;
+  }
+  function mobileStepper() {
+    const i = cur();
+    return `<div class="row"><span class="eyebrow">Step ${i + 1} of ${STEPS.length}</span><button type="button" class="link-btn" data-act="allSteps" aria-haspopup="dialog">All steps ${icon('chevron', 'ic')}</button></div><div class="bar"><span style="width:${((i + 1) / STEPS.length) * 100}%"></span></div>`;
+  }
+
+  /* ----- step 2: services ----- */
+  function rateSummary(id) {
+    const c = SA.S.svc[id];
+    return c.lines.map(l => { const ts = SA.tiersFor(id, l); const f = ts[0], s = l.rates[f.key]; return `${l.bank ? esc(l.bank) + ' · ' : ''}${s && s.rate !== '' ? `${f.short || f.label} ${SA.fmtN(s.rate)}% + ${SA.fmtN(s.fee)} EGP${ts.length > 1 ? ` (+${ts.length - 1} rate${ts.length > 2 ? 's' : ''})` : ''}` : 'No rates yet'}`; }).join(' · ');
+  }
+  function stChip(id) {
+    const st = SA.svcState(id), fl = st.flags;
+    if (!st.ready) return `<span class="sc warn">Needs setup</span>`;
+    if (fl.length) return `<span class="sc ${fl.some(f => f.approver === 'Head of Sales') ? 'bad' : 'warn'}">Needs ${fl.some(f => f.approver === 'Head of Sales') ? 'Head of Sales' : 'Sales Manager'} approval</span>`;
+    return `<span class="sc ok">Ready</span>`;
+  }
+  function servicesStep() {
+    const S = SA.S, counts = ch => S.order.filter(id => SA.chOf(id) === ch).length;
+    const tiles = SA.SVC_NAMES.filter(n => n.toLowerCase().includes(q.toLowerCase())).map(n => { const id = tab + ' ' + n, on = !!S.svc[id]; return `<button type="button" class="tile" aria-pressed="${on}" data-act="tile" data-id="${esc(id)}"><span class="bx">${on ? icon('tick', 'ic-14', 2.5) : ''}</span><span><b>${esc(n)}</b><span class="h">${esc(SA.SVC_HINT[n])}</span></span></button>`; }).join('') || '<p class="hint">No service matches.</p>';
+    const groups = SA.CHANNELS.filter(ch => counts(ch)).map(ch => `<div class="sel-g"><div class="sel-gh"><b>${ch} services · ${counts(ch)}</b>${ch === 'POS' ? `<div class="fld"><label for="term">Number of Terminals</label><input class="inp" id="term" data-term inputmode="numeric" value="${esc(S.terminals)}" placeholder="e.g. 2"></div>` : ''}</div>
+      ${S.order.filter(id => SA.chOf(id) === ch).map(id => `<div class="srow" id="row-${id.replace(/\W/g, '')}"><div class="tt"><b>${esc(SA.nmOf(id))}</b><span>${S.svc[id].model} · ${rateSummary(id)}</span></div><span class="st">${stChip(id)}</span><span class="acts"><button type="button" class="btn btn-outline btn-sm" data-act="setup" data-id="${esc(id)}">${SA.svcState(id).rates ? 'Edit' : 'Set up'}</button><button type="button" class="icon-btn" data-act="rmSvc" data-id="${esc(id)}" aria-label="Remove ${esc(SA.label(id))}">${icon('trash', 'ic')}</button></span></div>`).join('')}</div>`).join('');
+    return `<div class="fld"><span class="lbl">Add services</span><div class="cat-tools"><div class="seg" role="group" aria-label="Channel">${SA.CHANNELS.map(ch => `<button type="button" aria-pressed="${tab === ch}" data-act="tab" data-v="${ch}">${ch}${counts(ch) ? `<span class="c">${counts(ch)}</span>` : ''}</button>`).join('')}</div><div class="srch">${icon('search', 'ic')}<input class="inp" type="search" id="svcq" data-q placeholder="Search services" aria-label="Search services" value="${esc(q)}"></div></div></div>
+      <div class="tiles" data-live="tiles">${tiles}</div>
+      <div class="fld"><span class="lbl">Selected services</span>${groups || '<div class="empty-line">Pick services above. Each one you pick is listed here to set up.</div>'}</div>
+      <p class="hint" style="margin:0">Any rate below the published rate needs approval. You'll be asked for a justification before you can continue.</p>`;
+  }
+  function setupBody(id) {
+    const c = SA.S.svc[id];
+    const lines = c.lines.map((l, li) => {
+      const ts = SA.tiersFor(id, l);
+      return `<div class="ln"><div class="ln-h">${SA.needsBank(id) ? SA.bankSelect(id, li) : ''}${SA.pricingBtnHTML(id, li)}<span class="sp"></span>${li > 0 ? `<button type="button" class="link-btn danger" data-act="rmInst" data-id="${esc(id)}" data-li="${li}">Remove</button>` : ''}</div>
+        ${SA.sourceHTML(id, li) ? `<div style="padding:8px 16px 0">${SA.sourceHTML(id, li)}</div>` : ''}
+        ${ts.map(t => `<div class="rr"><span>${t.label}</span>${SA.moneyInputs(id, li, t)}<span class="vd" data-live="bv" data-id="${esc(id)}" data-li="${li}" data-k="${t.key}">${SA.verdictHTML(id, li, t)}</span></div>`).join('')}</div>`;
+    }).join('');
+    return `<div class="grid2"><div class="fld"><label>Model</label>${SA.modelSelect(id)}</div></div>
+      <div class="fld"><span class="lbl">${SA.needsBank(id) ? 'Financial institution and rates' : 'Rates'}</span>${lines}${SA.canAddInst(id) ? `<button type="button" class="link-btn" data-act="addInst" data-id="${esc(id)}" style="align-self:flex-start">${icon('plus', 'ic')}Add institution</button>` : ''}</div>
+      ${SA.isCard(id) ? `<div class="fld"><span class="lbl">Card options</span>${SA.cardOptions(id)}</div>` : ''}`;
+  }
+  function setupFoot(id) { if (!SA.S.svc[id]) return ''; const st = SA.svcState(id); return `<span class="sp hint">${st.issues.length ? esc(st.issues[0]) : st.flags.length ? `${st.flags.length} rate${st.flags.length > 1 ? 's' : ''} below published. You'll justify ${st.flags.length > 1 ? 'them' : 'it'} when you continue` : 'This service is set up.'}</span><button type="button" class="btn btn-primary" data-act="closeSetup">Done</button>`; }
+  function openSetup(id) {
+    SA.drawer({ size: '', title: `Set up ${SA.label(id)}`, sub: SA.SVC_HINT[SA.nmOf(id)], onClose: () => { setup = null; SA.rerender(); },
+      render(api) { api.el.dataset.sa = '1'; setup = { id, api }; drawSetup(); } });
+  }
+  function drawSetup() {
+    if (!setup || !setup.api.el.isConnected) return;
+    if (!SA.S.svc[setup.id]) { setup.api.close(); return; }
+    setup.api.body.innerHTML = setupBody(setup.id);
+    const f = setup.api.el.querySelector('.df') || (() => { const d = document.createElement('div'); d.className = 'df'; setup.api.el.append(d); return d; })();
+    f.dataset.live = 'sfoot'; f.innerHTML = setupFoot(setup.id);
+  }
+
+  /* ----- step 6: review ----- */
+  function reviewStep() {
+    const S = SA.S, fl = SA.flagged();
+    const sec = (i, t, body) => `<div class="rv-sec"><div class="hd"><b>${t}</b>${STEPS[i].ok() ? '<span class="tag ok">Complete</span>' : STEPS[i].opt ? '<span class="opt">(optional)</span>' : '<span class="tag req">To do</span>'}<button type="button" class="link-btn" data-act="step" data-i="${i}">Edit</button></div>${body}</div>`;
+    return `<div class="rv"><div style="display:flex;flex-direction:column;gap:12px">
+      ${sec(0, 'Merchant & criteria', `<dl class="dl"><dt>Business</dt><dd>${esc(S.merchant.name)} · ${esc(S.merchant.email)} · <span dir="ltr">${esc(S.merchant.phone)}</span></dd><dt>Type · industry</dt><dd>${esc(S.entity)} · ${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ') || 'None'}</dd></dl>`)}
+      ${sec(1, 'Services & pricing', S.order.length ? `<dl class="dl">${S.order.map(id => `<dt>${esc(SA.label(id))}</dt><dd>${S.svc[id].model} · ${rateSummary(id)} ${stChip(id)}</dd>`).join('')}${SA.hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals || 'None')}</dd>` : ''}</dl>${fl.length ? `<div class="row-acts"><span class="flag ${fl.some(f => f.approver === 'Head of Sales') ? 'h' : 'm'}">${icon('warn', 'ic-14')}${fl.length} rate${fl.length > 1 ? 's' : ''} will go for approval</span><button type="button" class="link-btn" data-act="justify">Justifications</button></div>` : ''}` : '<p class="hint" style="margin:0">No services yet.</p>')}
+      ${sec(2, 'Documents', `<p style="margin:0">${[...Object.keys(S.docs)].filter(n => Object.keys(S.docs[n]).length).map(esc).join(', ') || 'None uploaded'}${S.storeImage ? ' · Store Image' : ''}</p>`)}
+      ${sec(3, 'Payout method', `<p style="margin:0">${S.payouts.map((p, i) => `${p.type === 'bank' ? esc(p.bank || 'Bank account') : esc(p.provider || 'E-wallet')}${p.id === S.primary ? ' (primary)' : ''}`).join(', ') || 'None added (optional)'}</p>`)}
+      ${sec(4, 'Contracts', `<p style="margin:0">${Object.keys(S.reqContracts).map(esc).concat(S.contracts.filter(c => c.file).map(c => esc(c.label))).join(', ') || 'None uploaded'}</p>`)}
+      </div><div class="card sec" style="padding:20px;align-self:start">${SA.checklistHTML()}</div></div>`;
+  }
+
+  function stepBody(i) {
+    const S = SA.S;
+    if (i === 0) return `<div class="fld"><span class="sub-h">Merchant details</span>${SA.merchantFields()}</div><div class="fld" style="gap:16px"><span class="sub-h">Business criteria</span>${SA.criteriaFields()}</div>`;
+    if (i === 1) return servicesStep();
+    if (!S.order.length && i < 5) return `<div class="empty-line">Add a service first. This step depends on the services you pick.</div><button type="button" class="btn btn-outline btn-sm" data-act="step" data-i="1" style="align-self:flex-start">Go to Services &amp; pricing</button>`;
+    if (i === 2) return SA.documentsSection();
+    if (i === 3) return SA.payoutSection();
+    if (i === 4) return SA.contractsSection();
+    return reviewStep();
+  }
+  const HINTS = ['Basic information, merchant type and activities. Pricing rules and documents are matched on these.', 'Pick the services to activate, then set up each one: model, institution and fees.', 'Only the documents this merchant needs, based on the criteria and services.', 'Add the bank accounts or e-wallets the merchant is paid out to. The first one added is the primary method.', 'Required contracts first, then any other contract already signed with this merchant.', 'Check everything once, then submit.'];
+  function foot() {
+    const i = cur(), s = STEPS[i];
+    let msg = '', ok = s.ok();
+    if (i === 0) { const o = SA.checklist().filter(x => ['merchant', 'type', 'acts'].includes(x.k) && !x.done)[0]; msg = o ? (o.hint || o.label) : ''; }
+    if (i === 1) { const iss = SA.servicesIssues(), fl = SA.flagged(); msg = iss.length ? iss[0].m + (iss.length > 1 ? ` (+${iss.length - 1} more)` : '') : fl.length ? `${fl.length} rate${fl.length > 1 ? 's' : ''} below published. Add a justification to continue` : ''; ok = !iss.length; }
+    if (i === 2) { const d = SA.documentsIssues(); msg = d[0] ? d[0] + (d.length > 1 ? ` (+${d.length - 1} more)` : '') : ''; }
+    if (i === 3) msg = SA.payoutsIssues()[0] || '';
+    if (i === 4) msg = SA.contractsIssues()[0] || '';
+    if (i === 5) { const n = SA.openItems().length; msg = n ? `${n} item${n > 1 ? 's' : ''} left. See the checklist.` : 'Service setup complete'; }
+    if (!SA.S.order.length && i > 1 && i < 5) { msg = 'Add a service first'; ok = false; }
+    const done = !msg || msg === 'Service setup complete';
+    return `${i > 0 ? `<button type="button" class="btn btn-outline" data-act="step" data-i="${i - 1}">Back</button>` : ''}<span class="sp ${done ? 'ok' : ''}">${esc(msg || 'This step is complete')}</span>${i < 5 ? `<button type="button" class="btn btn-primary" data-act="next" ${ok ? '' : 'disabled'}>${s.next}</button>` : `<button type="button" class="btn btn-primary" data-act="submit" ${SA.openItems().length ? 'disabled' : ''}>Submit Merchant Application</button>`}`;
+  }
+
+  const V = {
+    key: 'b',
+    render() {
+      const page = document.getElementById('page');
+      if (!SA.isEdit()) { page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.readOnlyView()}</div>`; return; }
+      const i = cur();
+      page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>
+        <div class="b-grid"><div class="card b-steps-card"><div data-live="steps">${stepsNav()}</div></div>
+        <div class="b-panel"><div class="b-stepper card" style="padding:12px 16px;margin-block-end:12px">${mobileStepper()}</div>
+          <section class="card sec" aria-labelledby="stepH"><div class="sec-h"><div class="tt"><span class="eyebrow">Step ${i + 1} of ${STEPS.length}</span><h2 id="stepH" tabindex="-1">${STEPS[i].t}${STEPS[i].opt ? ' <span class="opt">(optional)</span>' : ''}</h2><p>${HINTS[i]}</p></div></div>${stepBody(i)}</section>
+          <div class="b-foot" data-live="foot">${foot()}</div></div></div></div>`;
+    },
+    afterRender() { drawSetup(); },
+    live: { steps: stepsNav, foot, sfoot: () => setup ? setupFoot(setup.id) : '', bv: el => { const c = SA.S.svc[el.dataset.id]; if (!c) return ''; const l = c.lines[+el.dataset.li]; const t = SA.tiersFor(el.dataset.id, l).find(x => x.key === el.dataset.k); return t ? SA.verdictHTML(el.dataset.id, +el.dataset.li, t) : ''; },
+      tiles: () => { const S = SA.S; return SA.SVC_NAMES.filter(n => n.toLowerCase().includes(q.toLowerCase())).map(n => { const id = tab + ' ' + n, on = !!S.svc[id]; return `<button type="button" class="tile" aria-pressed="${on}" data-act="tile" data-id="${esc(id)}"><span class="bx">${on ? icon('tick', 'ic-14', 2.5) : ''}</span><span><b>${esc(n)}</b><span class="h">${esc(SA.SVC_HINT[n])}</span></span></button>`; }).join('') || '<p class="hint">No service matches.</p>'; } },
+    input(el) { if (el.dataset.q != null) { q = el.value; return true; } return false; },
+    reset() { tab = 'Online'; q = ''; SA.S.step = 0; },
+    act: {
+      step: d => { SA.S.step = +d.i; setTimeout(() => { scrollTo(0, document.querySelector('.b-grid').offsetTop - 60); document.getElementById('stepH')?.focus({ preventScroll: true }); }); },
+      next: () => { const i = cur(); const go = () => { SA.S.step = i + 1; SA.rerender(); scrollTo(0, document.querySelector('.b-grid').offsetTop - 60); document.getElementById('stepH')?.focus({ preventScroll: true }); }; if (i === 1) SA.continueFromServices(go); else go(); return false; },
+      tab: d => { tab = d.v; },
+      tile: d => { if (SA.S.svc[d.id]) SA.removeService(d.id); else { SA.addService(d.id); } },
+      setup: d => { openSetup(d.id); return false; },
+      closeSetup: () => { setup && setup.api.close(); return false; },
+      allSteps: (d, el) => { SA.popover(el, `<div class="pop-b">${stepsNav()}</div>`, null, { width: 300 }); return false; }
+    },
+    onGoto(t) {
+      if (t === 'justify') return SA.openJustify();
+      const map = { merchant: 0, criteria: 0, services: 1, terminals: 1, documents: 2, payout: 3, contracts: 4 };
+      SA.S.step = t.startsWith('svc:') ? 1 : (map[t] != null ? map[t] : SA.S.step); SA.rerender();
+      scrollTo(0, document.querySelector('.b-grid').offsetTop - 60);
+      if (t.startsWith('svc:')) openSetup(t.slice(4)); else if (t === 'terminals') document.getElementById('term')?.focus(); else document.getElementById('stepH')?.focus({ preventScroll: true });
+    }
+  };
+  SA.mount(V, VARIANTS);
+})();
+</script>
+</body>
+</html>

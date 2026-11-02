@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { background: var(--bg); }
+  .doc { max-width: 1600px; margin: 0 auto; padding: 32px 16px 96px; display: flex; flex-direction: column; gap: 32px; }
+  @media (min-width: 768px) { .doc { padding: 40px 32px 96px; } }
+  header h1 { font-size: 31px; }
+  header p { margin: 8px 0 0; color: var(--muted-fg); max-width: 860px; }
+  .tabs { display: flex; gap: 0; border-block-end: 2px solid var(--border); overflow-x: auto; position: sticky; top: 44px; background: var(--bg); z-index: 5; }
+  .tabs button { padding: 10px 18px; font-weight: 600; color: var(--muted-fg); border: 0; background: none; border-block-end: 2px solid transparent; margin-block-end: -2px; white-space: nowrap; }
+  .tabs button[aria-selected="true"] { color: var(--primary); border-color: var(--primary); }
+  .row { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 1000px) {
+    .row:not(.ph) .col { display: grid; grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 20px; align-items: start; }
+    .row:not(.ph) .col h2 { grid-column: 1; flex-wrap: wrap; }
+    .row:not(.ph) .col h2 a { margin-inline-start: 0; width: 100%; }
+    .row:not(.ph) .col img { grid-column: 2; grid-row: 1 / span 2; }
+    .row:not(.ph) .col p { grid-column: 1; font-size: 14px; }
+    .row.ph { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  .col { background: var(--white); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .col h2 { font-size: 18px; display: flex; align-items: center; gap: 8px; }
+  .col h2 a { margin-inline-start: auto; font-family: var(--font-body); font-size: 13px; font-weight: 600; }
+  .col img { width: 100%; border: 1px solid var(--border); border-radius: 4px; display: block; cursor: zoom-in; background: var(--white); }
+  .col.phone img { max-width: 300px; align-self: center; }
+  .col p { margin: 0; font-size: 13px; color: var(--cadet-base); }
+  .col p b { color: var(--foreground); }
+  .lead { margin: 0; color: var(--cadet-base); max-width: 860px; }
+  .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 100; display: grid; place-items: center; padding: 24px; cursor: zoom-out; }
+  .zoom img { max-width: 100%; max-height: 100%; border-radius: 4px; background: var(--white); }
+  .verdict { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 1000px) { .verdict { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .verdict .col ul { margin: 0; padding-inline-start: 18px; color: var(--cadet-base); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+  .verdict .col .btn { align-self: flex-start; margin-block-start: auto; }
+  .pro b { color: var(--lemon-80); } .con b { color: var(--destructive); }
+</style>
+</head>
+<body>
+<div class="proto" role="navigation" aria-label="Prototype controls"><b>Sales Applications</b>
+  <span class="grp"><a href="list.html" title="My Applications list">List</a><a href="application.html" title="The chosen application form">Application</a><a href="variant-a.html" title="Sections + sticky rail">A · Rail</a><a href="variant-b.html" title="Full-page steps">B · Steps</a><a href="variant-c.html" title="Services first, inline blocks">C · Blocks</a><a href="compare.html" title="A, B and C side by side" aria-current="page">Compare</a><a href="audit.html" title="Audit of the current prototype">Audit</a></span><span class="sp"></span></div>
+<main class="doc">
+  <header>
+    <h1>A, B and C side by side</h1>
+    <p>The same application (Delta Pharma, "In progress": Card, Wallet and Bank Installments online, Card on POS) captured at the same moments in each direction, at 1440px and on a phone. Click any image to enlarge it, or open the live page to click through.</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Moment">
+    <button role="tab" aria-selected="true" data-m="2">Services area</button>
+    <button role="tab" aria-selected="false" data-m="3">Adding a service</button>
+    <button role="tab" aria-selected="false" data-m="1">First screen</button>
+    <button role="tab" aria-selected="false" data-m="4">Phone</button>
+  </div>
+  <p class="lead" id="mlead"></p>
+  <div class="row" id="shots"></div>
+
+  <section style="display:flex;flex-direction:column;gap:16px">
+    <h2 style="font-size:22px">In short</h2>
+    <div class="verdict">
+      <div class="col"><h2>A · Sections + rail</h2><ul><li class="pro"><b>+</b> One scroll, with the checklist and Submit always visible on the right</li><li class="pro"><b>+</b> Familiar table, only for the services you tick</li><li class="con"><b>−</b> The pricing table is tight at 1440 because of the rail</li><li class="con"><b>−</b> Below 1280 the rail becomes a bottom bar</li></ul><a class="btn btn-outline" href="variant-a.html">Open A</a></div>
+      <div class="col"><h2>B · Steps</h2><ul><li class="pro"><b>+</b> One task per screen, calm and good on iPad</li><li class="pro"><b>+</b> Each service shows a clear status: Needs setup, Ready or Needs approval</li><li class="con"><b>−</b> Rates are hidden behind a drawer, so it takes more clicks to compare services</li><li class="con"><b>−</b> The biggest departure from the stories (6 steps, a new Review step)</li></ul><a class="btn btn-outline" href="variant-b.html">Open B</a></div>
+      <div class="col"><h2>C · Services first</h2><ul><li class="pro"><b>+</b> Same page structure as the stories, so the smallest AC change</li><li class="pro"><b>+</b> The best published pricing is one "Apply" away on every service</li><li class="con"><b>−</b> Still a long page; the "N left" bar is the only constant progress signal</li><li class="con"><b>−</b> Blocks get tall with many services</li></ul><a class="btn btn-outline" href="variant-c.html">Open C</a></div>
+    </div>
+  </section>
+</main>
+<script>
+  const M = {
+    1: { lead: 'What the salesperson sees when the application opens.', cap: { a: '<b>Rail on the right</b> with status, logs, cancel and the 9-item checklist. Sections are numbered and tagged Complete or To do.', b: '<b>Vertical stepper</b> with a count of what\'s left per step. The panel shows one step at a time.', c: '<b>The stories\' layout</b>: Merchant Details and Criteria side by side, then the Service Setup card.' } },
+    2: { lead: 'The screen the audit flagged as the worst: picking services and setting their pricing.', cap: { a: '<b>Two compact checklists</b> (Online / POS), then a table with rows only for the ticked services. Institution, rates and approval on one line each.', b: '<b>A tile catalog</b> with Online / POS tabs and search, then a list of picked services, each with a status chip and Set up / Edit.', c: '<b>"+ Add service"</b>, then one block per service with model, institution, rates, approval and the source ("From pricing rule…").' } },
+    3: { lead: 'Adding Valu (A, C) or setting up Wallet (B).', cap: { a: '<b>Tick it in the checklist</b>: a new table row appears with its model and "View service pricing".', b: '<b>Set up opens a drawer</b> with model, institution, rates and card options. The below-published flag shows under the rate.', c: '<b>A searchable picker</b> shows what\'s already added; pick several and add them in one go. Each new block offers "Apply" on the best published pricing.' } },
+    4: { lead: 'The services area on a phone (390px).', cap: { a: '<b>Checklists stack</b>; the table scrolls sideways. A bottom bar replaces the rail.', b: '<b>Progress bar</b> + "All steps" menu; tiles wrap two per row. The setup drawer becomes a bottom sheet.', c: '<b>Blocks stack</b> with rates as two-column fields. The sticky "N left" bar stays at the bottom.' } }
+  };
+  const shots = document.getElementById('shots'), lead = document.getElementById('mlead');
+  function show(m) {
+    lead.textContent = M[m].lead; shots.classList.toggle('ph', m == 4);
+    shots.innerHTML = ['a', 'b', 'c'].map(v => `<div class="col ${m == 4 ? 'phone' : ''}"><h2>${{ a: 'A · Sections + rail', b: 'B · Steps', c: 'C · Services first' }[v]}<a href="variant-${v}.html?state=progress">Open live</a></h2><img src="shots/compare/${v}-${m}-${{ 1: 'first-screen', 2: 'services', 3: 'adding', 4: 'phone' }[m]}.png" alt="Direction ${v.toUpperCase()}: ${M[m].lead}"><p>${M[m].cap[v]}</p></div>`).join('');
+    document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.m == m));
+  }
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => show(b.dataset.m));
+  shots.onclick = e => { const i = e.target.closest('img'); if (!i) return; const z = document.createElement('div'); z.className = 'zoom'; z.innerHTML = `<img src="${i.src}" alt="${i.alt}">`; z.onclick = () => z.remove(); document.body.append(z); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelector('.zoom')?.remove(); });
+  show(2);
+</script>
+</body>
+</html>

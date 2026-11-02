@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales Application · C</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/base.css">
+<link rel="stylesheet" href="shared/sa.css">
+<style>
+  /* C · Services first: the stories' page structure, a new way to add and price services */
+  .wrap { max-width: 1600px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+  .c-top { display: grid; gap: 24px; grid-template-columns: 1fr; }
+  @media (min-width: 1280px) { .c-top { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); } .c-top .grid3 { grid-template-columns: 1fr; } }
+  .stp { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .stp button { width: 100%; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); text-align: start; min-height: 56px; }
+  .stp button:hover { border-color: var(--primary); }
+  .stp button[aria-current="step"] { border-color: var(--primary); background: var(--primary-10); }
+  .stp .d { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--cadet-base); flex-shrink: 0; background: var(--white); }
+  .stp .done .d { background: var(--success); border-color: var(--success); color: var(--white); }
+  .stp [aria-current="step"] .d { border-color: var(--primary); color: var(--primary); }
+  .stp .t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .stp .t b { font-weight: 600; }
+  .stp .t span { font-size: 12px; color: var(--cadet-base); }
+  .stp .t span.req { color: var(--mango-70); }
+  @media (max-width: 899px) { .stp { grid-template-columns: repeat(4, minmax(150px, 1fr)); overflow-x: auto; padding-block-end: 4px; } }
+  .step-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .step-h h3 { font-size: 18px; flex: 1; }
+
+  /* blocks */
+  .grp-h { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 4px; }
+  .grp-h b { font-size: 15px; }
+  .grp-h .fld { flex-direction: row; align-items: center; gap: 8px; }
+  .grp-h .inp { width: 96px; height: 36px; }
+  .blks { display: flex; flex-direction: column; gap: 12px; }
+  .blk { border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); scroll-margin-top: 60px; }
+  .blk-h { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-block-end: 1px solid var(--border-subtle); flex-wrap: wrap; }
+  .blk-h .nm { display: flex; flex-direction: column; min-width: 140px; }
+  .blk-h .nm b { font-size: 16px; }
+  .blk-h .nm span { font-size: 12px; color: var(--muted-fg); }
+  .blk-h .sel { width: 150px; height: 36px; }
+  .blk-h .sp { flex: 1; }
+  .sug { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--lemon-10); border-block-end: 1px solid var(--lemon-20); flex-wrap: wrap; }
+  .sug .tt { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .sug .tt b { font-weight: 600; }
+  .sug .tt span { color: var(--cadet-base); }
+  .bl { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; border-block-start: 1px solid var(--border-subtle); }
+  .bl:first-of-type { border-block-start: 0; }
+  .bl-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bl-h .sel { width: 220px; height: 36px; }
+  .bl-h .sp { flex: 1; }
+  .rg { display: grid; grid-template-columns: minmax(150px, 1.2fr) 112px 112px minmax(180px, 2fr); gap: 8px 12px; align-items: center; }
+  .rg .hd { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--cadet-base); font-weight: 600; }
+  .rg .money { height: 36px; }
+  @media (max-width: 899px) { .rg { grid-template-columns: 1fr 1fr; } .rg .hd { display: none; } .rg .lb { grid-column: 1 / -1; font-weight: 600; margin-block-start: 6px; } .rg .vd { grid-column: 1 / -1; } }
+  .bopts { padding: 10px 16px 12px; border-block-start: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
+  .bopts .sum { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--cadet-base); }
+  .addbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .addbar .sp { flex: 1; }
+
+  /* picker */
+  .pk { display: flex; flex-direction: column; min-height: 0; }
+  .pk-s { padding: 12px; border-block-end: 1px solid var(--border-subtle); position: relative; }
+  .pk-s .inp { padding-inline-start: 36px; }
+  .pk-s svg { position: absolute; inset-inline-start: 24px; top: 24px; color: var(--cadet-base); }
+  .pk-l { overflow-y: auto; padding: 4px 8px 8px; display: flex; flex-direction: column; }
+  .pk-l h4 { margin: 8px 8px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--cadet-base); }
+  .pk-l label { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 4px; cursor: pointer; }
+  .pk-l label:hover { background: var(--primary-10); }
+  .pk-l label.dis { cursor: default; color: var(--muted-fg); }
+  .pk-l label.dis:hover { background: none; }
+  .pk-l input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
+  .pk-l .t { display: flex; flex-direction: column; flex: 1; }
+  .pk-l .t span { font-size: 12px; color: var(--muted-fg); }
+  .pk-f { display: flex; gap: 8px; justify-content: flex-end; padding: 12px; border-block-start: 1px solid var(--border); }
+  .pop.sheet .pk-l { max-height: 55vh; }
+  .pop:not(.sheet) .pk { min-height: 0; flex: 1; }
+  .pop:not(.sheet) .pk-l { flex: 1; min-height: 120px; max-height: 340px; }
+
+  .sfoot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-block-start: 16px; border-block-start: 1px solid var(--border-subtle); }
+  .sfoot .sp { flex: 1; min-width: 160px; font-size: 13px; color: var(--muted-fg); }
+  .sfoot .sp.ok { color: var(--lemon-80); }
+  .c-status { position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 10px 16px; margin: 0 -16px -96px; background: var(--white); border-block-start: 1px solid var(--border); font-size: 13px; }
+  @media (min-width: 768px) { .c-status { margin-inline: -24px; padding-inline: 24px; } }
+  @media (min-width: 1024px) { .c-status { margin-inline: -32px; padding-inline: 32px; } }
+  @media (min-width: 1280px) { .c-status { margin-inline: -40px; padding-inline: 40px; } }
+  .c-status .sp { flex: 1; }
+  .c-status .pbar { width: 160px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .c-status .pbar span { display: block; height: 100%; background: var(--success); }
+  @media (max-width: 599px) { .c-status .pbar { display: none; } }
+  #checklist { scroll-margin-top: 60px; }
+</style>
+</head>
+<body>
+<script src="shared/agent-icons.js"></script>
+<script src="shared/sa-core.js"></script>
+<script>
+(function () {
+  const VARIANTS = [{ key: 'final', href: 'application.html', label: 'Final' }, { key: 'a', href: 'variant-a.html', label: 'A · Sections + rail' }, { key: 'b', href: 'variant-b.html', label: 'B · Steps' }, { key: 'c', href: 'variant-c.html', label: 'C · Services first' }];
+  const { icon, esc } = SA;
+  const openOpts = new Set();
+  const cl = k => SA.checklist().find(i => i.k === k);
+  const STEPS = [
+    { t: 'Services & Pricing', s: () => 'Institution, model and fees', ok: () => cl('svc1').done && cl('pricing').done && cl('just').done },
+    { t: 'Documents', s: () => 'Everything the setup requires', ok: () => cl('docs').done },
+    { t: 'Payout Method', s: () => 'Optional: bank account or e-wallet', ok: () => cl('payout').done && SA.S.payouts.length > 0, opt: true },
+    { t: 'Contracts', s: () => { const n = reqN(); return n ? `${n} signed contract${n === 1 ? '' : 's'} to upload` : 'Any signed agreements'; }, ok: () => cl('contracts').done }
+  ];
+  const reqN = () => { const S = SA.S; const pf = S.order.filter(id => S.svc[id].model === 'PF').map(SA.nmOf); const cov = ['Card', 'Wallet', 'Bank Installments', 'Basata']; return (pf.some(n => cov.includes(n)) ? 1 : 0) + new Set(pf.filter(n => !cov.includes(n))).size; };
+  const cur = () => Math.min(SA.S.step || 0, 3);
+
+  function stepper() { return `<ol class="stp">${STEPS.map((s, i) => { const done = s.ok() && SA.S.order.length; return `<li><button type="button" class="${done ? 'done' : ''}" data-act="step" data-i="${i}" ${i === cur() ? 'aria-current="step"' : ''}><span class="d">${done ? icon('tick', 'ic-14', 2.5) : i + 1}</span><span class="t"><b>${s.t}</b><span class="${i === 3 && reqN() ? 'req' : ''}">${s.s()}</span></span></button></li>`; }).join('')}</ol>`; }
+
+  /* ----- service blocks ----- */
+  function stChip(id) {
+    const st = SA.svcState(id);
+    if (!st.ready) return `<span class="sc warn">${st.rates ? 'Incomplete' : 'Needs rates'}</span>`;
+    if (st.flags.length) { const h = st.flags.some(f => f.approver === 'Head of Sales'); return `<span class="sc ${h ? 'bad' : 'warn'}">${h ? 'Head of Sales' : 'Sales Manager'} approval</span>`; }
+    return `<span class="sc ok">Ready</span>`;
+  }
+  function suggestion(id, li) {
+    const l = SA.S.svc[id].lines[li];
+    if (l.rule || Object.values(l.rates).some(v => v.rate !== '')) return '';
+    if (SA.pricingMissing(id)) return `<div class="sug" style="background:var(--bg);border-color:var(--border-subtle)">${icon('info', 'ic')}<div class="tt"><span>${esc(SA.pricingMissing(id))} to see the published pricing.</span></div></div>`;
+    const r = SA.bestRule(id, li); if (!r) return '';
+    const ts = SA.tiersFor(id, l);
+    return `<div class="sug">${icon('bolt', 'ic')}<div class="tt"><b>Best published pricing${r.bank ? ' · ' + esc(r.bank) : ''}</b><span>${ts.slice(0, 2).map(t => { const v = SA.ruleRate(r, t); return `${t.short || t.label} ${SA.fmtN(v.rate)}% + ${SA.fmtN(v.fee)} EGP`; }).join(' · ')}${ts.length > 2 ? ` · +${ts.length - 2} more` : ''} · ${esc(r.act)}</span></div><button type="button" class="btn btn-outline btn-sm" data-act="applyBest" data-id="${esc(id)}" data-li="${li}">Apply</button>${SA.pricingBtnHTML(id, li, 'btn btn-ghost btn-sm')}</div>`;
+  }
+  function block(id) {
+    const S = SA.S, c = S.svc[id];
+    const lines = c.lines.map((l, li) => {
+      const ts = SA.tiersFor(id, l), applied = l.rule || Object.values(l.rates).some(v => v.rate !== '');
+      return `${suggestion(id, li)}<div class="bl">${SA.needsBank(id) || applied ? `<div class="bl-h">${SA.needsBank(id) ? SA.bankSelect(id, li) : ''}${SA.sourceHTML(id, li)}<span class="sp"></span>${applied ? SA.pricingBtnHTML(id, li, 'btn btn-ghost btn-sm') : ''}${li > 0 ? `<button type="button" class="link-btn danger" data-act="rmInst" data-id="${esc(id)}" data-li="${li}">Remove</button>` : ''}</div>` : ''}
+        <div class="rg"><span class="hd">Rate type</span><span class="hd">Fees (%)</span><span class="hd">Flat fee</span><span class="hd">Approval</span>${ts.map(t => `<span class="lb">${t.label}</span>${SA.moneyInputs(id, li, t)}<span class="vd" data-live="cv" data-id="${esc(id)}" data-li="${li}" data-k="${t.key}">${SA.verdictHTML(id, li, t)}</span>`).join('')}</div></div>`;
+    }).join('');
+    return `<article class="blk" id="blk-${id.replace(/\W/g, '')}" aria-labelledby="bh-${id.replace(/\W/g, '')}"><div class="blk-h"><div class="nm"><b id="bh-${id.replace(/\W/g, '')}">${esc(SA.nmOf(id))}</b><span>${esc(SA.SVC_HINT[SA.nmOf(id)])}</span></div>${SA.modelSelect(id)}<span class="sp"></span><span data-live="chip" data-id="${esc(id)}">${stChip(id)}</span><button type="button" class="icon-btn" data-act="rmSvc" data-id="${esc(id)}" aria-label="Remove ${esc(SA.label(id))}">${icon('trash', 'ic')}</button></div>
+      ${lines}
+      ${SA.canAddInst(id) ? `<div class="bl"><button type="button" class="link-btn" data-act="addInst" data-id="${esc(id)}" style="align-self:flex-start">${icon('plus', 'ic')}Add institution</button></div>` : ''}
+      ${SA.isCard(id) ? `<div class="bopts">${openOpts.has(id) ? SA.cardOptions(id) + `<button type="button" class="link-btn" data-act="opts" data-id="${esc(id)}" style="align-self:flex-start">Done</button>` : `<div class="sum"><b style="color:var(--foreground)">Card options</b><span>${esc(SA.optsSummary(id))}</span><button type="button" class="link-btn" data-act="opts" data-id="${esc(id)}">Edit</button></div>`}</div>` : ''}</article>`;
+  }
+  function servicesStep() {
+    const S = SA.S;
+    const groups = SA.CHANNELS.map(ch => { const ids = S.order.filter(id => SA.chOf(id) === ch); if (!ids.length) return ''; return `<div class="grp-h"><b>${ch} services · ${ids.length}</b>${ch === 'POS' ? `<div class="fld"><label for="term">Number of Terminals</label><input class="inp" id="term" data-term inputmode="numeric" value="${esc(S.terminals)}" placeholder="e.g. 2"></div>` : ''}</div><div class="blks">${ids.map(block).join('')}</div>`; }).join('');
+    return `<div class="addbar"><button type="button" class="btn btn-outline" data-act="picker" aria-haspopup="dialog" aria-expanded="false">${icon('plus', 'ic')}Add service</button><span class="hint">${S.order.length ? `${S.order.length} service${S.order.length > 1 ? 's' : ''} added` : 'Online and POS: Card, Wallet, Valu, Bank Installments and more'}</span></div>
+      ${groups || `<div class="empty-line">No services yet. Add the ones this merchant needs. Each one gets its published pricing ready to apply.</div>`}
+      <p class="hint" style="margin:0">Any rate below the published rate needs approval. You'll be asked for a justification before you can continue.</p>`;
+  }
+  function openPicker(btn) {
+    let q = '', pick = new Set();
+    const list = () => SA.CHANNELS.map(ch => { const items = SA.SVC_NAMES.filter(n => (n + ' ' + SA.SVC_HINT[n]).toLowerCase().includes(q.toLowerCase())); if (!items.length) return ''; return `<h4>${ch}</h4>${items.map(n => { const id = ch + ' ' + n, has = !!SA.S.svc[id]; return `<label class="${has ? 'dis' : ''}"><input type="checkbox" value="${esc(id)}" ${has || pick.has(id) ? 'checked' : ''} ${has ? 'disabled' : ''}><span class="t">${esc(n)}<span>${has ? 'Already added' : esc(SA.SVC_HINT[n])}</span></span></label>`; }).join('')}`; }).join('') || '<p class="hint" style="padding:8px;margin:0">No service matches.</p>';
+    const foot = () => `<button type="button" class="btn btn-outline btn-sm" data-cx>Cancel</button><button type="button" class="btn btn-primary btn-sm" data-ok ${pick.size ? '' : 'disabled'}>${pick.size ? `Add ${pick.size} service${pick.size > 1 ? 's' : ''}` : 'Add services'}</button>`;
+    SA.popover(btn, `<div class="pk" role="group" aria-label="Add services"><div class="pk-s">${icon('search', 'ic')}<input class="inp" type="search" placeholder="Search services" aria-label="Search services" data-pq></div><div class="pk-l">${list()}</div><div class="pk-f">${foot()}</div></div>`, el => {
+      const L = el.querySelector('.pk-l'), F = el.querySelector('.pk-f');
+      const bindF = () => { F.querySelector('[data-cx]').onclick = () => { SA.closePop(); btn.focus(); }; F.querySelector('[data-ok]').onclick = () => { const ids = [...pick]; ids.forEach(SA.addService); SA.closePop(); SA.rerender(); SA.toast(`${ids.length} service${ids.length > 1 ? 's' : ''} added`); const f = document.getElementById('blk-' + ids.sort((a, b) => SA.SERVICES.indexOf(a) - SA.SERVICES.indexOf(b))[0].replace(/\W/g, '')); if (f) { f.scrollIntoView({ block: 'start' }); f.querySelector('select, button')?.focus({ preventScroll: true }); } }; };
+      L.onchange = e => { const c = e.target; if (c.checked) pick.add(c.value); else pick.delete(c.value); F.innerHTML = foot(); bindF(); };
+      const qi = el.querySelector('[data-pq]'); qi.oninput = () => { q = qi.value; L.innerHTML = list(); };
+      bindF(); qi.focus();
+    }, { width: 400 });
+  }
+
+  function footFor(i) {
+    const S = SA.S;
+    if (i === 0) { const iss = SA.servicesIssues(), fl = SA.flagged(); const msg = iss.length ? iss[0].m + (iss.length > 1 ? ` (+${iss.length - 1} more)` : '') : fl.length ? `${fl.length} rate${fl.length > 1 ? 's' : ''} below published. Add a justification to continue` : 'This step is complete.'; return `<span class="sp ${!iss.length && !fl.length ? 'ok' : ''}">${esc(msg)}</span><button type="button" class="btn btn-primary" data-act="next" ${iss.length ? 'disabled' : ''}>Continue to Documents</button>`; }
+    if (i === 1) { const d = SA.documentsIssues(); return `<button type="button" class="btn btn-outline" data-act="step" data-i="0">Back</button><span class="sp ${d.length ? '' : 'ok'}">${esc(d[0] ? d[0] + (d.length > 1 ? ` (+${d.length - 1} more)` : '') : 'This step is complete.')}</span><button type="button" class="btn btn-primary" data-act="next" ${d.length ? 'disabled' : ''}>Continue to Payout Method</button>`; }
+    if (i === 2) { const d = SA.payoutsIssues(); return `<button type="button" class="btn btn-outline" data-act="step" data-i="1">Back</button><span class="sp ${d.length ? '' : 'ok'}">${esc(d[0] || 'This step is complete.')}</span><button type="button" class="btn btn-primary" data-act="next" ${d.length ? 'disabled' : ''}>Continue to Contracts</button>`; }
+    const d = SA.contractsIssues(), n = SA.openItems().length;
+    return `<button type="button" class="btn btn-outline" data-act="step" data-i="2">Back</button><span class="sp ${!d.length && !n ? 'ok' : ''}">${esc(d[0] ? d[0] : n ? `${n} checklist item${n > 1 ? 's' : ''} still open` : 'Service setup complete')}</span><button type="button" class="btn btn-primary" data-act="submit" ${n ? 'disabled' : ''}>Submit Merchant Application</button>`;
+  }
+  function stepBody(i) {
+    if (i === 0) return servicesStep();
+    if (!SA.S.order.length) return `<div class="empty-line">Add a service first. This step depends on the services you pick.</div>`;
+    return [null, SA.documentsSection, SA.payoutSection, SA.contractsSection][i]();
+  }
+  const HINT = ['', '', 'Add the bank accounts or e-wallets the merchant is paid out to. The first one added is the primary method.', ''];
+  function statusBar() { const all = SA.checklist(), n = all.filter(x => !x.done).length; return `<span class="pbar" aria-hidden="true"><span style="width:${Math.round((all.length - n) / all.length * 100)}%"></span></span><span>${n ? `<b>${n}</b> of ${all.length} left to submit${(() => { const f = all.find(x => !x.done); return f && f.hint ? ` · <span class="muted">${esc(f.hint)}</span>` : ''; })()}` : '<b>Ready to submit</b>'}</span><span class="sp"></span><button type="button" class="link-btn" data-act="goto" data-t="checklist">${n ? 'See checklist' : 'Go to submit'}</button>`; }
+
+  const V = {
+    key: 'c',
+    render() {
+      const page = document.getElementById('page'), S = SA.S;
+      if (!SA.isEdit()) { page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.readOnlyView()}</div>`; return; }
+      const i = cur();
+      page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>
+        <div class="c-top"><section class="card sec" id="s-merchant" aria-labelledby="h1s"><div class="sec-h"><div class="tt"><h2 id="h1s">1. Merchant Details</h2><p>Basic information to create the application record.</p></div></div>${SA.merchantFields()}</section>
+        <section class="card sec" id="s-criteria" aria-labelledby="h2s"><div class="sec-h"><div class="tt"><h2 id="h2s">2. Criteria</h2><p>Merchant type, industry and activities decide the pricing rules and documents.</p></div></div>${SA.criteriaFields()}</section></div>
+        <section class="card sec" id="s-setup" aria-labelledby="h3s"><div class="sec-h"><div class="tt"><h2 id="h3s">3. Service Setup</h2><p>Choose which services to activate and set up their institution, model and fees, then the documents it all requires, the merchant's payout methods, and any contracts already signed.</p></div></div>
+          <div data-live="stp">${stepper()}</div>
+          <div class="step-h"><h3 id="stepH" tabindex="-1">Step ${i + 1} of 4: ${STEPS[i].t}</h3>${STEPS[i].opt ? '<span class="opt">(optional)</span>' : ''}</div>${HINT[i] ? `<p class="hint" style="margin:-12px 0 0">${HINT[i]}</p>` : ''}
+          ${stepBody(i)}
+          <div class="sfoot" data-live="sfoot">${footFor(i)}</div></section>
+        <section class="card sec" id="checklist" aria-label="Submission checklist" data-live="cl">${SA.checklistHTML()}</section>
+        <div class="c-status" data-live="status">${statusBar()}</div></div>`;
+    },
+    live: { stp: stepper, sfoot: () => footFor(cur()), cl: () => SA.checklistHTML(), status: statusBar,
+      cv: el => { const c = SA.S.svc[el.dataset.id]; if (!c) return ''; const t = SA.tiersFor(el.dataset.id, c.lines[+el.dataset.li]).find(x => x.key === el.dataset.k); return t ? SA.verdictHTML(el.dataset.id, +el.dataset.li, t) : ''; },
+      chip: el => SA.S.svc[el.dataset.id] ? stChip(el.dataset.id) : '' },
+    reset() { SA.S.step = 0; openOpts.clear(); },
+    act: {
+      picker: (d, el) => { openPicker(el); return false; },
+      applyBest: d => { const r = SA.bestRule(d.id, +d.li); if (r) { SA.applyRule(d.id, +d.li, r, false); SA.toast(`Published pricing applied to ${SA.label(d.id)}`); } },
+      opts: d => { openOpts.has(d.id) ? openOpts.delete(d.id) : openOpts.add(d.id); },
+      step: d => { SA.S.step = +d.i; setTimeout(() => { document.getElementById('s-setup').scrollIntoView({ block: 'start' }); document.getElementById('stepH')?.focus({ preventScroll: true }); }); },
+      next: () => { const i = cur(); const go = () => { SA.S.step = i + 1; SA.rerender(); document.getElementById('s-setup').scrollIntoView({ block: 'start' }); document.getElementById('stepH')?.focus({ preventScroll: true }); }; if (i === 0) SA.continueFromServices(go); else go(); return false; }
+    },
+    onGoto(t) {
+      if (t === 'justify') return SA.openJustify();
+      const stepOf = { services: 0, terminals: 0, documents: 1, payout: 2, contracts: 3 };
+      if (t.startsWith('svc:') || stepOf[t] != null) { SA.S.step = t.startsWith('svc:') ? 0 : stepOf[t]; SA.rerender(); }
+      const el = document.getElementById(t.startsWith('svc:') ? 'blk-' + t.slice(4).replace(/\W/g, '') : t === 'terminals' ? 'term' : stepOf[t] != null ? 's-setup' : t === 'checklist' ? 'checklist' : 's-' + t);
+      if (!el) return;
+      el.scrollIntoView({ block: 'start' });
+      const f = el.matches('input') ? el : el.querySelector('input:not([type=checkbox]):not([disabled]), select, button:not([disabled])');
+      if (t !== 'checklist') setTimeout(() => f && f.focus({ preventScroll: true }));
+    }
+  };
+  SA.mount(V, VARIANTS);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales Application · A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/base.css">
+<link rel="stylesheet" href="shared/sa.css">
+<style>
+  /* A · Sections + sticky rail */
+  .wrap { max-width: 1600px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+  .a-grid { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .a-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+  .a-rail { display: none; }
+  @media (min-width: 1280px) {
+    .a-grid { grid-template-columns: minmax(0, 1fr) 320px; }
+    .a-rail { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 60px; }
+    .a-bar, .a-mobile-acts { display: none !important; }
+  }
+  .rail-card { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .rail-card .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rail-card hr { border: 0; border-block-start: 1px solid var(--border-subtle); margin: 0; width: 100%; }
+  .rail-sub { font-size: 12px; color: var(--muted-fg); margin: -8px 0 0; }
+  .sec-n { width: 28px; height: 28px; border-radius: 50%; background: var(--primary-10); color: var(--primary); display: inline-grid; place-items: center; font-family: var(--font-body); font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .sec-n.done { background: var(--success); color: var(--white); }
+  section.card { scroll-margin-top: 60px; }
+
+  /* service picker */
+  .a-pick { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .a-pick { grid-template-columns: 1fr 1fr; } }
+  .a-ch { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px 16px; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .a-ch legend { padding: 0 6px; font-weight: 700; }
+  .a-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+  @media (min-width: 600px) { .a-chips { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .a-chips .cbx { min-height: 36px; border-radius: 4px; padding-inline: 6px; }
+  .a-chips .cbx:hover { background: var(--primary-10); }
+  .a-chips .cbx:has(input:checked) { font-weight: 600; color: var(--primary); }
+  .term { display: flex; align-items: flex-end; gap: 12px; padding-block-start: 12px; border-block-start: 1px solid var(--border-subtle); }
+  .term .fld { width: 180px; }
+
+  /* pricing table: only the chosen services */
+  .ptbl-w { border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+  table.ptbl { width: 100%; border-collapse: collapse; min-width: 640px; }
+  .ptbl th { text-align: start; background: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--cadet-base); padding: 10px 12px; white-space: nowrap; }
+  .ptbl td { padding: 8px 12px; border-block-start: 1px solid var(--border); vertical-align: middle; }
+  .ptbl tr.svc td { background: var(--bg); padding-block: 10px; }
+  .ptbl .svc-h { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ptbl .svc-h b { font-size: 15px; }
+  .ptbl .svc-h .sel { width: 150px; height: 36px; }
+  .ptbl .svc-h .sp { flex: 1; }
+  .ptbl td.inst { width: 160px; vertical-align: top; padding-block-start: 12px; }
+  .ptbl td.inst .sel { height: 36px; }
+  .ptbl td.num-in { width: 104px; padding-inline: 4px; }
+  .ptbl td.num-in .money { height: 36px; }
+  .ptbl td.ap { width: 150px; }
+  .ptbl td.rt { min-width: 120px; }
+  .ptbl tr.optrow td { background: var(--white); }
+  .ptbl .optsum { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--cadet-base); flex-wrap: wrap; }
+  .ptbl .pub { display: block; font-size: 12px; color: var(--muted-fg); }
+  .sec-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-block-start: 16px; border-block-start: 1px solid var(--border-subtle); }
+  .sec-foot .sp { flex: 1; min-width: 160px; font-size: 13px; color: var(--muted-fg); }
+  .sec-foot .sp.ok { color: var(--lemon-80); }
+
+  /* bottom bar below 1280 */
+  .a-bar { position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin: 0 -16px -96px; background: var(--white); border-block-start: 1px solid var(--border); }
+  @media (min-width: 768px) { .a-bar { margin-inline: -24px; padding-inline: 24px; } }
+  @media (min-width: 1024px) { .a-bar { margin-inline: -32px; padding-inline: 32px; } }
+  .a-bar .sp { flex: 1; }
+  @media (max-width: 767px) { .a-bar .btn-primary span.long { display: none; } }
+</style>
+</head>
+<body>
+<script src="shared/agent-icons.js"></script>
+<script src="shared/sa-core.js"></script>
+<script>
+(function () {
+  const VARIANTS = [{ key: 'final', href: 'application.html', label: 'Final' }, { key: 'a', href: 'variant-a.html', label: 'A · Sections + rail' }, { key: 'b', href: 'variant-b.html', label: 'B · Steps' }, { key: 'c', href: 'variant-c.html', label: 'C · Services first' }];
+  const { icon, esc } = SA;
+  const openOpts = new Set();
+  const cl = k => SA.checklist().find(i => i.k === k);
+  const secDone = { merchant: () => cl('merchant').done, criteria: () => cl('type').done && cl('acts').done, services: () => cl('svc1').done && cl('pricing').done && cl('just').done, documents: () => cl('docs').done, payout: () => cl('payout').done, contracts: () => cl('contracts').done };
+  const SECS = [['merchant', 'Merchant details', 'Basic information to create the application record.'], ['criteria', 'Business criteria', 'Merchant type, industry and activities decide the pricing rules and the documents.'], ['services', 'Services & pricing', 'Pick the services to activate, then set the model, institution and fees for each one.'], ['documents', 'Documents', 'Only the documents this merchant needs, based on the criteria and services.'], ['payout', 'Payout methods', 'Add the bank accounts or e-wallets the merchant is paid out to. The first one added is the primary method.'], ['contracts', 'Contracts', 'Contracts the merchant has already signed.']];
+  const statusTag = k => {
+    if (k === 'services' && !SA.S.order.length) return '<span class="tag">Not started</span>';
+    if (['documents', 'contracts'].includes(k) && !SA.S.order.length) return '<span class="tag">Add a service first</span>';
+    if (k === 'payout' && !SA.S.payouts.length) return '<span class="opt">(optional)</span>';
+    return secDone[k]() ? '<span class="tag ok">Complete</span>' : '<span class="tag req">To do</span>';
+  };
+
+  function servicesBody() {
+    const S = SA.S;
+    const pick = SA.CHANNELS.map(ch => {
+      const n = S.order.filter(id => SA.chOf(id) === ch).length;
+      return `<fieldset class="a-ch"><legend>${ch} services <span class="hint" style="font-weight:400">· ${n} selected</span></legend>
+        <div class="a-chips">${SA.SVC_NAMES.map(nm => { const id = ch + ' ' + nm; return `<label class="cbx"><input type="checkbox" data-act-change="toggleSvc" value="${esc(id)}" ${S.svc[id] ? 'checked' : ''}>${esc(nm)}</label>`; }).join('')}</div>
+        ${ch === 'POS' && n ? `<div class="term"><div class="fld"><label for="term">Number of Terminals</label><input class="inp" id="term" data-term inputmode="numeric" value="${esc(S.terminals)}" placeholder="e.g. 2"></div><span class="hint" style="padding-block-end:10px">Whole number, 1 or more.</span></div>` : ''}</fieldset>`;
+    }).join('');
+    if (!S.order.length) return `<div class="a-pick">${pick}</div><div class="empty-line">Pick the services above. Only the ones you pick get a pricing row.</div>`;
+    const rows = S.order.map(id => {
+      const c = S.svc[id], card = SA.isCard(id);
+      let h = `<tr class="svc" id="svc-${id.replace(/\W/g, '')}"><td colspan="5"><div class="svc-h"><b>${esc(SA.nmOf(id))}</b><span class="tag info">${SA.chOf(id)}</span>${SA.modelSelect(id)}${SA.pricingBtnHTML(id, 0)}${SA.sourceHTML(id, 0)}<span class="sp"></span><button type="button" class="icon-btn" data-act="rmSvc" data-id="${esc(id)}" aria-label="Remove ${esc(SA.label(id))}">${icon('x', 'ic')}</button></div></td></tr>`;
+      c.lines.forEach((l, li) => {
+        const ts = SA.tiersFor(id, l);
+        ts.forEach((t, ti) => {
+          h += `<tr>${ti === 0 ? `<td class="inst" rowspan="${ts.length}">${SA.needsBank(id) ? SA.bankSelect(id, li) : '<span class="hint">No institution needed</span>'}${li > 0 ? `<button type="button" class="link-btn danger" data-act="rmInst" data-id="${esc(id)}" data-li="${li}" style="margin-top:6px">Remove</button>` : ''}${li > 0 ? `<div style="margin-top:4px">${SA.pricingBtnHTML(id, li, 'link-btn')}</div>` : ''}</td>` : ''}
+            <td class="rt">${t.label}</td>${SA.moneyParts(id, li, t).map(x => `<td class="num-in">${x}</td>`).join('')}
+            <td class="ap" data-live="v" data-id="${esc(id)}" data-li="${li}" data-k="${t.key}">${apCell(id, li, t)}</td></tr>`;
+        });
+      });
+      if (SA.canAddInst(id)) h += `<tr><td colspan="5"><button type="button" class="link-btn" data-act="addInst" data-id="${esc(id)}">${icon('plus', 'ic')}Add institution</button></td></tr>`;
+      if (card) h += `<tr class="optrow"><td colspan="5">${openOpts.has(id) ? SA.cardOptions(id) + `<button type="button" class="link-btn" data-act="opts" data-id="${esc(id)}" style="margin-top:8px">Done</button>` : `<div class="optsum"><b style="color:var(--foreground)">Card options</b><span>${esc(SA.optsSummary(id))}</span><button type="button" class="link-btn" data-act="opts" data-id="${esc(id)}">Edit</button></div>`}</td></tr>`;
+      return h;
+    }).join('');
+    return `<div class="a-pick">${pick}</div>
+      <div class="ptbl-w"><table class="ptbl"><thead><tr><th>Financial institution</th><th>Rate type</th><th>Fees (%)</th><th>Flat fee</th><th>Rate approval</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="hint" style="margin:0">Any rate below the published rate needs approval. You'll be asked for a justification before you can continue.</p>
+      <div class="sec-foot" data-live="svcfoot">${svcFoot()}</div>`;
+  }
+  function apCell(id, li, t) {
+    const l = SA.S.svc[id].lines[li], v = SA.verdict(id, l, t);
+    return `${SA.verdictHTML(id, li, t, true) || '<span class="flag mute">Not set</span>'}<span class="pub">Published ${SA.pubText(v.p)}</span>`;
+  }
+  function svcFoot() {
+    const iss = SA.servicesIssues(), fl = SA.flagged();
+    const msg = iss.length ? `${esc(iss[0].m)}${iss.length > 1 ? ` (+${iss.length - 1} more)` : ''}` : fl.length ? `${fl.length} rate${fl.length > 1 ? 's' : ''} below published. Add a justification to continue` : 'This step is complete.';
+    return `<span class="sp ${!iss.length && !fl.length ? 'ok' : ''}">${msg}</span><button type="button" class="btn btn-primary" data-act="contDocs" ${iss.length ? 'disabled' : ''}>Continue to Documents</button>`;
+  }
+  function rail() {
+    const S = SA.S, n = SA.openItems().length, fl = SA.flagged();
+    return `<div class="card rail-card">${SA.checklistHTML()}
+      ${fl.length ? `<hr><div class="row"><span class="flag ${fl.some(f => f.approver === 'Head of Sales') ? 'h' : 'm'}">${icon('warn', 'ic-14')}${fl.length} rate${fl.length > 1 ? 's' : ''} need${fl.length > 1 ? '' : 's'} approval</span><button type="button" class="link-btn" data-act="justify">Justifications</button></div>` : ''}
+      <hr><button type="button" class="btn btn-primary" data-act="submit" ${n ? 'disabled' : ''}>Submit Merchant Application</button>${n ? `<p class="rail-sub">Enabled once the ${n} item${n > 1 ? 's' : ''} above ${n > 1 ? 'are' : 'is'} done.</p>` : ''}</div>`;
+  }
+  function bar() { const n = SA.openItems().length; return `<button type="button" class="btn btn-outline" data-act="sheet">${n ? `${n} left to submit` : 'Ready to submit'}${icon('chevron', 'ic')}</button><span class="sp"></span><button type="button" class="btn btn-primary" data-act="submit" ${n ? 'disabled' : ''}>Submit<span class="long">&nbsp;Merchant Application</span></button>`; }
+
+  const V = {
+    key: 'a',
+    render() {
+      const page = document.getElementById('page'), S = SA.S;
+      if (!SA.isEdit()) { page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.readOnlyView()}</div>`; return; }
+      const body = { merchant: SA.merchantFields(), criteria: SA.criteriaFields(), services: servicesBody(), documents: S.order.length ? SA.documentsSection() : '<div class="empty-line">Add a service first. The documents depend on it.</div>', payout: SA.payoutSection(), contracts: S.order.length ? SA.contractsSection() : '<div class="empty-line">Add a service first. The required contracts depend on it.</div>' };
+      page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>
+        <div class="a-grid"><div class="a-main">${SECS.map(([k, t, sub], i) => `<section class="card sec" id="s-${k}" aria-labelledby="h-${k}"><div class="sec-h"><span class="sec-n ${secDone[k]() && (k !== 'payout' || S.payouts.length) ? 'done' : ''}" data-live="n-${k}">${secDone[k]() && (k !== 'payout' || S.payouts.length) ? icon('tick', 'ic-14', 2.5) : i + 1}</span><div class="tt"><h2 id="h-${k}">${t} <span data-live="st-${k}">${statusTag(k)}</span></h2><p>${sub}</p></div></div>${body[k]}</section>`).join('')}</div>
+        <aside class="a-rail" aria-label="Application progress" data-live="rail">${rail()}</aside></div>
+        <div class="a-bar" data-live="bar">${bar()}</div></div>`;
+    },
+    live: { ...Object.fromEntries(SECS.flatMap(([k], i) => [['st-' + k, () => statusTag(k)], ['n-' + k, () => secDone[k]() && (k !== 'payout' || SA.S.payouts.length) ? icon('tick', 'ic-14', 2.5) : String(i + 1)]])), v: el => { const l = SA.S.svc[el.dataset.id]; return l ? apCell(el.dataset.id, +el.dataset.li, SA.tiersFor(el.dataset.id, l.lines[+el.dataset.li]).find(t => t.key === el.dataset.k)) : ''; }, svcfoot: svcFoot, rail, bar },
+    chg: { toggleSvc: el => { if (el.checked) SA.addService(el.value); else SA.removeService(el.value); } },
+    act: {
+      opts: d => { openOpts.has(d.id) ? openOpts.delete(d.id) : openOpts.add(d.id); },
+      contDocs: () => { SA.continueFromServices(() => V.onGoto('documents')); return false; },
+      sheet: () => { SA.drawer({ size: 'md', title: 'Submit checklist', render(api) { api.body.innerHTML = SA.checklistHTML(); api.body.onclick = e => { const b = e.target.closest('[data-act="goto"]'); if (b) { api.close(); V.onGoto(b.dataset.t); } }; } }); return false; }
+    },
+    onGoto(t) {
+      if (t === 'justify') return SA.openJustify();
+      const id = t.startsWith('svc:') ? 'svc-' + t.slice(4).replace(/\W/g, '') : t === 'terminals' ? 'term' : 's-' + t;
+      const el = document.getElementById(id); if (!el) return;
+      el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      const f = el.matches('input') ? el : el.querySelector('input:not([type=checkbox]):not([disabled]), select, textarea, button:not([disabled])');
+      setTimeout(() => f && f.focus({ preventScroll: true }), 350);
+    }
+  };
+  SA.mount(V, VARIANTS);
+})();
+</script>
+</body>
+</html>
