@@ -105,8 +105,8 @@
   const { icon, esc } = SA;
   const TODAY = '2026-10-21';
   const ROLES = { sales: { name: 'Aya Muhammed', init: 'AM', label: 'Salesperson' }, manager: { name: 'Nadia Salah', init: 'NS', label: 'Sales Manager' }, head: { name: 'Karim Zaki', init: 'KZ', label: 'Head of Sales' } };
-  /* Statuses belong to cases (one per service), never to the application. An application with no cases yet has not been submitted. */
-  const STATUSES = ['Not submitted', 'Rejected', 'Waiting Rate Approval', 'Underwriting Review', 'Bank Submission', 'Canceled'];
+  /* Statuses belong to cases (one per service), never to the application, so the list has no status tabs: filter by Case status instead. */
+  const CASE_STATUSES = ['Rejected', 'Waiting Rate Approval', 'Underwriting Review', 'Bank Submission', 'Live', 'Canceled'];
   const CHIP = { 'Not submitted': 'neu', New: 'info', Rejected: 'bad', 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Canceled: 'neu', Live: 'ok' };
 
   /* ----- sample data (Aya's prototype merchants, extended) ----- */
@@ -149,30 +149,23 @@
   });
 
   /* ----- state ----- */
-  /* liveUI (prototype only): 'switch' = In progress / Live view switch above the tabs; 'tab' = Live as a separated last tab (story as written). */
-  const st = { role: 'sales', tab: 'All', q: '', page: 1, size: 10, data: 'loaded', filters: {}, liveUI: 'switch' };
-  try { Object.assign(st, JSON.parse(sessionStorage.getItem('sa-list') || '{}')); if (st.tab === 'New') st.tab = 'Not submitted'; } catch (e) { }
-  const keep = () => { try { sessionStorage.setItem('sa-list', JSON.stringify({ role: st.role, tab: st.tab, size: st.size, liveUI: st.liveUI })); } catch (e) { } };
-  const isLive = () => st.tab === 'Live';
+  const st = { role: 'sales', tab: 'All', q: '', page: 1, size: 10, data: 'loaded', filters: {} };
+  try { Object.assign(st, JSON.parse(sessionStorage.getItem('sa-list') || '{}')); } catch (e) { }
+  const keep = () => { try { sessionStorage.setItem('sa-list', JSON.stringify({ role: st.role, size: st.size })); } catch (e) { } };
   const me = () => ROLES[st.role];
   const scoped = () => st.role === 'sales' ? ROWS.filter(r => r.sales === 'Aya Muhammed') : st.role === 'manager' ? ROWS.filter(r => r.sales !== 'Karim Zaki') : ROWS;
   const mine = c => (st.role === 'manager' && c.tier === 'Sales Manager') || (st.role === 'head' && c.tier === 'Head of Sales');
-  const hasCase = (r, s) => s === 'Not submitted' ? !r.cases.length : r.cases.some(c => c.status === s);
-  const pipeline = r => !r.cases.length || r.cases.some(c => c.status !== 'Live');
-  const liveRow = r => r.cases.some(c => c.status === 'Live');
-  const myCase = r => r.cases.some(c => c.status === 'Waiting Rate Approval' && mine(c));
   const FIELDS = () => [
     { key: 'industry', type: 'multi', icon: 'store', label: 'Industry', hint: 'The merchant\'s industry from Zoho CRM.', options: [...new Set(ROWS.map(r => r.industry))].sort() },
     ...(st.role !== 'sales' ? [{ key: 'sales', type: 'multi', icon: 'user', label: 'Salesperson', hint: 'Applications assigned to these salespeople.', options: [...new Set(scoped().map(r => r.sales))].sort() }] : []),
+    { key: 'cstatus', type: 'multi', icon: 'clock', label: 'Case status', hint: 'Applications with at least one case in these statuses.', options: CASE_STATUSES },
     { key: 'assigned', type: 'date', icon: 'calendar', label: 'Assigned', hint: 'When the lead was assigned.' },
     { key: 'last', type: 'date', icon: 'clock', label: 'Last activity', hint: 'The latest change on the application.' }
   ];
-  const getv = (r, k) => r[k];
+  const getv = (r, k) => k === 'cstatus' ? r.cases.map(c => c.status) : r[k];
   const searchHit = r => !st.q || [r.biz, r.contact, r.email, r.mid].join(' ').toLowerCase().includes(st.q.toLowerCase());
-  /* All is the pipeline only: live applications are never in it or in its count. */
-  const tabHit = r => st.tab === 'All' ? pipeline(r) : st.tab === 'Live' ? liveRow(r) : hasCase(r, st.tab);
   const base = vals => scoped().filter(r => searchHit(r) && KFilter.matches(vals || st.filters, r, FIELDS(), getv));
-  const rows = () => { const l = base().filter(tabHit); return isLive() ? l.sort((a, b) => b.since.localeCompare(a.since)) : l; };
+  const rows = () => base();
   const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const init = n => n.replace(/^Dr\.\s*/, '').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
   const openHref = r => (!r.cases.length ? 'application.html?state=progress' : `application.html?state=ready&cases=${encodeURIComponent(r.cases.map(c => c.svc + '~' + c.status).join('|'))}`) + (r.since ? `&since=${r.since}` : '') + `&as=${st.role}`;
@@ -184,16 +177,6 @@
       <div class="tsearch" id="topSearch"></div>
       <button type="button" class="profile" aria-label="Account: ${esc(me().name)}"><span class="pav">${me().init}</span><span class="pdata"><span class="pname">${esc(me().name)}</span><span class="pmail">${esc(me().label)}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
   }
-  function tabs() {
-    const b = base(), cnt = s => s === 'All' ? b.filter(pipeline).length : s === 'Live' ? b.filter(liveRow).length : b.filter(r => hasCase(r, s)).length;
-    const tab = s => { const attn = s === 'Waiting Rate Approval' && st.role !== 'sales' && b.some(myCase); return `<button type="button" role="tab" aria-selected="${st.tab === s}" data-act="tab" data-v="${esc(s)}">${s}<span class="c ${attn ? 'attn' : ''}" ${attn ? 'title="Includes rates waiting for your approval"' : ''}>${cnt(s)}</span></button>`; };
-    const pipe = ['All'].concat(STATUSES).map(tab).join('');
-    /* A: Live closes the row behind a divider, so it reads as outside All. */
-    if (st.liveUI === 'tab') return `<div class="stabs" role="tablist" aria-label="Status">${pipe}<span class="tsep" aria-hidden="true"></span>${tab('Live')}</div>`;
-    /* B: a view switch above the tabs; the status tabs belong to In progress only. */
-    const sw = `<div class="vsw" role="tablist" aria-label="Applications"><button type="button" role="tab" aria-selected="${!isLive()}" data-act="tab" data-v="All">In progress<span class="c">${cnt('All')}</span></button><button type="button" role="tab" aria-selected="${isLive()}" data-act="tab" data-v="Live">${icon('check', 'ic-16')}Live<span class="c">${cnt('Live')}</span></button></div>`;
-    return `${sw}${isLive() ? `<p class="lnote">${st.role === 'sales' ? 'Applications you submitted whose merchant is now live' : 'Your team\'s applications whose merchant is now live'}, latest go-live first. View only.</p>` : `<div class="stabs" role="tablist" aria-label="Status">${pipe}</div>`}`;
-  }
   /* The Cases column: one row per case (service) with its Case ID and its own status. Rejected and waiting cases say why. */
   function caseNote(c) {
     if (c.reject) return `<span class="sub2 h" title="${esc(c.reject[1])}">${c.reject[2]} ${c.reject[2] > 1 ? 'items' : 'item'} rejected by ${esc(c.reject[0])} · ${esc(c.reject[1])}</span>`;
@@ -201,25 +184,24 @@
     return '';
   }
   function casesCell(r) {
-    if (!r.cases.length) return `<span class="sc neu">Not submitted</span>`;
-    const vis = r.cases.filter(c => isLive() ? c.status === 'Live' : c.status !== 'Live'), list = vis.length ? vis : r.cases, shown = list.slice(0, 2);
+    if (!r.cases.length) return `<span class="sub2" style="margin:0">No cases yet</span>`;
+    const list = r.cases.slice().sort((a, b) => (a.status === 'Live') - (b.status === 'Live')), shown = list.slice(0, 2);
     return shown.map(c => `<span class="cs"><span class="sc ${CHIP[c.status]}">${esc(c.status)}</span><span class="csv"><b>${esc(c.id)}</b> · ${esc(svcName(c.svc))}</span>${caseNote(c)}</span>`).join('') + (list.length > 2 ? `<span class="sub2">+${list.length - 2} more case${list.length - 2 > 1 ? 's' : ''}</span>` : '');
   }
   function table(list) {
-    const showSales = st.role !== 'sales', live = isLive(), cols = 5 + (showSales ? 1 : 0) + (live ? 1 : 0);
-    const head = `<th>Merchant</th><th>Contact</th><th>Cases</th>${showSales ? '<th>Salesperson</th>' : ''}${live ? '<th>Live since</th>' : ''}<th>Last activity</th>`;
+    const showSales = st.role !== 'sales', cols = 5 + (showSales ? 1 : 0);
+    const head = `<th>Merchant</th><th>Contact</th><th>Cases</th>${showSales ? '<th>Salesperson</th>' : ''}<th>Last activity</th>`;
     if (st.data === 'loading') return `<div class="tscroll"><table class="dt"><thead><tr>${head}<th></th></tr></thead><tbody>${Array.from({ length: 6 }, () => `<tr class="skel-row">${'<td><span></span></td>'.repeat(cols)}</tr>`).join('')}</tbody></table></div>`;
     if (!list.length) {
-      const filtered = st.q || Object.keys(st.filters || {}).length || (!live && st.tab !== 'All');
-      if (live) return `<div class="empty"><span class="ei">${icon(filtered ? 'search' : 'check', 'ic-24')}</span><h3>${filtered && st.data !== 'empty' ? 'No live applications match' : 'No live applications yet'}</h3><p>${filtered && st.data !== 'empty' ? 'Clear the search and filters to see every live application.' : 'Applications appear here once their merchant goes live.'}</p>${filtered && st.data !== 'empty' ? '<button type="button" class="btn btn-outline btn-sm" data-act="clear">Clear search and filters</button>' : ''}</div>`;
+      const filtered = st.q || Object.keys(st.filters || {}).length;
       return `<div class="empty"><span class="ei">${icon('search', 'ic-24')}</span><h3>${st.data === 'empty' ? 'No applications yet' : 'No applications match'}</h3><p>${st.data === 'empty' ? 'Applications appear here when a Zoho CRM lead is assigned to you.' : filtered ? 'Try another status tab, or clear the search and filters.' : ''}</p>${filtered && st.data !== 'empty' ? '<button type="button" class="btn btn-outline btn-sm" data-act="clear">Clear search and filters</button>' : ''}</div>`;
     }
     const page = list.slice((st.page - 1) * st.size, st.page * st.size);
     return `<div class="tscroll"><table class="dt"><thead><tr>${head}<th><span class="sr-only">Open</span></th></tr></thead><tbody>
       ${page.map(r => `<tr tabindex="0" data-href="${openHref(r)}" aria-label="Open ${esc(r.biz)}"><td><div class="mer"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="two"><span class="p">${esc(r.biz)}</span><span class="s">${esc(r.mid)} · ${esc(r.industry)}</span></span></div></td><td class="two"><span class="p" style="font-weight:400">${esc(r.contact)}</span><span class="s">${esc(r.email)}</span></td>
-        <td>${casesCell(r)}</td>${showSales ? `<td class="num">${esc(r.sales)}</td>` : ''}${live ? `<td class="num">${fmtD(r.since)}</td>` : ''}
+        <td>${casesCell(r)}</td>${showSales ? `<td class="num">${esc(r.sales)}</td>` : ''}
         <td class="two num"><span class="p" style="font-weight:400">${fmtD(r.last)}</span><span class="s">Assigned ${fmtD(r.assigned)}</span></td><td class="go">${icon('right', 'ic mirror')}</td></tr>`).join('')}</tbody></table></div>
-      <div class="rcards-l">${page.map(r => `<a class="rc" href="${openHref(r)}"><span class="top"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="t"><b>${esc(r.biz)}</b><span>${esc(r.industry)} · ${esc(r.mid)}</span></span>${icon('right', 'ic mirror')}</span><span>${casesCell(r)}</span><span class="meta"><span>${esc(r.contact)}</span>${showSales ? `<span>${esc(r.sales)}</span>` : ''}${live ? `<span>Live since ${fmtD(r.since)}</span>` : `<span>Last activity ${fmtD(r.last)}</span>`}</span></a>`).join('')}</div>`;
+      <div class="rcards-l">${page.map(r => `<a class="rc" href="${openHref(r)}"><span class="top"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="t"><b>${esc(r.biz)}</b><span>${esc(r.industry)} · ${esc(r.mid)}</span></span>${icon('right', 'ic mirror')}</span><span>${casesCell(r)}</span><span class="meta"><span>${esc(r.contact)}</span>${showSales ? `<span>${esc(r.sales)}</span>` : ''}<span>Last activity ${fmtD(r.last)}</span></span></a>`).join('')}</div>`;
   }
   function pager(list) {
     if (st.data !== 'loaded' || !list.length) return '';
@@ -230,14 +212,13 @@
   let fb = null;
   function body() {
     const list = st.data === 'empty' ? [] : rows();
-    return `<div class="lnav" data-live="nav">${tabs()}</div><div class="owned"><div id="fbHost"></div><div class="lcard" data-live="tbl">${table(list)}${pager(list)}</div></div>`;
+    return `<div class="owned"><div id="fbHost"></div><div class="lcard" data-live="tbl">${table(list)}${pager(list)}</div></div>`;
   }
 
   const V = {
     key: 'list',
-    protoControls: () => `<label class="lbl" for="role">View as</label><select id="role">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${st.role === k ? 'selected' : ''}>${r.label}</option>`).join('')}</select><label class="lbl" for="dstate">Data</label><select id="dstate">${['loaded', 'loading', 'empty'].map(d => `<option value="${d}" ${st.data === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select><label class="lbl" for="liveui">Live</label><select id="liveui"><option value="switch" ${st.liveUI === 'switch' ? 'selected' : ''}>View switch</option><option value="tab" ${st.liveUI === 'tab' ? 'selected' : ''}>Separated tab</option></select>`,
+    protoControls: () => `<label class="lbl" for="role">View as</label><select id="role">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${st.role === k ? 'selected' : ''}>${r.label}</option>`).join('')}</select><label class="lbl" for="dstate">Data</label><select id="dstate">${['loaded', 'loading', 'empty'].map(d => `<option value="${d}" ${st.data === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select>`,
     bindProto() {
-      document.getElementById('liveui').onchange = e => { st.liveUI = e.target.value; st.page = 1; keep(); SA.rerender(); };
       document.getElementById('role').onchange = e => { st.role = e.target.value; st.page = 1; st.filters = {}; fb = null; keep(); SA.rerender(); };
       document.getElementById('dstate').onchange = e => { st.data = e.target.value; SA.rerender(); };
     },
@@ -248,24 +229,23 @@
       fb = KFilter.mount(document.getElementById('fbHost'), {
         fields: FIELDS(), noun: ['application', 'applications'], today: TODAY, initial: st.filters,
         onExport: () => SA.toast(`${rows().length} applications exported as CSV`),
-        count: vals => base(vals).filter(tabHit).length,
+        count: vals => base(vals).length,
         onChange: v => { st.filters = v; st.page = 1; refresh(); }
       });
     },
     chg: { size: el => { st.size = +el.value; st.page = 1; keep(); } },
     act: {
-      tab: d => { st.tab = d.v; st.page = 1; keep(); refresh(); return false; },
       prev: () => { st.page--; refresh(); return false; },
       next: () => { st.page++; refresh(); return false; },
-      clear: () => { st.q = ''; if (!isLive()) st.tab = 'All'; st.filters = {}; keep(); return true; }
+      clear: () => { st.q = ''; st.filters = {}; return true; }
     }
   };
   /* Search, tabs and paging redraw only the tabs and the table, so the search field keeps focus. */
   function refresh() {
     const host = document.querySelector('[data-live="body"]'); if (!host) return;
-    const nav = host.querySelector('[data-live="nav"]'), tbl = host.querySelector('[data-live="tbl"]');
+    const tbl = host.querySelector('[data-live="tbl"]');
     const list = st.data === 'empty' ? [] : rows();
-    nav.innerHTML = tabs(); tbl.innerHTML = table(list) + pager(list);
+    tbl.innerHTML = table(list) + pager(list);
   }
   document.addEventListener('click', e => { const tr = e.target.closest('tr[data-href]'); if (tr) location.href = tr.dataset.href; });
   document.addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[data-href]'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); location.href = tr.dataset.href; } });
