@@ -177,16 +177,11 @@
       <div class="tsearch" id="topSearch"></div>
       <button type="button" class="profile" aria-label="Account: ${esc(me().name)}"><span class="pav">${me().init}</span><span class="pdata"><span class="pname">${esc(me().name)}</span><span class="pmail">${esc(me().label)}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
   }
-  /* The Cases column: one row per case (service) with its Case ID and its own status. Rejected and waiting cases say why. */
-  function caseNote(c) {
-    if (c.reject) return `<span class="sub2 h" title="${esc(c.reject[1])}">${c.reject[2]} ${c.reject[2] > 1 ? 'items' : 'item'} rejected by ${esc(c.reject[0])} · ${esc(c.reject[1])}</span>`;
-    if (c.status === 'Waiting Rate Approval') return mine(c) ? `<span class="sub2 m">${c.pending} rate${c.pending > 1 ? 's' : ''} need${c.pending > 1 ? '' : 's'} your approval</span>` : `<span class="sub2">${c.pending} rate${c.pending > 1 ? 's' : ''} with the ${esc(c.tier)}</span>`;
-    return '';
-  }
+  /* The Cases column: one line per case (Case ID and service). Statuses are not shown here; they live on the case itself and in the Case status filter. */
   function casesCell(r) {
     if (!r.cases.length) return `<span class="sub2" style="margin:0">No cases yet</span>`;
     const list = r.cases.slice().sort((a, b) => (a.status === 'Live') - (b.status === 'Live')), shown = list.slice(0, 2);
-    return shown.map(c => `<span class="cs"><span class="sc ${CHIP[c.status]}">${esc(c.status)}</span><span class="csv"><b>${esc(c.id)}</b> · ${esc(svcName(c.svc))}</span>${caseNote(c)}</span>`).join('') + (list.length > 2 ? `<span class="sub2">+${list.length - 2} more case${list.length - 2 > 1 ? 's' : ''}</span>` : '');
+    return shown.map(c => `<span class="cs"><span class="csv"><b>${esc(c.id)}</b> · ${esc(svcName(c.svc))}</span></span>`).join('') + (list.length > 2 ? `<span class="sub2">+${list.length - 2} more case${list.length - 2 > 1 ? 's' : ''}</span>` : '');
   }
   function table(list) {
     const showSales = st.role !== 'sales', cols = 5 + (showSales ? 1 : 0);

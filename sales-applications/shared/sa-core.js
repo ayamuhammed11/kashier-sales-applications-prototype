@@ -150,7 +150,7 @@
   const KEY = () => 'sa-dir-' + (V && V.key);
   function save() { try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch (e) { } }
   function load() { try { const s = JSON.parse(localStorage.getItem(KEY()) || 'null'); if (s && s.merchant) { S = Object.assign(blankState(), s); if (!s.cases) { S.cases = {}; if (s.status && s.status !== 'New') S.order.forEach(id => { S.cases[id] = { status: s.status, prev: s.prevStatus, cancelComment: s.cancelComment }; }); } delete S.status; } } catch (e) { } ME = ROLES[S.viewAs] || ROLES.sales; }
-  const log = (text, ic = 'pencil', detail = '') => { S.log.unshift({ t: nowStr(), who: ME.name, text, ic, detail }); };
+  const log = (text, ic = 'pencil', detail = '', id) => { S.log.unshift({ t: nowStr(), who: ME.name, text, ic, detail, id }); };
 
   /* ---------- Pricing ---------- */
   const acts = () => S.activities.slice();
@@ -234,14 +234,14 @@
     S.order.forEach(id => {
       if (caseStatus(id) !== 'Waiting Rate Approval') return;
       const fl = flagged().filter(f => f.id === id); if (fl.some(f => !decisionOf(f))) return;
-      if (fl.some(rejectedStill)) { setCase(id, 'Rejected'); S.log.unshift({ t: nowStr(), who: 'System', text: `returned the ${label(id)} case to the salesperson`, ic: 'arrows', detail: 'One or more rates were rejected.' }); }
-      else { setCase(id, 'Underwriting Review'); S.log.unshift({ t: nowStr(), who: 'System', text: `moved the ${label(id)} case to Underwriting Review`, ic: 'check', detail: 'Every requested rate was approved.' }); }
+      if (fl.some(rejectedStill)) { setCase(id, 'Rejected'); S.log.unshift({ t: nowStr(), who: 'System', text: `returned the ${label(id)} case to the salesperson`, ic: 'arrows', detail: 'One or more rates were rejected.', id }); }
+      else { setCase(id, 'Underwriting Review'); S.log.unshift({ t: nowStr(), who: 'System', text: `moved the ${label(id)} case to Underwriting Review`, ic: 'check', detail: 'Every requested rate was approved.', id }); }
     });
   }
   function decide(f, decision, comment = '') {
     S.decisions[f.key] = { decision, by: ME.name, role: ME.role, comment, rate: f.sel.rate, fee: f.sel.fee, at: nowStr() };
     if (decision === 'rejected') delete S.just[f.key];
-    log(`${decision} the rate ${f.t.label}: ${label(f.id)}${f.line.bank ? ' · ' + f.line.bank : ''}`, decision === 'approved' ? 'check' : 'xcircle', `Requested ${rateText(f.sel)} · Published ${pubText(f.p)}${comment ? ' · Decision comment: ' + comment : ''}`);
+    log(`${decision} the rate ${f.t.label}: ${label(f.id)}${f.line.bank ? ' · ' + f.line.bank : ''}`, decision === 'approved' ? 'check' : 'xcircle', `Requested ${rateText(f.sel)} · Published ${pubText(f.p)}${comment ? ' · Decision comment: ' + comment : ''}`, f.id);
     settleCases();
   }
   function applyRule(id, li, rule, adv) {
@@ -251,7 +251,7 @@
     line.rates = {};
     tiersFor(id, line).forEach(t => { const v = ruleRate(rule, t); line.rates[t.key] = { rate: String(v.rate), fee: String(v.fee) }; });
     line.rule = rule.id; line.custom = false; line.by = ME.name; line.at = nowStr();
-    log(`added rates from service pricing: ${label(id)}${line.bank ? ' · ' + line.bank : ''}`, 'banknotes', `Rule: ${S.entity} · ${rule.act} · ${chOf(id)} · ${c.model} · ${nmOf(id)}`);
+    log(`added rates from service pricing: ${label(id)}${line.bank ? ' · ' + line.bank : ''}`, 'banknotes', `Rule: ${S.entity} · ${rule.act} · ${chOf(id)} · ${c.model} · ${nmOf(id)}`, id);
   }
   /* Rates applied from a rule follow the application's activities and model; manual rates stay. */
   function reprice(why) {
@@ -545,7 +545,7 @@
         const t = api.el.querySelector('#cc'), y = api.el.querySelector('[data-y]');
         t.oninput = () => { y.disabled = !t.value.trim(); };
         api.el.querySelector('[data-n]').onclick = api.close;
-        y.onclick = () => { const c = t.value.trim(); setCase(id, 'Canceled', { prev: caseStatus(id), cancelComment: c }); log(`canceled the ${label(id)} case`, 'x', 'Comment: ' + c); api.close(); rerender(); toast(`${label(id)} case canceled`); };
+        y.onclick = () => { const c = t.value.trim(); setCase(id, 'Canceled', { prev: caseStatus(id), cancelComment: c }); log(`canceled the ${label(id)} case`, 'x', 'Comment: ' + c, id); api.close(); rerender(); toast(`${label(id)} case canceled`); };
       } });
   }
   /* Reopen (FIN-28567): any time, back to the status the case was canceled from. The MID on the portal is untouched. */
@@ -557,7 +557,7 @@
       bind(api) {
         const t = api.el.querySelector('#rc');
         api.el.querySelector('[data-n]').onclick = api.close;
-        api.el.querySelector('[data-y]').onclick = () => { const c = t.value.trim(); setCase(id, to, { prev: '', cancelComment: '' }); log(`reopened the ${label(id)} case (back to ${to})`, 'arrows', c ? 'Comment: ' + c : ''); api.close(); scrollTo(0, 0); rerender(); toast(`${label(id)} case reopened`); };
+        api.el.querySelector('[data-y]').onclick = () => { const c = t.value.trim(); setCase(id, to, { prev: '', cancelComment: '' }); log(`reopened the ${label(id)} case (back to ${to})`, 'arrows', c ? 'Comment: ' + c : '', id); api.close(); scrollTo(0, 0); rerender(); toast(`${label(id)} case reopened`); };
       } });
   }
   function openReject(f) {
@@ -586,6 +586,7 @@
           S.submittedAt = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
           const sent = S.order.filter(id => ['New', 'Rejected'].includes(caseStatus(id)));
           sent.forEach(id => setCase(id, caseRoute(id)));
+          sent.forEach(id => log(`${re ? 'resubmitted' : 'submitted'} the ${label(id)} case`, 'send', `${S.cases[id].caseId} · ${S.cases[id].status}`, id));
           log(re ? 'resubmitted the returned cases with revised rates' : 'submitted the application', 'send', `Application ID ${S.appId} · ${sent.length} case${sent.length === 1 ? '' : 's'}: ${sent.map(label).join(', ')}${S.submitComment ? ' · Comment: ' + S.submitComment : ''}`);
           api.close(); scrollTo(0, 0); rerender(); toast(re ? 'Application resubmitted' : 'Application submitted');
         };
@@ -608,7 +609,7 @@
     return `<header class="hdr"><div class="hdr-l">
         <nav class="crumb" aria-label="Breadcrumb"><a href="#">My Applications</a>${chevR}<span aria-current="page">${isEdit() ? title : esc(S.merchant.name)}</span></nav>
         <h1>${title}</h1>
-        <p class="desc">${isEdit() && submitted() ? 'One or more cases were returned to you. Change the rejected rates and resubmit. The other cases carry on unchanged.' : isEdit() ? 'Finish onboarding this lead into a live merchant. Capture their business criteria and services below. The required documents checklist updates automatically as you go, exactly like the merchant will see it.' : 'The application exactly as it was submitted. Each service is its own case, with its own status.'}</p>
+        <p class="desc">${isEdit() && submitted() ? 'One or more cases were returned to you. Change the rejected rates and resubmit. The other cases carry on unchanged.' : isEdit() ? 'Finish onboarding this lead into a live merchant. Capture their business criteria and services below. The required documents checklist updates automatically as you go, exactly like the merchant will see it.' : 'Everything about this merchant in one place. Open a case to see its full details and logs.'}</p>
         <div class="ph-meta">${submitted() ? `<span class="mi"><b>${esc(S.appId)}</b></span>` : ''}<span class="mi">${icon('link', 'ic-14')}<span>Zoho CRM record <a href="#" target="_blank" rel="noopener">ZOHO-00002 ${icon('ext', 'ic-14')}</a></span></span>${last ? `<span class="mi">${icon('clock', 'ic-14')}<span>Last activity ${esc(whenStr(last.t))} by ${esc(last.who)} · <button type="button" class="link-btn" data-act="logs">View logs</button></span></span>` : ''}</div>
       </div><button type="button" class="profile" aria-label="Account: ${ME.name}"><span class="pav">${ME.init}</span><span class="pdata"><span class="pname">${ME.name}</span><span class="pmail">${ME.email}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
   }
@@ -735,14 +736,14 @@
     if (S.svc[id]) return;
     S.svc[id] = { model: 'PF', currencies: ['EGP'], ops: [], notes: '', lines: [blankLine()] };
     S.order.push(id); S.order.sort((a, b) => SERVICES.indexOf(a) - SERVICES.indexOf(b));
-    log(`added service: ${nmOf(id)} (${chOf(id)})`, 'plus');
+    log(`added service: ${nmOf(id)} (${chOf(id)})`, 'plus', '', id);
   }
   function removeService(id, { quiet = false } = {}) {
     const snap = JSON.stringify({ c: S.svc[id], just: S.just, terminals: S.terminals });
     delete S.svc[id]; delete S.cases[id]; S.order = S.order.filter(x => x !== id);
     Object.keys(S.just).forEach(k => { if (k.startsWith(id + '::')) delete S.just[k]; });
     if (!hasCh('POS')) S.terminals = '';
-    log(`removed service: ${nmOf(id)} (${chOf(id)})`, 'x');
+    log(`removed service: ${nmOf(id)} (${chOf(id)})`, 'x', '', id);
     if (!quiet) toast(`${label(id)} removed and its values cleared`, () => { const o = JSON.parse(snap); S.svc[id] = o.c; S.order.push(id); S.order.sort((a, b) => SERVICES.indexOf(a) - SERVICES.indexOf(b)); S.just = o.just; S.terminals = o.terminals; rerender(); });
   }
 
@@ -757,44 +758,101 @@
         <div class="ap-act">${d ? `<span class="flag ${d.decision === 'approved' ? 'ok' : 'h'}">${icon(d.decision === 'approved' ? 'check' : 'xcircle', 'ic-14')}${d.decision === 'approved' ? 'Approved' : 'Rejected'} by ${esc(d.by)}${d.comment ? ' · ' + esc(d.comment) : ''}</span>` : m ? `<button type="button" class="btn btn-outline-danger btn-sm" data-act="reject" data-k="${esc(f.key)}">Reject</button><button type="button" class="btn btn-outline btn-sm" data-act="approve" data-k="${esc(f.key)}">${icon('tick', 'ic', 2)}Approve</button>` : `<span class="hint">Waiting for the ${f.approver}</span>`}</div></div>`; }).join('');
     return `<section class="card sec" id="approval" aria-labelledby="apH"><div class="sec-h"><div class="tt"><h2 id="apH">Rates waiting for your approval</h2><p>${mineLeft ? `${mineLeft} rate${mineLeft > 1 ? 's' : ''} need${mineLeft > 1 ? '' : 's'} your decision.` : 'You have decided every rate assigned to you.'}${S.submitComment ? ` Salesperson's note: “${esc(S.submitComment)}”` : ''}</p></div></div><div class="ap-list">${rows}</div></section>`;
   }
-  /* One case per service: its own status, its own tracking, its own Cancel / Reopen. */
-  function caseCard(id) {
-    const st = caseStatus(id), c = S.cases[id] || {}, fl = flagged().filter(f => f.id === id);
-    const draft = st === 'New', ready = draft && !svcIssues(id).length;
+  /* Request a new service on a submitted application (FIN-30790): it becomes a new, independent case; existing cases stay read-only and unchanged. */
+  function submitCase(id) {
+    if (svcIssues(id).length) { toast('Finish the service setup first'); return false; }
+    const go = () => { setCase(id, caseRoute(id)); log(`requested a new service: ${label(id)}`, 'send', `${S.cases[id].caseId} · ${caseRoute(id) === 'Waiting Rate Approval' ? 'rates need approval' : 'no approval needed'}`, id); rerender(); toast(`${label(id)} submitted as ${S.cases[id].caseId}`); };
+    if (needsApproval().some(f => f.id === id && !rejectedStill(f))) openJustify(go); else go();
+    return false;
+  }
+  const liveOf = id => (S.cases[id] && S.cases[id].liveSince) || S.liveSince || '';
+  const banksOf = id => S.svc[id].lines.map(l => l.bank).filter(Boolean);
+  function trackOf(id) {
+    const st = caseStatus(id), fl = flagged().filter(f => f.id === id);
     const reviewed = fl.filter(f => decisionOf(f)).length, approvedN = fl.filter(approvedOk).length;
     const steps = fl.length ? ['Submitted', 'Rate Approval', 'Underwriting Review', 'Bank Submission'] : ['Submitted', 'Underwriting Review', 'Bank Submission'];
     if (st === 'Live') steps.push('Live');
     const cur = st === 'Live' ? steps.length : st === 'Waiting Rate Approval' ? 1 : st === 'Underwriting Review' ? (fl.length ? 2 : 1) : st === 'Bank Submission' ? steps.length - 1 : -1;
-    const note = draft ? (ready ? 'New service request, not submitted yet. It becomes its own case when you submit it. The other cases are not affected.' : `New service request, not submitted yet. ${esc(svcIssues(id)[0])}. The other cases are not affected.`) : st === 'Canceled' ? `Canceled. View only.${c.cancelComment ? ' Comment: ' + esc(c.cancelComment) : ''}`
-      : st === 'Live' ? `The merchant went live on ${esc(c.liveSince || S.liveSince || '')} with this service. View only.`
-      : st === 'Waiting Rate Approval' ? `${reviewed} of ${fl.length} requested rates reviewed. It moves to Underwriting Review once every rate is approved, and comes back to you to edit if any is rejected.`
-      : `Submitted on ${esc(S.submittedAt)}. It can be edited again only if a rate is rejected and the case is returned to you.`;
-    const act = draft ? `<span class="case-acts"><button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button><button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button></span>` : st === 'Live' ? '' : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-act="reopen" data-id="${esc(id)}">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-act="cancel" data-id="${esc(id)}">Cancel Case</button>`;
-    const track = st === 'Canceled' || draft ? '' : `<ol class="track">${steps.map((t, k) => `<li class="${k < cur ? 'done' : k === cur ? 'now' : ''}"><span class="d">${k < cur ? icon('tick', 'ic-14', 2.5) : k + 1}</span><b>${t}</b><span class="hint">${k === 0 ? `${esc(S.submittedAt)}` : t === 'Live' ? esc(c.liveSince || S.liveSince || '') : t === 'Rate Approval' && k <= cur ? (st === 'Waiting Rate Approval' ? `${approvedN} approved · ${fl.length - reviewed} to review` : 'All rates approved') : ''}</span></li>`).join('')}</ol>`;
-    return `<div class="case" id="case-${id.replace(/\W/g, '')}"><div class="case-h">${c.caseId ? `<span class="cid">${esc(c.caseId)}</span>` : ''}<span class="tag info">${chOf(id)}</span><b>${esc(nmOf(id))}</b><span class="muted">${esc(S.svc[id].model)}${S.svc[id].lines.some(l => l.bank) ? ' · ' + S.svc[id].lines.map(l => l.bank).filter(Boolean).map(esc).join(', ') : ''}</span>${draft ? '<span class="sc neu">Not submitted</span>' : caseChip(id)}<span class="sp"></span>${act}</div>
-      <p class="case-n">${note}</p>${track}</div>`;
+    if (st === 'Canceled' || st === 'New') return '';
+    return `<ol class="track">${steps.map((t, k) => `<li class="${k < cur ? 'done' : k === cur ? 'now' : ''}"><span class="d">${k < cur ? icon('tick', 'ic-14', 2.5) : k + 1}</span><b>${t}</b><span class="hint">${k === 0 ? esc(S.submittedAt) : t === 'Live' ? esc(liveOf(id)) : t === 'Rate Approval' && k <= cur ? (st === 'Waiting Rate Approval' ? `${approvedN} approved · ${fl.length - reviewed} to review` : 'All rates approved') : ''}</span></li>`).join('')}</ol>`;
   }
-  /* Request a new service on a submitted application (FIN-30790): it becomes a new, independent case; existing cases stay read-only and unchanged. */
-  function submitCase(id) {
-    if (svcIssues(id).length) { toast('Finish the service setup first'); return false; }
-    const go = () => { setCase(id, caseRoute(id)); log(`requested a new service: ${label(id)}`, 'send', `${S.cases[id].caseId} · ${caseRoute(id) === 'Waiting Rate Approval' ? 'rates need approval' : 'no approval needed'}`); rerender(); toast(`${label(id)} submitted as ${S.cases[id].caseId}`); };
-    if (needsApproval().some(f => f.id === id && !rejectedStill(f))) openJustify(go); else go();
-    return false;
+  /* A row in the profile's case list: ID, service, status and a one-line note. Opening it shows the whole case. */
+  function caseRow(id) {
+    const st = caseStatus(id), c = S.cases[id] || {}, svc = S.svc[id], fl = flagged().filter(f => f.id === id), reviewed = fl.filter(f => decisionOf(f)).length;
+    const draft = st === 'New', ready = draft && !svcIssues(id).length, banks = banksOf(id);
+    const note = draft ? (ready ? 'Not submitted yet. It becomes its own case when you submit it.' : `Not submitted yet. ${esc(svcIssues(id)[0])}.`)
+      : st === 'Canceled' ? `Canceled.${c.cancelComment ? ' ' + esc(c.cancelComment) : ''}`
+      : st === 'Live' ? `Live since ${esc(liveOf(id))}`
+      : st === 'Waiting Rate Approval' ? `${reviewed} of ${fl.length} requested rates reviewed`
+      : `Submitted ${esc(S.submittedAt)}`;
+    const acts = draft ? `<button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button><button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button>`
+      : `<button type="button" class="btn btn-outline btn-sm" data-act="openCase" data-id="${esc(id)}" aria-label="View case ${esc(c.caseId || label(id))}">View case${icon('right', 'ic mirror')}</button>`;
+    return `<div class="crow ${draft ? 'draft' : ''}" id="case-${id.replace(/\W/g, '')}"><div class="crow-m"><div class="crow-t">${c.caseId ? `<span class="cid">${esc(c.caseId)}</span>` : ''}<span class="tag info">${chOf(id)}</span><b>${esc(nmOf(id))}</b>${draft ? '<span class="sc neu">Not submitted</span>' : caseChip(id)}</div>
+      <div class="crow-s">${esc(svc.model)}${banks.length ? ' · ' + banks.map(esc).join(', ') : ''}</div><div class="crow-n">${note}</div></div><div class="crow-a">${acts}</div></div>`;
+  }
+  /* Case detail: everything about one service request in one place, with its own activity log. */
+  function caseLogHTML(id) {
+    const ts = e => { const d = Date.parse(e.t); return isNaN(d) ? 0 : d; };
+    const rows = S.log.map((e, i) => ({ e, i })).filter(x => x.e.id === id || !x.e.id).sort((a, b) => (ts(b.e) - ts(a.e)) || (a.i - b.i)).map(x => x.e);
+    return `<ul class="log">${rows.map(e => `<li><span class="li">${icon(e.ic || 'pencil', 'ic-16')}</span><div><div class="t num">${esc(e.t)}${e.id ? '' : ' <span class="tag">Application</span>'}</div><div><b>${esc(e.who)}</b> ${esc(e.text)}</div>${e.detail ? `<div class="d">${esc(e.detail)}</div>` : ''}</div></li>`).join('')}</ul>`;
+  }
+  function caseRates(id) {
+    const svc = S.svc[id], fl = flagged().filter(f => f.id === id), past = ['Underwriting Review', 'Bank Submission', 'Live'].includes(caseStatus(id));
+    const rows = svc.lines.map(l => tiersFor(id, l).map(t => {
+      const sel = l.rates[t.key] || {}, f = fl.find(x => x.key === `${id}::${l.bank}::${t.key}`), d = f && decisionOf(f), p = pubFor(id, l, t);
+      const appr = !f ? '<span class="hint">No approval needed</span>'
+        : d ? `<span class="sc ${d.decision === 'approved' ? 'ok' : 'bad'}">${d.decision}</span> <span class="hint">${esc(d.by)} (${esc(d.role)})${d.comment ? ' · ' + esc(d.comment) : ''}</span>`
+        : past ? '<span class="sc ok">approved</span>' : `<span class="sc warn">Pending</span> <span class="hint">${f.approver}</span>`;
+      const why = f && S.just[f.key] ? `<div class="hint" style="margin-top:4px">Justification: ${esc(S.just[f.key])}</div>` : '';
+      return `<tr><td>${l.bank ? `<div class="hint">${esc(l.bank)}</div>` : ''}${esc(t.label)}</td><td class="num"><b>${fmtN(sel.rate)}% + ${fmtN(sel.fee)} EGP</b></td><td class="num">${pubText(p)}</td><td>${appr}${why}</td></tr>`;
+    }).join('')).join('');
+    return `<div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Rate type</th><th>Requested</th><th>Published</th><th>Approval</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  let caseDr = null;
+  function openCase(id) {
+    const draw = () => {
+      if (!S.svc[id]) { caseDr.api.close(true); return; }
+      const st = caseStatus(id), c = S.cases[id] || {}, svc = S.svc[id], banks = banksOf(id);
+      const note = st === 'Canceled' ? `Canceled. View only.${c.cancelComment ? ' Comment: ' + esc(c.cancelComment) : ''}`
+        : st === 'Live' ? `The merchant went live with this service on ${esc(liveOf(id))}. View only.`
+        : st === 'Waiting Rate Approval' ? 'Waiting for rate approval. It moves to Underwriting Review once every rate is approved, and comes back to the salesperson to edit if any is rejected.'
+        : st === 'Rejected' ? 'Returned to the salesperson: a rate was rejected.' : `Submitted on ${esc(S.submittedAt)}. View only.`;
+      const act = st === 'Live' || isApprover() ? '' : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-cd="reopen">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="cancel">Cancel Case</button>`;
+      caseDr.api.setTitle(`${esc(label(id))}`, `${esc(c.caseId || '')} · ${esc(S.merchant.name)}`);
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}</div><p class="case-n">${note}</p></div>
+        ${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
+        <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
+          ${needsBank(id) ? `<dt>Financial institution</dt><dd>${banks.length ? banks.map(esc).join(', ') : 'Not chosen'}</dd>` : ''}${chOf(id) === 'POS' ? `<dt>POS terminals</dt><dd>${esc(S.terminals || 'Not set')}</dd>` : ''}
+          ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
+          <dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}</dl></section>
+        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>
+        <section class="cd-s"><h3 class="sub-h">Activity log</h3>${caseLogHTML(id)}</section>`;
+      const b = caseDr.api.body;
+      const cb = b.querySelector('[data-cd=cancel]'), rb = b.querySelector('[data-cd=reopen]');
+      if (cb) cb.onclick = () => openCancel(id); if (rb) rb.onclick = () => openReopen(id);
+    };
+    caseDr = { draw };
+    drawer({ size: 'xl', title: esc(label(id)), sub: '', onClose() { caseDr = null; }, render(api) { caseDr.api = api; draw(); } });
   }
   function readOnlyView() {
-    const fl = flagged();
-    const cases = `<div class="card sec"><div class="sec-h"><div class="tt"><h2 class="sub-h" style="font-size:16px">Cases · ${S.order.length}</h2><p>${esc(S.appId)} · submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}. Each service is its own case with its own ID and status.</p></div>${isApprover() ? '' : `<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button>`}</div><div class="cases">${S.order.map(caseCard).join('')}</div></div>`;
-    const svcRows = S.order.map(id => S.svc[id].lines.map((l, li) => tiersFor(id, l).map((t, ti) => { const s = l.rates[t.key] || {}; const f = fl.find(x => x.key === `${id}::${l.bank}::${t.key}`); return `<tr>${ti === 0 ? `<td rowspan="${tiersFor(id, l).length}"><b>${esc(label(id))}</b><div class="hint">${S.svc[id].model}${l.bank ? ' · ' + esc(l.bank) : ''}</div>${caseChip(id)}</td>` : ''}<td>${t.label}</td><td class="num">${fmtN(s.rate)}% + ${fmtN(s.fee)} EGP</td><td>${f ? (() => { const d = decisionOf(f); return d ? `<span class="sc ${d.decision === 'approved' ? 'ok' : 'bad'}">${d.decision}</span> <span class="hint">${esc(d.by)}</span>` : ['Underwriting Review', 'Bank Submission', 'Live'].includes(caseStatus(id)) ? `<span class="sc ok">approved</span>` : `<span class="sc warn">Pending</span> <span class="hint">${f.approver}</span>`; })() : '<span class="hint">No approval needed</span>'}</td></tr>`; }).join('')).join('')).join('');
+    const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const head = `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
+      <div class="prof-id"><h2>${esc(S.merchant.name)}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
+        <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span><span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span></div></div>
+      <div class="prof-n"><b>${S.order.length}</b><span>case${S.order.length === 1 ? '' : 's'}</span></div></section>`;
+    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases</h2><p>Each service is its own case with its own status. Open one to see its details and activity log.</p></div>${isApprover() ? '' : `<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button>`}</div><div class="crows">${S.order.map(caseRow).join('')}</div></section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
-    return `${approvalCard()}${cases}
-      <div class="card sec"><h2 class="sub-h" style="font-size:16px">Merchant and criteria</h2><dl class="dl"><dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Contact</dt><dd>${esc(S.merchant.email)} · <span dir="ltr">${esc(S.merchant.phone)}</span></dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}</dl></div>
-      <div class="card sec"><h2 class="sub-h" style="font-size:16px">Services &amp; pricing</h2><div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Service</th><th>Rate type</th><th>Rate</th><th>Rate approval</th></tr></thead><tbody>${svcRows}</tbody></table></div></div>
-      <div class="grid2"><div class="card sec"><h2 class="sub-h" style="font-size:16px">Documents</h2><dl class="dl">${docs.map(d => `<dt>${esc(d)}</dt><dd>${Object.values(S.docs[d]).map(esc).join(', ')}</dd>`).join('') || '<dd>None uploaded</dd>'}</dl></div>
-      <div class="card sec"><h2 class="sub-h" style="font-size:16px">Payout methods and contracts</h2><dl class="dl">${S.payouts.map((p, i) => `<dt>Payout method ${i + 1}${p.id === S.primary ? ' · Primary' : ''}</dt><dd>${p.type === 'bank' ? `Bank account: ${esc(p.bank)} · •••• ${esc(p.acct.slice(-4))}` : `E-wallet: ${esc(p.provider)} · •••• ${esc(p.mobile.slice(-4))}`}</dd>`).join('')}${Object.entries(S.reqContracts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}${S.contracts.map(c => `<dt>${esc(c.label)}</dt><dd>${esc(c.file)}</dd>`).join('')}</dl></div></div>`;
+    const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
+    const side = `<aside class="prof-side">
+      <section class="card sec"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}`)}</section>
+      <section class="card sec"><h2 class="sub-h">Payout methods</h2>${S.payouts.length ? dl(S.payouts.map((p, i) => `<dt>${p.id === S.primary ? 'Primary' : esc(p.name || 'Method ' + (i + 1))}</dt><dd>${p.type === 'bank' ? `${esc(p.bank)} · •••• ${esc(p.acct.slice(-4))}` : `${esc(p.provider)} · •••• ${esc(p.mobile.slice(-4))}`}</dd>`).join('')) : '<p class="hint" style="margin:0">None added.</p>'}</section>
+      <section class="card sec"><h2 class="sub-h">Documents</h2>${docs.length ? dl(docs.map(d => `<dt>${esc(d)}</dt><dd>${Object.values(S.docs[d]).map(esc).join(', ')}</dd>`).join('')) : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
+      <section class="card sec"><h2 class="sub-h">Contracts</h2>${Object.keys(S.reqContracts).length + S.contracts.length ? dl(Object.entries(S.reqContracts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + S.contracts.map(c => `<dt>${esc(c.label)}</dt><dd>${esc(c.file)}</dd>`).join('')) : '<p class="hint" style="margin:0">None attached.</p>'}</section></aside>`;
+    return `${head}<div class="prof-g"><div class="prof-main">${approvalCard()}${cases}</div>${side}</div>`;
   }
 
   /* ---------- Presets (prototype only) ---------- */
-  function submitDemo() { S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => setCase(id, caseRoute(id))); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
+  function submitDemo() { S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
   function rejectDemo(target) {
     const fl = flagged(), w = fl.find(f => f.id === (target || 'Online Wallet')) || fl[0], b = target ? null : fl.find(f => f.id !== w.id);
     if (b) S.decisions[b.key] = { decision: 'approved', by: 'Nadia Salah', role: 'Sales Manager', comment: '', rate: b.sel.rate, fee: b.sel.fee, at: '09/07/2026, 10:02:00 AM' };
@@ -838,6 +896,7 @@
       V.render();
       bindStatic(); V.afterRender && V.afterRender();
     } finally { rendering = false; }
+    if (caseDr && caseDr.api && caseDr.api.el.isConnected) caseDr.draw();
     scrollTo(sx, sy);
     if (fid) { const n = document.getElementById(fid); if (n && n !== document.activeElement) { n.focus({ preventScroll: true }); if (sel && 'setSelectionRange' in n) try { n.setSelectionRange(sel[0], sel[1]); } catch (e) { } } }
     if (opts.keepPop && popEl && popBtn && !popBtn.isConnected) { const nb = document.querySelector(`[data-act="${popBtn.dataset.act}"]`); if (nb) { popBtn = nb; nb.setAttribute('aria-expanded', 'true'); } }
@@ -848,6 +907,7 @@
   const ACT = {
     logs: () => openLogs(),
     submitCase: d => submitCase(d.id),
+    openCase: d => { openCase(d.id); return false; },
     cancel: d => openCancel(d.id),
     reopen: d => openReopen(d.id),
     submit: () => openSubmit(),
@@ -897,7 +957,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
@@ -971,10 +1031,12 @@
         if (st === 'Rejected') { rejectDemo(id); }
         else {
           if (!['Waiting Rate Approval', 'New'].includes(st)) flagged().filter(f => f.id === id && !decisionOf(f)).forEach(f => { S.decisions[f.key] = { decision: 'approved', by: f.approver === 'Head of Sales' ? 'Karim Zaki' : 'Nadia Salah', role: f.approver, comment: '', rate: f.sel.rate, fee: f.sel.fee, at: '09/07/2026, 10:02:00 AM' }; });
+          const hist = { 'Underwriting Review': 1, 'Bank Submission': 2, Live: 3, Canceled: 1 }[st] || 0;
+          ['Underwriting Review', 'Bank Submission', 'Live'].slice(0, hist).forEach((x, k) => S.log.unshift({ t: `09/0${7 + k * 2}/2026, 10:0${k}:00 AM`, who: 'System', text: `moved the ${label(id)} case to ${x}`, ic: 'check', id }));
+          if (st === 'Canceled') S.log.unshift({ t: '09/12/2026, 03:15:00 PM', who: 'Aya Muhammed', text: `canceled the ${label(id)} case`, ic: 'x', detail: 'Comment: The merchant dropped this service.', id });
           setCase(id, st, st === 'Canceled' ? { prev: 'Underwriting Review', cancelComment: 'The merchant dropped this service.' } : st === 'Live' ? { liveSince: since } : {});
         }
       });
-      if (S.order.some(id => caseStatus(id) === 'Live')) S.log.unshift({ t: '10/20/2026, 09:00:00 AM', who: 'System', text: 'marked a case as live', ic: 'check', detail: 'Moved out of Bank Submission.' });
     }
     if (qs.get('as') && ROLES[qs.get('as')]) { S.viewAs = qs.get('as'); ME = ROLES[S.viewAs]; const v = document.getElementById('viewAs'); if (v) v.value = S.viewAs; }
   }
