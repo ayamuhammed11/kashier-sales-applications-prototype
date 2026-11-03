@@ -475,3 +475,17 @@ body.locked { overflow: hidden; }
 .ch-g { display: flex; flex-direction: column; gap: 8px; }
 .ch-h { display: flex; align-items: center; gap: 8px; }
 .ch-h b { font-size: 14px; font-weight: 600; color: var(--cadet-base); }
+.ch-ic { width: 28px; height: 28px; border-radius: 50%; background: var(--primary-10); color: var(--primary); display: grid; place-items: center; flex-shrink: 0; }
+
+/* Comments on the application. */
+.cm-new { display: flex; gap: 12px; align-items: flex-start; }
+.cm-f { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.cm-f textarea { min-height: 72px; resize: vertical; }
+.cm-a { display: flex; justify-content: flex-end; }
+.cm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.cm { display: flex; gap: 12px; padding-block: 16px; border-block-start: 1px solid var(--border-subtle); }
+.cm-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cm-h { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
+.cm-h b { font-weight: 600; }
+.cm-t { font-size: 12px; color: var(--muted-fg); margin-inline-start: auto; }
+.cm-b p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground, #202020); }

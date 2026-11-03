@@ -320,6 +320,7 @@
           <div class="step-h"><h3 id="stepH" tabindex="-1">Step ${i + 1} of 4: ${STEPS[i].t}</h3>${STEPS[i].opt ? '<span class="opt">(optional)</span>' : ''}${i === 0 && S.order.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="addSvc">${icon('plus', 'ic')}Add service</button>` : ''}</div>${HINT[i] ? `<p class="hint" style="margin:-12px 0 0">${HINT[i]}</p>` : ''}
           ${stepBody(i)}
           <div class="sfoot" data-live="sfoot">${footFor(i)}</div></section>
+        ${SA.commentsSection()}
         <div class="c-status" data-live="status">${statusBar()}</div></div>`;
     },
     afterRender() { drawSvc(); },
