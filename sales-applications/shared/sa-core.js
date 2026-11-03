@@ -43,6 +43,7 @@
     trash: P('m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0'),
     retry: P('M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99'),
     ext: P('M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25'),
+    download: P('M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3'),
     bolt: P('m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z'),
     help: P('M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z'),
     bell: P('M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0')
@@ -863,9 +864,9 @@
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
     const info = `<div class="prof-info">
       <section class="card sec prof-wide"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}`)}</section>
+      <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Documents</h2>${docs.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="docs" data-n="${docs.length}">${icon('download', 'ic')}Download all (${docs.length})</button>` : ''}</div>${docs.length ? dl(docs.map(d => `<dt>${esc(d)}</dt><dd>${Object.values(S.docs[d]).map(esc).join(', ')}</dd>`).join('')) : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
       <section class="card sec"><h2 class="sub-h">Payout methods</h2>${S.payouts.length ? dl(S.payouts.map((p, i) => `<dt>${p.id === S.primary ? 'Primary' : esc(p.name || 'Method ' + (i + 1))}</dt><dd>${p.type === 'bank' ? `${esc(p.bank)} · •••• ${esc(p.acct.slice(-4))}` : `${esc(p.provider)} · •••• ${esc(p.mobile.slice(-4))}`}</dd>`).join('')) : '<p class="hint" style="margin:0">None added.</p>'}</section>
-      <section class="card sec"><h2 class="sub-h">Documents</h2>${docs.length ? dl(docs.map(d => `<dt>${esc(d)}</dt><dd>${Object.values(S.docs[d]).map(esc).join(', ')}</dd>`).join('')) : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
-      <section class="card sec"><h2 class="sub-h">Contracts</h2>${Object.keys(S.reqContracts).length + S.contracts.length ? dl(Object.entries(S.reqContracts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + S.contracts.map(c => `<dt>${esc(c.label)}</dt><dd>${esc(c.file)}</dd>`).join('')) : '<p class="hint" style="margin:0">None attached.</p>'}</section></div>`;
+      <section class="card sec"><div class="sub-hr"><h2 class="sub-h">Contracts</h2>${Object.keys(S.reqContracts).length + S.contracts.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="contracts" data-n="${Object.keys(S.reqContracts).length + S.contracts.length}">${icon('download', 'ic')}Download all (${Object.keys(S.reqContracts).length + S.contracts.length})</button>` : ''}</div>${Object.keys(S.reqContracts).length + S.contracts.length ? dl(Object.entries(S.reqContracts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + S.contracts.map(c => `<dt>${esc(c.label)}</dt><dd>${esc(c.file)}</dd>`).join('')) : '<p class="hint" style="margin:0">None attached.</p>'}</section></div>`;
     return `${head}${banner}<div class="prof-g"><div class="prof-main">${approvalCard()}${info}</div><aside class="prof-side">${cases}</aside></div>`;
   }
 
@@ -928,6 +929,7 @@
   const fake = n => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const ACT = {
     logs: () => openLogs(),
+    dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
     fix: () => { S.fixing = true; scrollTo(0, 0); },
     stopFix: () => { S.fixing = false; scrollTo(0, 0); },
     submitCase: d => submitCase(d.id),
@@ -981,7 +983,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'dlAll', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;

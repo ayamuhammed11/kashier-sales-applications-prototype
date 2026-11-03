@@ -448,3 +448,5 @@ body.locked { overflow: hidden; }
 .cgroup { margin-block-start: 16px; }
 .cgroup summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--cadet-base); padding-block: 8px; }
 .cgroup .crows { margin-block-start: 8px; }
+
+.sub-hr { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
