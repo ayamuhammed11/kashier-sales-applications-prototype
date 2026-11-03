@@ -450,3 +450,10 @@ body.locked { overflow: hidden; }
 .cgroup .crows { margin-block-start: 8px; }
 
 .sub-hr { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Payout methods on the profile: every method in full, one block each. */
+.pm-list { display: flex; flex-direction: column; gap: 16px; }
+.pm { display: flex; flex-direction: column; gap: 12px; padding-block-start: 16px; border-block-start: 1px solid var(--border-subtle); }
+.pm:first-child { padding-block-start: 0; border-block-start: 0; }
+.pm-h { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.pm-h b { font-size: 14px; font-weight: 600; }
