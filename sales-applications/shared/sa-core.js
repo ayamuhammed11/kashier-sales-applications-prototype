@@ -636,11 +636,9 @@
           ${uw ? ' <button type="button" class="link-btn" data-act="goto" data-t="documents">Go to documents</button>' : (rj.map(f => `<br><span class="num">${esc(f.t.label)}: ${rateText(f.sel)}</span> <button type="button" class="link-btn" data-act="goto" data-t="svc:${esc(f.id)}">Change rate</button>`).join('') || '<br><span>Every rejected rate is changed.</span>')}</li>`; }).join('')}</ul>
       <p>Resubmit when you are ready. Only the returned cases are sent again; changed rates that are still below published go back for approval.</p><button type="button" class="link-btn" data-act="stopFix">Back to the profile</button></div></div>`;
   }
-  /* A new application, before it is submitted: the merchant's identity from the CRM lead, and no cases yet. */
+  /* A new application, before its first submission: just the merchant's identity from the CRM lead. Active services and Cases appear after the first submit. */
   function draftHead() {
-    if (submitted()) return '';
-    return profileHead(false) + `<div class="grid2"><section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant.</p></div></div><p class="hint" style="margin:0">No active services yet.</p></section>
-      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt">0</span></h2><p>${S.order.length ? `${S.order.length} service${S.order.length === 1 ? ' is' : 's are'} selected. Each one becomes its own case when you submit the application.` : 'Add the services this merchant needs below. Each one becomes its own case when you submit the application.'}</p></div></div><p class="hint" style="margin:0">No cases yet.</p></section></div>`;
+    return submitted() ? '' : profileHead(false);
   }
   function fieldErr(cond, msg) { return cond ? `<span class="ferr">${icon('warn', 'ic-14')}${msg}</span>` : ''; }
   function merchantFields() {
