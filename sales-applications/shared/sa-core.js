@@ -873,7 +873,7 @@
     const list = S.comments.slice().reverse();
     return `<section class="card sec" id="s-comments"><div class="sec-h"><div class="tt"><h2>Comments <span class="cnt">${S.comments.length}</span></h2><p>Notes about this application, visible to everyone working on it.</p></div></div>
       <div class="cm-new"><span class="pav" aria-hidden="true">${esc(ME.init)}</span><div class="cm-f"><label class="sr-only" for="cmText">Add a comment</label><textarea class="inp" id="cmText" data-path="commentDraft" placeholder="Write a comment…">${esc(S.commentDraft)}</textarea><div class="cm-a"><button type="button" class="btn btn-primary btn-sm" data-act="postComment">Post comment</button></div></div></div>
-      ${list.length ? `<ul class="cm-list">${list.map(c => `<li class="cm"><span class="pav" aria-hidden="true">${esc(c.init)}</span><div class="cm-b"><div class="cm-h"><b>${esc(c.who)}</b><span class="tag info">${esc(c.role)}</span><span class="cm-t num">${esc(whenStr(c.t))}</span></div><p>${esc(c.text)}</p></div></li>`).join('')}</ul>` : '<p class="hint" style="margin:0">No comments yet.</p>'}</section>`;
+      ${list.length ? `<ul class="cm-list">${list.map(c => `<li class="cm"><span class="pav" aria-hidden="true">${esc(c.init)}</span><div class="cm-b"><div class="cm-h"><b>${esc(c.who)}</b><span class="cm-t num">${esc(whenStr(c.t))}</span></div><p>${esc(c.text)}</p></div></li>`).join('')}</ul>` : '<p class="hint" style="margin:0">No comments yet.</p>'}</section>`;
   }
   function readOnlyView() {
     const head = profileHead(true);
