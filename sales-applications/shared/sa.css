@@ -501,3 +501,5 @@ body.locked { overflow: hidden; }
 .wl a:hover { text-decoration: underline; color: var(--primary-hover); }
 .fi-w { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .fthumb { width: 48px; height: 48px; border-radius: var(--radius); background: var(--primary-10); color: var(--primary); display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--ocean-20); }
+.st-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.st-row .muted { overflow-wrap: anywhere; }
