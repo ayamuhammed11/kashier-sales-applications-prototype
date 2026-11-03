@@ -229,7 +229,7 @@
   const undecided = () => flagged().filter(f => !decisionOf(f));
   /* Cases: every service on a submitted application is its own case with its own status. The application has no status of its own. */
   const caseStatus = id => (S.cases[id] && S.cases[id].status) || 'New';
-  const setCase = (id, status, extra) => { const c = S.cases[id] = Object.assign(S.cases[id] || {}, extra || {}, { status }); if (!c.caseId) c.caseId = 'CASE-' + String(S.nextCase++).padStart(3, '0'); };
+  const setCase = (id, status, extra) => { const prev = S.cases[id] && S.cases[id].status; const c = S.cases[id] = Object.assign(S.cases[id] || {}, extra || {}, { status }); if (!c.caseId) c.caseId = 'CASE-' + String(S.nextCase++).padStart(3, '0'); if (!(extra && extra.since) && prev !== status) c.since = new Date(CLOCK).toISOString(); };
   const submitted = () => !!S.appId;
   const hasRejectedCase = () => S.order.some(id => caseStatus(id) === 'Rejected');
   /* The application's status is derived from its cases: New, Has Rejected Cases, Has Pending Cases or Cases Completed. */
@@ -242,6 +242,13 @@
     if (st.some(x => PENDING_CASE.includes(x))) return 'Has Pending Cases';
     return 'Cases Completed';
   }
+  /* Waiting time of a pending case: how long it has been in its current stage, against a target for that stage. */
+  const CLOCK = new Date('2026-10-21T12:00:00').getTime();   // the prototype's "now", so waiting times match on every page
+  const WAIT_SLA = { 'Waiting Rate Approval': 48, 'Underwriting Review': 72, 'Bank Submission': 120 };   // target hours per stage
+  const waitHours = id => { const c = S.cases[id]; return c && PENDING_CASE.includes(c.status) && c.since ? Math.max(0, (CLOCK - Date.parse(c.since)) / 36e5) : null; };
+  const isLate = id => { const h = waitHours(id); return h != null && h > WAIT_SLA[S.cases[id].status]; };
+  const fmtWait = h => h < 1 ? 'Under 1h' : h < 24 ? `${Math.floor(h)}h` : `${Math.floor(h / 24)}d ${Math.floor(h % 24)}h`;
+  const waitPill = id => { const h = waitHours(id); return isApprover() && h != null ? `<span class="wait ${isLate(id) ? 'late' : ''}" title="Waiting in ${esc(S.cases[id].status)}. Target: ${WAIT_SLA[S.cases[id].status] / 24} days.">${icon('clock', 'ic-14')}${fmtWait(h)}${isLate(id) ? ' · Late' : ''}</span>` : ''; };
   const appChip = () => `<span class="sc ${APP_CHIP[appStatus()]}">${esc(appStatus())}</span>`;
   const caseRoute = id => needsApproval().some(f => f.id === id) ? 'Waiting Rate Approval' : 'Underwriting Review';
   /* A case in rate approval moves on as soon as every one of ITS rates is decided; other cases are not affected. */
@@ -811,7 +818,7 @@
       : rej ? `${isApprover() ? '' : '<button type="button" class="btn btn-primary btn-sm" data-act="fix">Review and resubmit</button>'}${view}`
       : cx ? `${isApprover() ? '' : `<button type="button" class="btn btn-outline btn-sm" data-act="reopen" data-id="${esc(id)}">Reopen Case</button>`}${view}`
       : view;
-    return `<div class="crow ${draft ? 'draft' : ''} ${cx ? 'cx' : ''}" id="case-${id.replace(/\W/g, '')}"><div class="crow-m"><div class="crow-t">${c.caseId ? `<span class="cid">${esc(c.caseId)}</span>` : ''}<span class="tag info">${chOf(id)}</span><b>${esc(nmOf(id))}</b>${draft ? '<span class="sc neu">Not submitted</span>' : caseChip(id)}</div>
+    return `<div class="crow ${draft ? 'draft' : ''} ${cx ? 'cx' : ''}" id="case-${id.replace(/\W/g, '')}"><div class="crow-m"><div class="crow-t">${c.caseId ? `<span class="cid">${esc(c.caseId)}</span>` : ''}<span class="tag info">${chOf(id)}</span><b>${esc(nmOf(id))}</b>${draft ? '<span class="sc neu">Not submitted</span>' : caseChip(id)}${waitPill(id)}</div>
       ${note ? `<div class="crow-n">${note}</div>` : ''}${rej ? rejectBox(id) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   /* The merchant identity card: a submitted application (sub) or a new one from the CRM lead. */
@@ -856,7 +863,7 @@
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
           ${needsBank(id) ? `<dt>Financial institution</dt><dd>${banks.length ? banks.map(esc).join(', ') : 'Not chosen'}</dd>` : ''}${chOf(id) === 'POS' ? `<dt>POS terminals</dt><dd>${esc(S.terminals || 'Not set')}</dd>` : ''}
           ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
-          <dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}</dl></section>
+          ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''} <span class="hint">(target ${WAIT_SLA[st] / 24} days)</span></dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}</dl></section>
         <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>`}`;
       caseDr.api.body.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); caseDr.api.body.scrollTop = 0; }; });
       const b = caseDr.api.body;
@@ -878,7 +885,7 @@
   function readOnlyView() {
     const head = profileHead(true);
     const live = S.order.filter(id => caseStatus(id) === 'Live'), canceled = S.order.filter(id => caseStatus(id) === 'Canceled');
-    const pending = S.order.filter(id => !['Live', 'Canceled'].includes(caseStatus(id))), pendingN = pending.filter(id => caseStatus(id) !== 'New').length;
+    const pending = S.order.filter(id => !['Live', 'Canceled'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const pendingN = pending.filter(id => caseStatus(id) !== 'New').length;
     const allCanceled = S.order.length > 0 && !pending.length && !live.length;
     const banner = allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
     /* Active services: the live cases. Just the service and its full log, no detail view. */
@@ -1082,7 +1089,7 @@
       if (only.length) S.order.slice().filter(id => !only.includes(id)).forEach(id => removeService(id, { quiet: true }));
       submitDemo();
       const want = {}; if (qs.get('status')) S.order.forEach(id => { want[id] = qs.get('status'); });
-      (qs.get('cases') || '').split('|').filter(Boolean).forEach(x => { const [id, st] = x.split('~'); if (S.svc[id]) want[id] = st; });
+      const hrs = {}; (qs.get('cases') || '').split('|').filter(Boolean).forEach(x => { const [id, rest] = x.split('~'), [st, h] = String(rest).split('@'); if (S.svc[id]) { want[id] = st; if (h) hrs[id] = +h; } });
       const since = new Date((qs.get('since') || '2026-10-20') + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
       Object.keys(want).forEach(id => {
         const st = want[id];
@@ -1094,7 +1101,7 @@
           const hist = { 'Underwriting Review': 1, 'Bank Submission': 2, Live: 3, Canceled: 1 }[st] || 0;
           ['Underwriting Review', 'Bank Submission', 'Live'].slice(0, hist).forEach((x, k) => S.log.unshift({ t: `09/${String(7 + k * 2).padStart(2, '0')}/2026, 10:0${k}:00 AM`, who: 'System', text: `moved the ${label(id)} case to ${x}`, ic: 'check', id }));
           if (st === 'Canceled') S.log.unshift({ t: '09/12/2026, 03:15:00 PM', who: 'Aya Muhammed', text: `canceled the ${label(id)} case`, ic: 'x', detail: 'Comment: The merchant dropped this service.', id });
-          setCase(id, st, st === 'Canceled' ? { prev: 'Underwriting Review', cancelComment: 'The merchant dropped this service.' } : st === 'Live' ? { liveSince: since } : {});
+          setCase(id, st, st === 'Canceled' ? { prev: 'Underwriting Review', cancelComment: 'The merchant dropped this service.' } : st === 'Live' ? { liveSince: since } : hrs[id] != null ? { since: new Date(CLOCK - hrs[id] * 36e5).toISOString() } : {});
         }
       });
     }

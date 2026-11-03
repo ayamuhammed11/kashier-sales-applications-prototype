@@ -489,3 +489,8 @@ body.locked { overflow: hidden; }
 .cm-h b { font-weight: 600; }
 .cm-t { font-size: 12px; color: var(--muted-fg); margin-inline-start: auto; }
 .cm-b p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground, #202020); }
+
+/* Waiting time of a pending case (managers and heads). */
+.wait { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); background: var(--white); font-size: 12px; font-weight: 600; color: var(--cadet-base); }
+.wait.late { border-color: #FFD0D6; background: var(--error-10); color: var(--destructive); }
+.late-t { color: var(--destructive); }
