@@ -116,7 +116,7 @@
   /* ----- service blocks ----- */
   function stChip(id) {
     const st = SA.svcState(id);
-    if (!st.ready) return `<span class="sc warn">${st.rates ? 'Incomplete' : 'Needs rates'}</span>`;
+    if (!st.ready) return '';
     if (st.flags.length) { const h = st.flags.some(f => f.approver === 'Head of Sales'); return `<span class="sc ${h ? 'bad' : 'warn'}">${h ? 'Head of Sales' : 'Sales Manager'} approval</span>`; }
     return `<span class="sc ok">Ready</span>`;
   }
