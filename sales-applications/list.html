@@ -165,9 +165,9 @@
   ];
   /* The application's status, derived from its cases. */
   const PENDING = ['Waiting Rate Approval', 'Underwriting Review', 'Bank Submission'];
-  const APP_STATUSES = ['New', 'Has Pending Cases', 'Has Rejected Cases', 'Active'];
-  const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', Active: 'ok' };
-  const appStatus = r => !r.cases.length ? 'New' : r.cases.some(c => c.status === 'Rejected') ? 'Has Rejected Cases' : r.cases.some(c => PENDING.includes(c.status)) ? 'Has Pending Cases' : 'Active';
+  const APP_STATUSES = ['New', 'Has Pending Cases', 'Has Rejected Cases', 'Cases Completed'];
+  const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', 'Cases Completed': 'ok' };
+  const appStatus = r => !r.cases.length ? 'New' : r.cases.some(c => c.status === 'Rejected') ? 'Has Rejected Cases' : r.cases.some(c => PENDING.includes(c.status)) ? 'Has Pending Cases' : 'Cases Completed';
   const getv = (r, k) => k === 'cstatus' ? r.cases.map(c => c.status) : k === 'astatus' ? appStatus(r) : r[k];
   const searchHit = r => !st.q || [r.biz, r.contact, r.email, r.mid].join(' ').toLowerCase().includes(st.q.toLowerCase());
   const base = vals => scoped().filter(r => searchHit(r) && KFilter.matches(vals || st.filters, r, FIELDS(), getv));

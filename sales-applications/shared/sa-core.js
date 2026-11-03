@@ -230,15 +230,15 @@
   const setCase = (id, status, extra) => { const c = S.cases[id] = Object.assign(S.cases[id] || {}, extra || {}, { status }); if (!c.caseId) c.caseId = 'CASE-' + String(S.nextCase++).padStart(3, '0'); };
   const submitted = () => !!S.appId;
   const hasRejectedCase = () => S.order.some(id => caseStatus(id) === 'Rejected');
-  /* The application's status is derived from its cases: New, Has Rejected Cases, Has Pending Cases or Active. */
+  /* The application's status is derived from its cases: New, Has Rejected Cases, Has Pending Cases or Cases Completed. */
   const PENDING_CASE = ['Waiting Rate Approval', 'Underwriting Review', 'Bank Submission'];
-  const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', Active: 'ok' };
+  const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', 'Cases Completed': 'ok' };
   function appStatus() {
     if (!submitted()) return 'New';
     const st = S.order.map(caseStatus);
     if (st.includes('Rejected')) return 'Has Rejected Cases';
     if (st.some(x => PENDING_CASE.includes(x))) return 'Has Pending Cases';
-    return 'Active';
+    return 'Cases Completed';
   }
   const appChip = () => `<span class="sc ${APP_CHIP[appStatus()]}">${esc(appStatus())}</span>`;
   const caseRoute = id => needsApproval().some(f => f.id === id) ? 'Waiting Rate Approval' : 'Underwriting Review';
