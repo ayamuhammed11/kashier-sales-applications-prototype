@@ -785,7 +785,7 @@
     const acts = draft ? `<button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button><button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button>`
       : `<button type="button" class="btn btn-outline btn-sm" data-act="openCase" data-id="${esc(id)}" aria-label="View case ${esc(c.caseId || label(id))}">View case${icon('right', 'ic mirror')}</button>`;
     return `<div class="crow ${draft ? 'draft' : ''}" id="case-${id.replace(/\W/g, '')}"><div class="crow-m"><div class="crow-t">${c.caseId ? `<span class="cid">${esc(c.caseId)}</span>` : ''}<span class="tag info">${chOf(id)}</span><b>${esc(nmOf(id))}</b>${draft ? '<span class="sc neu">Not submitted</span>' : caseChip(id)}</div>
-      <div class="crow-s">${esc(svc.model)}${banks.length ? ' · ' + banks.map(esc).join(', ') : ''}</div><div class="crow-n">${note}</div></div><div class="crow-a">${acts}</div></div>`;
+      ${draft ? `<div class="crow-n">${note}</div>` : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   /* Case detail: everything about one service request in one place, with its own activity log. */
   function caseLogHTML(id) {
@@ -817,18 +817,19 @@
       const act = st === 'Live' || isApprover() ? '' : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-cd="reopen">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="cancel">Cancel Case</button>`;
       caseDr.api.setTitle(`${esc(label(id))}`, `${esc(c.caseId || '')} · ${esc(S.merchant.name)}`);
       caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}</div><p class="case-n">${note}</p></div>
-        ${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
+        <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${caseDr.tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${caseDr.tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === id || !e.id).length}</span></button></div>
+        ${caseDr.tab === 'log' ? `<section class="cd-s">${caseLogHTML(id)}</section>` : `${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
           ${needsBank(id) ? `<dt>Financial institution</dt><dd>${banks.length ? banks.map(esc).join(', ') : 'Not chosen'}</dd>` : ''}${chOf(id) === 'POS' ? `<dt>POS terminals</dt><dd>${esc(S.terminals || 'Not set')}</dd>` : ''}
           ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
           <dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}</dl></section>
-        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>
-        <section class="cd-s"><h3 class="sub-h">Activity log</h3>${caseLogHTML(id)}</section>`;
+        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>`}`;
+      caseDr.api.body.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); caseDr.api.body.scrollTop = 0; }; });
       const b = caseDr.api.body;
       const cb = b.querySelector('[data-cd=cancel]'), rb = b.querySelector('[data-cd=reopen]');
       if (cb) cb.onclick = () => openCancel(id); if (rb) rb.onclick = () => openReopen(id);
     };
-    caseDr = { draw };
+    caseDr = { draw, tab: 'details' };
     drawer({ size: 'xl', title: esc(label(id)), sub: '', onClose() { caseDr = null; }, render(api) { caseDr.api = api; draw(); } });
   }
   function readOnlyView() {

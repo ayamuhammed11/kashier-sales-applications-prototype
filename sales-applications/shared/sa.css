@@ -428,3 +428,12 @@ body.locked { overflow: hidden; }
 /* The approval card sits in the profile's centre column: stack each rate row so its actions never clip. */
 .prof-main .ap-row { grid-template-columns: minmax(0, 1fr); }
 .prof-main .ap-why, .prof-main .ap-act { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+
+/* Case detail tabs: Details | Activity log. */
+.cd-tabs { display: flex; gap: 0; border-block-end: 1px solid var(--border); margin-block-start: 4px; }
+.cd-tabs button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border: 0; background: none; font-weight: 600; color: var(--muted-fg); border-block-end: 2px solid transparent; margin-block-end: -1px; cursor: pointer; white-space: nowrap; }
+.cd-tabs button:first-child { padding-inline-start: 4px; }
+.cd-tabs button:hover { color: var(--foreground); }
+.cd-tabs button[aria-selected="true"] { color: var(--primary); border-color: var(--primary); }
+.cd-tabs .c { font-size: 12px; min-width: 22px; padding: 0 6px; border-radius: 99px; background: var(--muted); color: var(--cadet-base); text-align: center; }
+.cd-tabs [aria-selected="true"] .c { background: var(--primary-10); color: var(--primary); }
