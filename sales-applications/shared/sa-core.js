@@ -136,7 +136,7 @@
   function blankLine() { return { bank: '', adv: false, rates: {}, rule: null, custom: false }; }
   function blankState() {
     return {
-      cases: {}, nextCase: 1, fixing: false, appId: '', submittedAt: '', submitComment: '', cancelComment: '',
+      cases: {}, nextCase: 1, fixing: false, mid: '', appId: '', submittedAt: '', submitComment: '', cancelComment: '',
       merchant: { name: 'Delta Pharma Group', email: 'nourhan@deltapharma.eg', phone: '+20 111 234 5678' },
       entity: 'Registered Business', industry: 'Healthcare / Pharmacy', activities: ['Healthcare / Pharmacy'], owner: '',
       svc: {}, order: [], terminals: '',
@@ -581,6 +581,7 @@
         api.el.querySelector('[data-y]').onclick = () => {
           Object.keys(S.decisions).forEach(k => { if (S.decisions[k].decision === 'rejected') delete S.decisions[k]; });
           S.submitComment = api.el.querySelector('#sc').value.trim();
+          if (!S.mid) S.mid = 'MID-' + String(Math.floor(10000 + Math.random() * 89999)) + '-' + String(Math.floor(100 + Math.random() * 899));
           if (!S.appId) S.appId = 'APP-' + String(Math.floor(10000000 + Math.random() * 89999999));
           S.submittedBy = ME.name;
           S.submittedAt = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -806,7 +807,7 @@
   function profileHead(sub) {
     const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
-      <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
+      <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}${sub && S.mid ? ` <span class="mid" title="Account MID">${esc(S.mid)}</span>` : ''}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
         <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div></section>`;
   }
   /* Case detail: everything about one service request in one place, with its own activity log. */
@@ -879,7 +880,7 @@
   }
 
   /* ---------- Presets (prototype only) ---------- */
-  function submitDemo() { S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
+  function submitDemo() { if (!S.mid) S.mid = (new URLSearchParams(location.search).get('mid')) || 'MID-10200-100'; S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
   function rejectDemo(target) {
     const fl = flagged(), wid = (fl.find(f => f.id === (target || 'Online Wallet')) || fl[0]).id, ws = fl.filter(f => f.id === wid), b = target ? null : fl.find(f => f.id !== wid);
     if (b) S.decisions[b.key] = { decision: 'approved', by: 'Nadia Salah', role: 'Sales Manager', comment: '', rate: b.sel.rate, fee: b.sel.fee, at: '09/07/2026, 10:02:00 AM' };

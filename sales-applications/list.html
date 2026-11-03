@@ -168,7 +168,7 @@
   const rows = () => base();
   const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const init = n => n.replace(/^Dr\.\s*/, '').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  const openHref = r => (!r.cases.length ? 'application.html?state=new' : `application.html?state=ready&cases=${encodeURIComponent(r.cases.map(c => c.svc + '~' + c.status + (c.reject && c.reject[0] === 'Onboarding team' ? ':uw' : '')).join('|'))}`) + (r.since ? `&since=${r.since}` : '') + `&as=${st.role}`;
+  const openHref = r => (!r.cases.length ? 'application.html?state=new' : `application.html?state=ready&mid=${encodeURIComponent(r.mid)}&cases=${encodeURIComponent(r.cases.map(c => c.svc + '~' + c.status + (c.reject && c.reject[0] === 'Onboarding team' ? ':uw' : '')).join('|'))}`) + (r.since ? `&since=${r.since}` : '') + `&as=${st.role}`;
 
   /* ----- render ----- */
   function header() {
