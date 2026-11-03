@@ -44,6 +44,8 @@
     retry: P('M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99'),
     ext: P('M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25'),
     download: P('M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3'),
+    doc: P('M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z'),
+    eye: P('M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z') + P('M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z'),
     bolt: P('m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z'),
     help: P('M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z'),
     bell: P('M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0')
@@ -625,7 +627,8 @@
   /* A new application, before it is submitted: the merchant's identity from the CRM lead, and no cases yet. */
   function draftHead() {
     if (submitted()) return '';
-    return profileHead(false) + `<div class="banner">${icon('info', 'ic-20')}<div><b>No cases yet</b><p>${S.order.length ? `${S.order.length} service${S.order.length === 1 ? ' is' : 's are'} selected. Each one becomes its own case with its own ID and status when you submit the application.` : 'Add the services this merchant needs below. Each one becomes its own case, with its own ID and status, when you submit the application.'}</p></div></div>`;
+    return profileHead(false) + `<div class="grid2"><section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant.</p></div></div><p class="hint" style="margin:0">No active services yet.</p></section>
+      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt">0</span></h2><p>${S.order.length ? `${S.order.length} service${S.order.length === 1 ? ' is' : 's are'} selected. Each one becomes its own case when you submit the application.` : 'Add the services this merchant needs below. Each one becomes its own case when you submit the application.'}</p></div></div><p class="hint" style="margin:0">No cases yet.</p></section></div>`;
   }
   function fieldErr(cond, msg) { return cond ? `<span class="ferr">${icon('warn', 'ic-14')}${msg}</span>` : ''; }
   function merchantFields() {
@@ -801,11 +804,10 @@
   }
   /* The merchant identity card: a submitted application (sub) or a new one from the CRM lead. */
   function profileHead(sub) {
-    const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase(), n = sub ? S.order.length : 0;
+    const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
       <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
-        <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div>
-      <div class="prof-n"><b>${n}</b><span>case${n === 1 ? '' : 's'}</span></div></section>`;
+        <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div></section>`;
   }
   /* Case detail: everything about one service request in one place, with its own activity log. */
   function caseLogHTML(id) {
@@ -855,19 +857,25 @@
   }
   function readOnlyView() {
     const head = profileHead(true);
-    const active = S.order.filter(id => caseStatus(id) !== 'Canceled'), canceled = S.order.filter(id => caseStatus(id) === 'Canceled');
-    const allLive = S.order.length > 0 && S.order.every(id => caseStatus(id) === 'Live'), allCanceled = S.order.length > 0 && !active.length;
-    const banner = allLive ? `<div class="banner ok">${icon('check', 'ic-20')}<div><b>All ${S.order.length} case${S.order.length === 1 ? ' is' : 's are'} live</b><p>The merchant can accept payments with ${S.order.length === 1 ? 'the requested service' : 'every requested service'}${liveOf(S.order[0]) ? `, live since ${esc(liveOf(S.order[0]))}` : ''}. Request a new service to add another.</p></div></div>`
-      : allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
-    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases</h2><p>Each service is its own case with its own status. Open one to see its details and activity log.</p></div>${isApprover() ? '' : `<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button>`}</div>${active.length ? `<div class="crows">${active.map(caseRow).join('')}</div>` : '<p class="hint" style="margin:0">No active cases.</p>'}${canceled.length ? `<details class="cgroup" ${active.length ? '' : 'open'}><summary>Canceled cases · ${canceled.length}</summary><div class="crows">${canceled.map(caseRow).join('')}</div></details>` : ''}</section>`;
+    const live = S.order.filter(id => caseStatus(id) === 'Live'), canceled = S.order.filter(id => caseStatus(id) === 'Canceled');
+    const pending = S.order.filter(id => !['Live', 'Canceled'].includes(caseStatus(id))), pendingN = pending.filter(id => caseStatus(id) !== 'New').length;
+    const allCanceled = S.order.length > 0 && !pending.length && !live.length;
+    const banner = allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
+    /* Active services: the live cases. Just the service and its full log, no detail view. */
+    const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant.</p></div></div>${live.length ? `<div class="crows">${live.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(label(id))}</b></div></div><div class="crow-a"><button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}">View logs</button></div></div>`).join('')}</div>` : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
+    const casesMsg = !S.order.length ? 'No cases yet.' : !pending.length && !canceled.length ? 'No pending cases. Every case is live.' : !pending.length ? 'No pending cases.' : '';
+    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div>${isApprover() ? '' : `<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button>`}</div>${pending.length ? `<div class="crows">${pending.map(caseRow).join('')}</div>` : ''}${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${canceled.length ? `<details class="cgroup" ${pending.length ? '' : 'open'}><summary>Canceled cases · ${canceled.length}</summary><div class="crows">${canceled.map(caseRow).join('')}</div></details>` : ''}</section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
+    const frow = (lbl, file) => `<div class="frow"><div class="fi"><b>${esc(lbl)}</b><span class="muted">${esc(file)}</span></div><div class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(file)}" data-l="${esc(lbl)}">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(file)}">${icon('download', 'ic')}Download</button></div></div>`;
+    const docRows = docs.flatMap(d => Object.entries(S.docs[d]).map(([slot, f]) => frow(slotsOf(d).length > 1 ? `${d} · ${slot}` : d, f)));
+    const conRows = Object.entries(S.reqContracts).map(([k, v]) => frow(k, v)).concat(S.contracts.map(c => frow(c.label, c.file)));
     const info = `<div class="prof-info">
       <section class="card sec prof-wide"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}`)}</section>
-      <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Documents</h2>${docs.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="docs" data-n="${docs.length}">${icon('download', 'ic')}Download all (${docs.length})</button>` : ''}</div>${docs.length ? dl(docs.map(d => `<dt>${esc(d)}</dt><dd>${Object.values(S.docs[d]).map(esc).join(', ')}</dd>`).join('')) : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
+      <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Documents</h2>${docRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="docs" data-n="${docRows.length}">${icon('download', 'ic')}Download all (${docRows.length})</button>` : ''}</div>${docRows.length ? `<div class="frows">${docRows.join('')}</div>` : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
       <section class="card sec"><h2 class="sub-h">Payout methods</h2>${S.payouts.length ? `<div class="pm-list">${S.payouts.map((p, i) => `<div class="pm"><div class="pm-h"><b>${p.id === S.primary ? 'Primary payout method' : esc(p.name || 'Payout method ' + (i + 1))}</b><span class="tag info">${p.type === 'bank' ? 'Bank Account' : 'E-Wallet'}</span>${p.id === S.primary ? '<span class="tag ok">Primary</span>' : ''}</div>${dl((p.id !== S.primary && p.name ? `<dt>Method name</dt><dd>${esc(p.name)}</dd>` : '') + (p.type === 'bank' ? `<dt>Bank name</dt><dd>${esc(p.bank)}</dd><dt>Branch</dt><dd>${esc(p.branch)}</dd><dt>Account holder</dt><dd>${esc(p.holder)}</dd><dt>Account number</dt><dd dir="ltr" class="num">${esc(p.acct)}</dd>` : `<dt>Wallet provider</dt><dd>${esc(p.provider)}</dd><dt>Mobile number</dt><dd dir="ltr" class="num">${esc(p.mobile)}</dd><dt>Wallet holder</dt><dd>${esc(p.wholder)}</dd>`))}</div>`).join('')}</div>` : '<p class="hint" style="margin:0">None added.</p>'}</section>
-      <section class="card sec"><div class="sub-hr"><h2 class="sub-h">Contracts</h2>${Object.keys(S.reqContracts).length + S.contracts.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="contracts" data-n="${Object.keys(S.reqContracts).length + S.contracts.length}">${icon('download', 'ic')}Download all (${Object.keys(S.reqContracts).length + S.contracts.length})</button>` : ''}</div>${Object.keys(S.reqContracts).length + S.contracts.length ? dl(Object.entries(S.reqContracts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + S.contracts.map(c => `<dt>${esc(c.label)}</dt><dd>${esc(c.file)}</dd>`).join('')) : '<p class="hint" style="margin:0">None attached.</p>'}</section></div>`;
-    return `${head}${banner}<div class="prof-g"><div class="prof-main">${approvalCard()}${info}</div><aside class="prof-side">${cases}</aside></div>`;
+      <section class="card sec"><div class="sub-hr"><h2 class="sub-h">Contracts</h2>${conRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="contracts" data-n="${conRows.length}">${icon('download', 'ic')}Download all (${conRows.length})</button>` : ''}</div>${conRows.length ? `<div class="frows">${conRows.join('')}</div>` : '<p class="hint" style="margin:0">None attached.</p>'}</section></div>`;
+    return `${head}${banner}<div class="prof-g"><div class="prof-main">${approvalCard()}${info}</div><aside class="prof-side">${activeSvc}${cases}</aside></div>`;
   }
 
   /* ---------- Presets (prototype only) ---------- */
@@ -929,6 +937,9 @@
   const fake = n => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const ACT = {
     logs: () => openLogs(),
+    viewFile: d => { modal({ title: esc(d.l), sub: esc(d.f), body: `<div class="fprev">${icon('doc', 'ic-24')}<b>${esc(d.f)}</b><span class="hint">Preview of the uploaded file. The prototype does not store real files.</span></div>`, foot: `<button type="button" class="btn btn-outline" data-n>Close</button><button type="button" class="btn btn-primary" data-y>${icon('download', 'ic')}Download</button>`, bind(api) { api.el.querySelector('[data-n]').onclick = api.close; api.el.querySelector('[data-y]').onclick = () => { api.close(); toast(`Downloading ${d.f}`); }; } }); return false; },
+    dlFile: d => { toast(`Downloading ${d.f}`); return false; },
+    svcLogs: d => { const id = d.id; drawer({ size: 'md', title: 'Activity log', sub: `${esc(label(id))} · ${esc((S.cases[id] || {}).caseId || '')}`, render(api) { api.body.innerHTML = caseLogHTML(id); } }); return false; },
     dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
     fix: () => { S.fixing = true; scrollTo(0, 0); },
     stopFix: () => { S.fixing = false; scrollTo(0, 0); },
@@ -983,7 +994,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'dlAll', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
@@ -1060,7 +1071,7 @@
         else {
           if (!['Waiting Rate Approval', 'New'].includes(st)) flagged().filter(f => f.id === id && !decisionOf(f)).forEach(f => { S.decisions[f.key] = { decision: 'approved', by: f.approver === 'Head of Sales' ? 'Karim Zaki' : 'Nadia Salah', role: f.approver, comment: '', rate: f.sel.rate, fee: f.sel.fee, at: '09/07/2026, 10:02:00 AM' }; });
           const hist = { 'Underwriting Review': 1, 'Bank Submission': 2, Live: 3, Canceled: 1 }[st] || 0;
-          ['Underwriting Review', 'Bank Submission', 'Live'].slice(0, hist).forEach((x, k) => S.log.unshift({ t: `09/0${7 + k * 2}/2026, 10:0${k}:00 AM`, who: 'System', text: `moved the ${label(id)} case to ${x}`, ic: 'check', id }));
+          ['Underwriting Review', 'Bank Submission', 'Live'].slice(0, hist).forEach((x, k) => S.log.unshift({ t: `09/${String(7 + k * 2).padStart(2, '0')}/2026, 10:0${k}:00 AM`, who: 'System', text: `moved the ${label(id)} case to ${x}`, ic: 'check', id }));
           if (st === 'Canceled') S.log.unshift({ t: '09/12/2026, 03:15:00 PM', who: 'Aya Muhammed', text: `canceled the ${label(id)} case`, ic: 'x', detail: 'Comment: The merchant dropped this service.', id });
           setCase(id, st, st === 'Canceled' ? { prev: 'Underwriting Review', cancelComment: 'The merchant dropped this service.' } : st === 'Live' ? { liveSince: since } : {});
         }

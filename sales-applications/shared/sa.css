@@ -457,3 +457,14 @@ body.locked { overflow: hidden; }
 .pm:first-child { padding-block-start: 0; border-block-start: 0; }
 .pm-h { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
 .pm-h b { font-size: 14px; font-weight: 600; }
+
+/* Count next to a section title; one row per uploaded file with View and Download. */
+.cnt { font-family: var(--font-body); font-size: 12px; font-weight: 600; min-width: 22px; padding: 0 6px; border-radius: 99px; background: var(--primary-10); color: var(--primary); text-align: center; }
+.frows { display: flex; flex-direction: column; }
+.frow { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding-block: 10px; border-block-start: 1px solid var(--border-subtle); }
+.frow:first-child { border-block-start: 0; padding-block-start: 0; }
+.fi { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fi b { font-size: 14px; font-weight: 600; }
+.fi .muted { font-size: 13px; overflow-wrap: anywhere; }
+.fa { display: flex; gap: 8px; flex-wrap: wrap; }
+.fprev { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--muted); text-align: center; color: var(--cadet-base); }
