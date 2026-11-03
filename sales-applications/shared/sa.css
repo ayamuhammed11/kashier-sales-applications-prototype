@@ -470,3 +470,8 @@ body.locked { overflow: hidden; }
 .fprev { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--muted); text-align: center; color: var(--cadet-base); }
 
 .mid { display: inline-block; margin-inline-start: 8px; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--cadet-base); vertical-align: middle; letter-spacing: .02em; }
+
+/* Active services grouped by channel. */
+.ch-g { display: flex; flex-direction: column; gap: 8px; }
+.ch-h { display: flex; align-items: center; gap: 8px; }
+.ch-h b { font-size: 14px; font-weight: 600; color: var(--cadet-base); }
