@@ -494,3 +494,10 @@ body.locked { overflow: hidden; }
 .wait { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); background: var(--white); font-size: 12px; font-weight: 600; color: var(--cadet-base); }
 .wait.late { border-color: #FFD0D6; background: var(--error-10); color: var(--destructive); }
 .late-t { color: var(--destructive); }
+
+/* Website / social media links in the business details. */
+.wl { display: flex; flex-direction: column; gap: 4px; }
+.wl a { display: inline-flex; align-items: center; gap: 4px; color: var(--link); text-decoration: none; overflow-wrap: anywhere; }
+.wl a:hover { text-decoration: underline; color: var(--primary-hover); }
+.fi-w { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.fthumb { width: 48px; height: 48px; border-radius: var(--radius); background: var(--primary-10); color: var(--primary); display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--ocean-20); }
