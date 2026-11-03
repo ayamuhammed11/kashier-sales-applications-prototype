@@ -116,7 +116,6 @@
     { name: 'POS services', docs: ['Store Lease / Location Proof'], channel: 'POS' }
   ];
   const TAX_DOC = 'Tax Identification Card';
-  const PF_COVERED = ['Card', 'Wallet', 'Bank Installments', 'Basata'];
   const PAYOUT_BANKS = { 'National Bank of Egypt': ['Main Branch', 'Nasr City', 'Heliopolis', 'Maadi'], 'Banque Misr': ['Main Branch', 'Zamalek', 'Dokki', 'New Cairo'],
     CIB: ['Smart Village', 'Mohandessin', 'Korba'], 'QNB Alahli': ['Downtown Cairo', 'Sheikh Zayed', 'Alexandria, Smouha'] };
   const WALLETS = ['Vodafone Cash', 'Orange Cash', 'e& Cash', 'WE Pay'];
@@ -335,12 +334,10 @@
     return out;
   }
   function payoutsIssues() { const i = S.payouts.findIndex(p => payoutIssues(p).length); return i < 0 ? [] : [`Complete payout method ${i + 1}, or remove it`]; }
+  /* One signed contract per PF method, named "<Method> - PF Contract" (a method on Online and POS shares one). */
   function requiredContracts() {
     const pf = S.order.filter(id => S.svc[id].model === 'PF');
-    const covered = [...new Set(pf.filter(id => PF_COVERED.includes(nmOf(id))).map(nmOf))], out = [];
-    if (covered.length) out.push({ label: 'Kashier PF Contract', text: `One signed contract covers every PF service on the application: Card, Wallet, Bank Installments and Basata. Selected now: ${covered.join(', ')}.` });
-    [...new Set(pf.filter(id => !PF_COVERED.includes(nmOf(id))).map(nmOf))].forEach(n => out.push({ label: n + ' Contract', text: `${n} on PF is not part of the Kashier PF contract, so it needs its own signed contract.` }));
-    return out;
+    return [...new Set(pf.map(nmOf))].map(n => ({ label: `${n} - PF Contract`, text: `${n} on PF needs its own signed contract. It applies to ${pf.filter(id => nmOf(id) === n).map(chOf).join(' and ')}.` }));
   }
   function contractsIssues() {
     const miss = requiredContracts().filter(r => !S.reqContracts[r.label]), out = [];
@@ -843,12 +840,12 @@
     const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases</h2><p>Each service is its own case with its own status. Open one to see its details and activity log.</p></div>${isApprover() ? '' : `<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button>`}</div><div class="crows">${S.order.map(caseRow).join('')}</div></section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
-    const side = `<aside class="prof-side">
-      <section class="card sec"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}`)}</section>
+    const info = `<div class="prof-info">
+      <section class="card sec prof-wide"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}`)}</section>
       <section class="card sec"><h2 class="sub-h">Payout methods</h2>${S.payouts.length ? dl(S.payouts.map((p, i) => `<dt>${p.id === S.primary ? 'Primary' : esc(p.name || 'Method ' + (i + 1))}</dt><dd>${p.type === 'bank' ? `${esc(p.bank)} · •••• ${esc(p.acct.slice(-4))}` : `${esc(p.provider)} · •••• ${esc(p.mobile.slice(-4))}`}</dd>`).join('')) : '<p class="hint" style="margin:0">None added.</p>'}</section>
       <section class="card sec"><h2 class="sub-h">Documents</h2>${docs.length ? dl(docs.map(d => `<dt>${esc(d)}</dt><dd>${Object.values(S.docs[d]).map(esc).join(', ')}</dd>`).join('')) : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
-      <section class="card sec"><h2 class="sub-h">Contracts</h2>${Object.keys(S.reqContracts).length + S.contracts.length ? dl(Object.entries(S.reqContracts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + S.contracts.map(c => `<dt>${esc(c.label)}</dt><dd>${esc(c.file)}</dd>`).join('')) : '<p class="hint" style="margin:0">None attached.</p>'}</section></aside>`;
-    return `${head}<div class="prof-g"><div class="prof-main">${approvalCard()}${cases}</div>${side}</div>`;
+      <section class="card sec"><h2 class="sub-h">Contracts</h2>${Object.keys(S.reqContracts).length + S.contracts.length ? dl(Object.entries(S.reqContracts).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + S.contracts.map(c => `<dt>${esc(c.label)}</dt><dd>${esc(c.file)}</dd>`).join('')) : '<p class="hint" style="margin:0">None attached.</p>'}</section></div>`;
+    return `${head}<div class="prof-g"><div class="prof-main">${approvalCard()}${info}</div><aside class="prof-side">${cases}</aside></div>`;
   }
 
   /* ---------- Presets (prototype only) ---------- */

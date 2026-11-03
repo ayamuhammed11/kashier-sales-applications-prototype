@@ -394,7 +394,11 @@ body.locked { overflow: hidden; }
 .prof-n b { font-family: var(--font-display); font-size: 31px; line-height: 1.1; }
 .prof-n span { font-size: 12px; color: var(--muted-fg); text-transform: uppercase; letter-spacing: .03em; }
 .prof-g { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
-@media (min-width: 1100px) { .prof-g { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); } }
+@media (min-width: 1100px) { .prof-g { grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); } }
+.prof-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; align-items: start; }
+.prof-info .prof-wide { grid-column: 1 / -1; }
+.prof-side .sec-h { flex-wrap: wrap; }
+.prof-side .sec-h .btn { width: 100%; }
 .prof-main, .prof-side { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .dl-s { grid-template-columns: minmax(110px, auto) 1fr; gap: 8px 16px; font-size: 13px; }
 @media (max-width: 767px) { .prof-h { padding: 16px; } .prof-n { border-inline-start: 0; padding-inline: 0; flex-direction: row; gap: 8px; align-items: baseline; } }
@@ -420,3 +424,7 @@ body.locked { overflow: hidden; }
 .cd-st .sp { flex: 1; }
 .cd-s { display: flex; flex-direction: column; gap: 12px; }
 .case-n { margin: 0; font-size: 13px; color: var(--cadet-base); }
+
+/* The approval card sits in the profile's centre column: stack each rate row so its actions never clip. */
+.prof-main .ap-row { grid-template-columns: minmax(0, 1fr); }
+.prof-main .ap-why, .prof-main .ap-act { grid-column: 1; grid-row: auto; justify-content: flex-start; }
