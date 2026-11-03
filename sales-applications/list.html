@@ -159,7 +159,7 @@
     { key: 'industry', type: 'multi', icon: 'store', label: 'Industry', hint: 'The merchant\'s industry from Zoho CRM.', options: [...new Set(ROWS.map(r => r.industry))].sort() },
     ...(st.role !== 'sales' ? [{ key: 'sales', type: 'multi', icon: 'user', label: 'Salesperson', hint: 'Applications assigned to these salespeople.', options: [...new Set(scoped().map(r => r.sales))].sort() }] : []),
     { key: 'astatus', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the application.', options: APP_STATUSES },
-    { key: 'cstatus', type: 'multi', icon: 'clock', label: 'Case status', hint: 'Applications with at least one case in these statuses.', options: CASE_STATUSES },
+    { key: 'cstatus', type: 'multi', icon: 'clock', label: 'Case status', hint: 'Applications with at least one case in these statuses.', options: CASE_STATUSES.map(v => v === 'Live' ? { value: 'Live', label: 'Cases completed' } : v) },
     { key: 'assigned', type: 'date', icon: 'calendar', label: 'Assigned', hint: 'When the lead was assigned.' },
     { key: 'last', type: 'date', icon: 'clock', label: 'Last activity', hint: 'The latest change on the application.' }
   ];
