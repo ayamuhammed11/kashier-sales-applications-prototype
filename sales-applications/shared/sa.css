@@ -437,3 +437,14 @@ body.locked { overflow: hidden; }
 .cd-tabs button[aria-selected="true"] { color: var(--primary); border-color: var(--primary); }
 .cd-tabs .c { font-size: 12px; min-width: 22px; padding: 0 6px; border-radius: 99px; background: var(--muted); color: var(--cadet-base); text-align: center; }
 .cd-tabs [aria-selected="true"] .c { background: var(--primary-10); color: var(--primary); }
+
+/* Rejected cases: who rejected and why. Canceled cases sit apart and dimmed. */
+.rj-box { display: flex; gap: 10px; align-items: flex-start; padding: 12px; margin-block-start: 8px; border: 1px solid #FFD0D6; background: var(--error-10); border-radius: var(--radius); color: var(--destructive); }
+.rj-box svg { flex-shrink: 0; margin-block-start: 2px; }
+.rj-box b { font-weight: 600; }
+.rj-box p { margin: 2px 0 0; color: var(--foreground, #202020); font-size: 13px; }
+.rj-box .rj-h { color: var(--cadet-base); }
+.crow.cx .crow-m { opacity: .7; }
+.cgroup { margin-block-start: 16px; }
+.cgroup summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--cadet-base); padding-block: 8px; }
+.cgroup .crows { margin-block-start: 8px; }

@@ -312,7 +312,7 @@
       const page = document.getElementById('page');
       if (!SA.isEdit()) { page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.readOnlyView()}</div>`; return; }
       const i = cur(), S = SA.S;
-      page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.returnedBanner()}
+      page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.draftHead()}${SA.returnedBanner()}
         <div class="c-top"><section class="card sec" id="s-merchant" aria-labelledby="h1s"><div class="sec-h"><div class="tt"><h2 id="h1s">1. Merchant Details</h2><p>Basic information to create the application record.</p></div></div>${SA.merchantFields()}</section>
         <section class="card sec" id="s-criteria" aria-labelledby="h2s"><div class="sec-h"><div class="tt"><h2 id="h2s">2. Criteria</h2><p>Merchant type, industry and activities decide the pricing rules and documents.</p></div></div>${SA.criteriaFields()}</section></div>
         <section class="card sec" id="s-setup" aria-labelledby="h3s"><div class="sec-h"><div class="tt"><h2 id="h3s">3. Service Setup</h2><p>Choose which services to activate and set up their institution, model and fees, then the documents it all requires, the merchant's payout methods, and any contracts already signed.</p></div></div>
