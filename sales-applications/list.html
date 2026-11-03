@@ -158,11 +158,17 @@
   const FIELDS = () => [
     { key: 'industry', type: 'multi', icon: 'store', label: 'Industry', hint: 'The merchant\'s industry from Zoho CRM.', options: [...new Set(ROWS.map(r => r.industry))].sort() },
     ...(st.role !== 'sales' ? [{ key: 'sales', type: 'multi', icon: 'user', label: 'Salesperson', hint: 'Applications assigned to these salespeople.', options: [...new Set(scoped().map(r => r.sales))].sort() }] : []),
+    { key: 'astatus', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the application.', options: APP_STATUSES },
     { key: 'cstatus', type: 'multi', icon: 'clock', label: 'Case status', hint: 'Applications with at least one case in these statuses.', options: CASE_STATUSES },
     { key: 'assigned', type: 'date', icon: 'calendar', label: 'Assigned', hint: 'When the lead was assigned.' },
     { key: 'last', type: 'date', icon: 'clock', label: 'Last activity', hint: 'The latest change on the application.' }
   ];
-  const getv = (r, k) => k === 'cstatus' ? r.cases.map(c => c.status) : r[k];
+  /* The application's status, derived from its cases. */
+  const PENDING = ['Waiting Rate Approval', 'Underwriting Review', 'Bank Submission'];
+  const APP_STATUSES = ['New', 'Has Pending Cases', 'Has Rejected Cases', 'Active'];
+  const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', Active: 'ok' };
+  const appStatus = r => !r.cases.length ? 'New' : r.cases.some(c => c.status === 'Rejected') ? 'Has Rejected Cases' : r.cases.some(c => PENDING.includes(c.status)) ? 'Has Pending Cases' : 'Active';
+  const getv = (r, k) => k === 'cstatus' ? r.cases.map(c => c.status) : k === 'astatus' ? appStatus(r) : r[k];
   const searchHit = r => !st.q || [r.biz, r.contact, r.email, r.mid].join(' ').toLowerCase().includes(st.q.toLowerCase());
   const base = vals => scoped().filter(r => searchHit(r) && KFilter.matches(vals || st.filters, r, FIELDS(), getv));
   const rows = () => base();
@@ -177,17 +183,9 @@
       <div class="tsearch" id="topSearch"></div>
       <button type="button" class="profile" aria-label="Account: ${esc(me().name)}"><span class="pav">${me().init}</span><span class="pdata"><span class="pname">${esc(me().name)}</span><span class="pmail">${esc(me().label)}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
   }
-  /* Small row indicators instead of a status: a new application has no cases yet; rejected cases say who rejected them. */
-  function flags(r) {
-    if (!r.cases.length) return '<span class="tag info">New</span>';
-    const rj = r.cases.filter(c => c.status === 'Rejected');
-    if (!rj.length) return '';
-    const why = rj.map(c => `${svcName(c.svc)}: rejected by ${c.reject ? c.reject[0] : 'the approver'}`).join(', ');
-    return `<span class="tag bad" title="${esc(why)}">${rj.length} rejected</span>`;
-  }
   function table(list) {
-    const showSales = st.role !== 'sales', cols = 4 + (showSales ? 1 : 0);
-    const head = `<th>Merchant</th><th>Contact</th>${showSales ? '<th>Salesperson</th>' : ''}<th>Last activity</th>`;
+    const showSales = st.role !== 'sales', cols = 5 + (showSales ? 1 : 0);
+    const head = `<th>Merchant</th><th>Contact</th><th>Status</th>${showSales ? '<th>Salesperson</th>' : ''}<th>Last activity</th>`;
     if (st.data === 'loading') return `<div class="tscroll"><table class="dt"><thead><tr>${head}<th></th></tr></thead><tbody>${Array.from({ length: 6 }, () => `<tr class="skel-row">${'<td><span></span></td>'.repeat(cols)}</tr>`).join('')}</tbody></table></div>`;
     if (!list.length) {
       const filtered = st.q || Object.keys(st.filters || {}).length;
@@ -195,10 +193,10 @@
     }
     const page = list.slice((st.page - 1) * st.size, st.page * st.size);
     return `<div class="tscroll"><table class="dt"><thead><tr>${head}<th><span class="sr-only">Open</span></th></tr></thead><tbody>
-      ${page.map(r => `<tr tabindex="0" data-href="${openHref(r)}" aria-label="Open ${esc(r.biz)}"><td><div class="mer"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="two"><span class="p">${esc(r.biz)} ${flags(r)}</span><span class="s">${esc(r.mid)} · ${esc(r.industry)}</span></span></div></td><td class="two"><span class="p" style="font-weight:400">${esc(r.contact)}</span><span class="s">${esc(r.email)}</span></td>
-        ${showSales ? `<td class="num">${esc(r.sales)}</td>` : ''}
+      ${page.map(r => `<tr tabindex="0" data-href="${openHref(r)}" aria-label="Open ${esc(r.biz)}"><td><div class="mer"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="two"><span class="p">${esc(r.biz)}</span><span class="s">${esc(r.mid)} · ${esc(r.industry)}</span></span></div></td><td class="two"><span class="p" style="font-weight:400">${esc(r.contact)}</span><span class="s">${esc(r.email)}</span></td>
+        <td><span class="sc ${APP_CHIP[appStatus(r)]}">${appStatus(r)}</span></td>${showSales ? `<td class="num">${esc(r.sales)}</td>` : ''}
         <td class="two num"><span class="p" style="font-weight:400">${fmtD(r.last)}</span><span class="s">Assigned ${fmtD(r.assigned)}</span></td><td class="go">${icon('right', 'ic mirror')}</td></tr>`).join('')}</tbody></table></div>
-      <div class="rcards-l">${page.map(r => `<a class="rc" href="${openHref(r)}"><span class="top"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="t"><b>${esc(r.biz)} ${flags(r)}</b><span>${esc(r.industry)} · ${esc(r.mid)}</span></span>${icon('right', 'ic mirror')}</span><span class="meta"><span>${esc(r.contact)}</span>${showSales ? `<span>${esc(r.sales)}</span>` : ''}<span>Last activity ${fmtD(r.last)}</span></span></a>`).join('')}</div>`;
+      <div class="rcards-l">${page.map(r => `<a class="rc" href="${openHref(r)}"><span class="top"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="t"><b>${esc(r.biz)}</b><span>${esc(r.industry)} · ${esc(r.mid)}</span></span>${icon('right', 'ic mirror')}</span><span><span class="sc ${APP_CHIP[appStatus(r)]}">${appStatus(r)}</span></span><span class="meta"><span>${esc(r.contact)}</span>${showSales ? `<span>${esc(r.sales)}</span>` : ''}<span>Last activity ${fmtD(r.last)}</span></span></a>`).join('')}</div>`;
   }
   function pager(list) {
     if (st.data !== 'loaded' || !list.length) return '';

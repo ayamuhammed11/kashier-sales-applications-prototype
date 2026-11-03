@@ -230,6 +230,17 @@
   const setCase = (id, status, extra) => { const c = S.cases[id] = Object.assign(S.cases[id] || {}, extra || {}, { status }); if (!c.caseId) c.caseId = 'CASE-' + String(S.nextCase++).padStart(3, '0'); };
   const submitted = () => !!S.appId;
   const hasRejectedCase = () => S.order.some(id => caseStatus(id) === 'Rejected');
+  /* The application's status is derived from its cases: New, Has Rejected Cases, Has Pending Cases or Active. */
+  const PENDING_CASE = ['Waiting Rate Approval', 'Underwriting Review', 'Bank Submission'];
+  const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', Active: 'ok' };
+  function appStatus() {
+    if (!submitted()) return 'New';
+    const st = S.order.map(caseStatus);
+    if (st.includes('Rejected')) return 'Has Rejected Cases';
+    if (st.some(x => PENDING_CASE.includes(x))) return 'Has Pending Cases';
+    return 'Active';
+  }
+  const appChip = () => `<span class="sc ${APP_CHIP[appStatus()]}">${esc(appStatus())}</span>`;
   const caseRoute = id => needsApproval().some(f => f.id === id) ? 'Waiting Rate Approval' : 'Underwriting Review';
   /* A case in rate approval moves on as soon as every one of ITS rates is decided; other cases are not affected. */
   function settleCases() {
@@ -611,7 +622,7 @@
         <nav class="crumb" aria-label="Breadcrumb"><a href="#">My Applications</a>${chevR}<span aria-current="page">${isEdit() ? title : esc(S.merchant.name)}</span></nav>
         <h1>${title}</h1>
         <p class="desc">${isEdit() && submitted() ? 'One or more cases were returned to you. Change the rejected rates and resubmit. The other cases carry on unchanged.' : isEdit() ? 'Finish onboarding this lead into a live merchant. Capture their business criteria and services below. The required documents checklist updates automatically as you go, exactly like the merchant will see it.' : 'Everything about this merchant in one place. Open a case to see its full details and logs.'}</p>
-        <div class="ph-meta">${submitted() ? `<span class="mi"><b>${esc(S.appId)}</b></span>` : ''}<span class="mi">${icon('link', 'ic-14')}<span>Zoho CRM record <a href="#" target="_blank" rel="noopener">ZOHO-00002 ${icon('ext', 'ic-14')}</a></span></span>${last ? `<span class="mi">${icon('clock', 'ic-14')}<span>Last activity ${esc(whenStr(last.t))} by ${esc(last.who)} · <button type="button" class="link-btn" data-act="logs">View logs</button></span></span>` : ''}</div>
+        <div class="ph-meta">${isEdit() && submitted() ? appChip() : ''}${submitted() ? `<span class="mi"><b>${esc(S.appId)}</b></span>` : ''}<span class="mi">${icon('link', 'ic-14')}<span>Zoho CRM record <a href="#" target="_blank" rel="noopener">ZOHO-00002 ${icon('ext', 'ic-14')}</a></span></span>${last ? `<span class="mi">${icon('clock', 'ic-14')}<span>Last activity ${esc(whenStr(last.t))} by ${esc(last.who)} · <button type="button" class="link-btn" data-act="logs">View logs</button></span></span>` : ''}</div>
       </div><button type="button" class="profile" aria-label="Account: ${ME.name}"><span class="pav">${ME.init}</span><span class="pdata"><span class="pname">${ME.name}</span><span class="pmail">${ME.email}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
   }
   /* Page actions row: Watch / Unwatch for approvers (FIN-28612). Cancel and Reopen live on each case (FIN-28567, FIN-30327). */
@@ -807,7 +818,7 @@
   function profileHead(sub) {
     const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
-      <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}${sub && S.mid ? ` <span class="mid" title="Account MID">${esc(S.mid)}</span>` : ''}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
+      <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}${sub && S.mid ? ` <span class="mid" title="Account MID">${esc(S.mid)}</span>` : ''} ${appChip()}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
         <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div></section>`;
   }
   /* Case detail: everything about one service request in one place, with its own activity log. */
@@ -1088,7 +1099,7 @@
     get S() { return S; }, mount, navIcon, rerender, soft, toast, icon, esc, fmtN, label, chOf, nmOf, isCard, needsBank, multiBank,
     CHANNELS, SVC_NAMES, SVC_HINT, SERVICES, BANKS, tiersFor, verdict, verdictHTML, flagged, pubText, rateText, sortedRules, bestRule, applyRule, ruleRate,
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
-    draftHead, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
+    draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
     addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, get ME() { return ME; }
   };
