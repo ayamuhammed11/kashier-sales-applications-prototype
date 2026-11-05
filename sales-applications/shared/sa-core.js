@@ -131,6 +131,7 @@
   const ROLES = {
     sales: { key: 'sales', name: 'Aya Muhammed', email: 'aya@kashier.io', init: 'AM', role: 'Salesperson' },
     manager: { key: 'manager', name: 'Nadia Salah', email: 'nadia@kashier.io', init: 'NS', role: 'Sales Manager', tier: 'Sales Manager' },
+    uw: { key: 'uw', name: 'Layla Hassan', email: 'layla@kashier.io', init: 'LH', role: 'Underwriting', tier: 'Underwriting' },
     head: { key: 'head', name: 'Karim Zaki', email: 'karim@kashier.io', init: 'KZ', role: 'Head of Sales', tier: 'Head of Sales' }
   };
   let ME = ROLES.sales;
@@ -139,7 +140,7 @@
   function blankLine() { return { bank: '', adv: false, rates: {}, rule: null, custom: false }; }
   function blankState() {
     return {
-      cases: {}, nextCase: 1, fixing: false, mid: '', comments: [], commentDraft: '', appId: '', submittedAt: '', submitComment: '', cancelComment: '',
+      cases: {}, kyc: [], nextCase: 1, fixing: false, mid: '', comments: [], commentDraft: '', appId: '', submittedAt: '', submitComment: '', cancelComment: '',
       merchant: { name: 'Delta Pharma Group', email: 'nourhan@deltapharma.eg', phone: '+20 111 234 5678' },
       entity: 'Registered Business', industry: 'Healthcare / Pharmacy', activities: ['Healthcare / Pharmacy'], owner: '',
       svc: {}, order: [], terminals: '',
@@ -238,7 +239,7 @@
   const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', 'Cases Completed': 'ok' };
   function appStatus() {
     if (!submitted()) return 'New';
-    const st = S.order.map(caseStatus);
+    const st = S.order.map(caseStatus).concat(S.kyc.map(k => k.status));
     if (st.includes('Rejected')) return 'Has Rejected Cases';
     if (st.some(x => PENDING_CASE.includes(x))) return 'Has Pending Cases';
     return 'Cases Completed';
@@ -616,7 +617,7 @@
   }
 
   /* ---------- Shared section renderers ---------- */
-  const STATUS_CLS = { New: 'info', Rejected: 'bad', 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok', Canceled: 'neu', Live: 'ok' };
+  const STATUS_CLS = { New: 'info', Rejected: 'bad', 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
   const caseChip = id => `<span class="sc ${STATUS_CLS[caseStatus(id)] || 'neu'}">${esc(caseStatus(id))}</span>`;
   const isEditable = s => s === 'New' || s === 'Rejected';
   /* The form is open until the first submit, and again when the salesperson chooses to fix a returned case. */
@@ -823,10 +824,11 @@
       ${note ? `<div class="crow-n">${note}</div>` : ''}${rej ? rejectBox(id) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   /* The merchant identity card: a submitted application (sub) or a new one from the CRM lead. */
+  const kycOpen = () => S.kyc.some(k => ['Underwriting Review', 'Rejected'].includes(k.status));
   function profileHead(sub) {
     const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
-      ${sub ? `<button type="button" class="btn btn-outline prof-edit" data-act="editGeneral">${icon('pencil', 'ic')}Edit</button>` : ''}
+      ${sub ? `<button type="button" class="btn btn-outline prof-edit" data-act="editGeneral" ${kycOpen() ? 'disabled title="A KYC update is already open in Cases"' : ''}>${icon('pencil', 'ic')}Edit</button>` : ''}
       <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}${sub && S.mid ? ` <span class="mid" title="Account MID">${esc(S.mid)}</span>` : ''} ${appChip()}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
         <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div></section>`;
   }
@@ -876,11 +878,84 @@
     caseDr = { draw, tab: 'details' };
     drawer({ size: 'xl', title: esc(label(id)), sub: '', onClose() { caseDr = null; }, render(api) { caseDr.api = api; draw(); } });
   }
+  /* KYC cases: an edit of the merchant's general information is not applied directly. It becomes a case for the Underwriting team,
+     related to the merchant KYC, and is applied only when Underwriting approves it. */
+  function kycChanges(P) {
+    const ch = [], add = (label, from, to) => { if (String(from) !== String(to)) ch.push({ label, from: String(from) || 'Not set', to: String(to) || 'Not set' }); };
+    add('Business name', S.merchant.name, P.name); add('Contact email', S.merchant.email, P.email); add('Contact phone', S.merchant.phone, P.phone);
+    add('Industry', S.industry, P.industry); add('Owner nationality', S.owner || 'Not set', P.owner || 'Not set');
+    add('Website / social media', S.websites.filter(Boolean).join(', '), P.websites.join(', ')); add('Store image', S.storeImage, P.storeImage);
+    const full = p => (p.name ? p.name + ': ' : '') + (p.type === 'bank' ? `Bank account · ${p.bank} · ${p.branch} · ${p.holder} · ${p.acct}` : `E-wallet · ${p.provider} · ${p.mobile} · ${p.wholder}`);
+    const old = new Map(S.payouts.map(p => [p.id, p])), nw = new Map(P.payouts.map(p => [p.id, p]));
+    P.payouts.forEach(p => { const o = old.get(p.id); if (!o) ch.push({ label: 'Payout method added', from: 'None', to: full(p) }); else if (full(o) !== full(p)) ch.push({ label: 'Payout method changed', from: full(o), to: full(p) }); });
+    S.payouts.forEach(o => { if (!nw.has(o.id)) ch.push({ label: 'Payout method removed', from: full(o), to: 'None' }); });
+    if (P.primary !== S.primary) { const a = old.get(S.primary), b = nw.get(P.primary); ch.push({ label: 'Primary payout method', from: a ? full(a) : 'None', to: b ? full(b) : 'None' }); }
+    return ch;
+  }
+  const kycById = key => S.kyc.find(k => k.key === key);
+  const kycChip = k => `<span class="sc ${STATUS_CLS[k.status] || 'neu'}">${esc(k.status)}</span>`;
+  const kycWaitH = k => k.status === 'Underwriting Review' && k.since ? Math.max(0, (CLOCK - Date.parse(k.since)) / 36e5) : null;
+  const kycPill = k => { const h = kycWaitH(k); return isApprover() && h != null ? `<span class="wait ${h > WAIT_SLA['Underwriting Review'] ? 'late' : ''}">${icon('clock', 'ic-14')}${fmtWait(h)}${h > WAIT_SLA['Underwriting Review'] ? ' · Late' : ''}</span>` : ''; };
+  function applyKyc(k) {
+    const P = k.proposed;
+    S.merchant.name = P.name; S.merchant.email = P.email; S.merchant.phone = P.phone; S.industry = P.industry; S.owner = P.owner;
+    S.websites = P.websites.length ? P.websites.slice() : ['']; S.storeImage = P.storeImage; S.payouts = P.payouts.map(p => Object.assign({}, p)); S.primary = P.primary; S.nextPayout = Math.max(S.nextPayout, P.nextPayout);
+  }
+  const isUW = () => ME.key === 'uw';
+  function kycApprove(k) { applyKyc(k); k.status = 'Approved'; k.decision = { by: ME.name, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('approved the KYC update', 'check', 'The changes are now on the application', k.key); toast(`${k.caseId} approved. The changes are applied.`); }
+  function kycReject(k) {
+    modal({ title: 'Reject this KYC update?', sub: `${esc(k.caseId)} · ${k.changes.length} requested change${k.changes.length === 1 ? '' : 's'}.`,
+      body: `<div class="fld"><label for="krc">Decision comment</label><textarea class="inp" id="krc" placeholder="What does the salesperson need to fix?"></textarea><span class="hint">The salesperson sees this when the case comes back to them.</span></div>`,
+      foot: `<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-danger" data-y disabled>Reject</button>`,
+      bind(api) {
+        const t = api.el.querySelector('#krc'), y = api.el.querySelector('[data-y]');
+        t.oninput = () => { y.disabled = !t.value.trim(); };
+        api.el.querySelector('[data-n]').onclick = api.close;
+        y.onclick = () => { const c = t.value.trim(); k.status = 'Rejected'; k.reject = { source: 'uw', by: ME.name, role: 'Underwriting', comment: c, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('rejected the KYC update', 'xcircle', c, k.key); api.close(); rerender(); toast(`${k.caseId} rejected`); };
+      } });
+  }
+  function kycCancel(k) {
+    confirmBox({ title: 'Cancel this KYC update?', body: `${esc(k.caseId)} is canceled and none of its changes are applied.`, ok: 'Cancel update', danger: true }).then(ok => { if (!ok) return; k.status = 'Canceled'; log('canceled the KYC update', 'x', '', k.key); rerender(); toast(`${k.caseId} canceled`); });
+  }
+  function kycRejectBox(k) {
+    const r = k.reject || {};
+    return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${r.comment ? `<p>${esc(r.comment)}</p>` : ''}<p class="rj-h">Edit the details and resubmit, or cancel the update.</p></div></div>`;
+  }
+  function kycRow(k) {
+    const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected';
+    const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openKyc" data-id="${esc(k.key)}">View case${icon('right', 'ic mirror')}</button>`;
+    const acts = open && uw ? `<button type="button" class="btn btn-outline-danger btn-sm" data-act="kycReject" data-id="${esc(k.key)}">Reject</button><button type="button" class="btn btn-primary btn-sm" data-act="kycApprove" data-id="${esc(k.key)}">${icon('tick', 'ic', 2)}Approve</button>${view}`
+      : rej && !uw ? `<button type="button" class="btn btn-primary btn-sm" data-act="kycFix" data-id="${esc(k.key)}">Edit and resubmit</button>${view}` : view;
+    return `<div class="crow ${k.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span><b>Merchant information update</b>${kycChip(k)}${kycPill(k)}</div>${rej ? kycRejectBox(k) : ''}</div><div class="crow-a">${acts}</div></div>`;
+  }
+  function openKycCase(k0) {
+    const key = k0.key;
+    const draw = () => {
+      const k = kycById(key); if (!k) { caseDr.api.close(true); return; }
+      const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected';
+      const note = open ? 'Waiting for the Underwriting team. The changes are not on the application until they are approved.' : k.status === 'Approved' ? 'Approved by the Underwriting team. The changes are applied to the application.' : k.status === 'Canceled' ? 'Canceled. None of the changes were applied.' : 'Returned to the salesperson.';
+      const acts = open && uw ? `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kreject">Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd="kapprove">${icon('tick', 'ic', 2)}Approve</button>` : (open || rej) && !uw ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kcancel">Cancel update</button>' : '';
+      caseDr.api.setTitle('Merchant information update', `${esc(k.caseId)} · ${esc(S.merchant.name)}`);
+      const tab = caseDr.tab;
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${kycChip(k)}<span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span>${kycPill(k)}<span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? kycRejectBox(k) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="kfix">Edit and resubmit</button></div>') : ''}</div>
+        <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
+        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3><div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Field</th><th>Current</th><th>Requested</th></tr></thead><tbody>${k.changes.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from)}</td><td><b>${esc(c.to)}</b></td></tr>`).join('')}</tbody></table></div></section>
+        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(k.caseId)}</dd><dt>Type</dt><dd>Merchant KYC update</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(k.by)} (${esc(k.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(k.at))}</dd>${k.decision ? `<dt>Approved by</dt><dd>${esc(k.decision.by)} · ${esc(whenStr(k.decision.at))}</dd>` : ''}</dl></section>`}`;
+      const b = caseDr.api.body;
+      b.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); b.scrollTop = 0; }; });
+      const on = (sel, fn) => { const x = b.querySelector(sel); if (x) x.onclick = fn; };
+      on('[data-cd=kapprove]', () => { kycApprove(k); rerender(); }); on('[data-cd=kreject]', () => kycReject(k)); on('[data-cd=kcancel]', () => kycCancel(k));
+      on('[data-cd=kfix]', () => { caseDr.api.close(true); openEditGeneral(k); });
+    };
+    caseDr = { draw, tab: 'details' };
+    drawer({ size: 'xl', title: 'Merchant information update', onClose() { caseDr = null; }, render(api) { caseDr.api = api; draw(); } });
+  }
   /* Edit the general information of a submitted application: business info, website / social links, store image (POS) and payout methods.
      Pricing and the cases are not touched. Changes are made on a copy and only applied on Save. */
-  function openEditGeneral() {
+  function openEditGeneral(k) {
     const clone = o => JSON.parse(JSON.stringify(o));
-    const D = { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.length ? S.websites.slice() : [''], storeImage: S.storeImage, payouts: clone(S.payouts), primary: S.primary, nextPayout: S.nextPayout };
+    const D = k ? clone(k.proposed) : { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.length ? S.websites.slice() : [''], storeImage: S.storeImage, payouts: clone(S.payouts), primary: S.primary, nextPayout: S.nextPayout };
+    if (!D.websites.length) D.websites = [''];
     const orig = JSON.stringify(D); let tried = false, saved = false, api;
     const payIssues = p => {
       const o = {};
@@ -923,7 +998,8 @@
         return `<div class="item"><div class="item-h"><b>Payout method ${i + 1}</b><span class="tag info">${p.type === 'bank' ? 'Bank Account' : 'E-Wallet'}</span>${prim ? '<span class="tag ok">Primary</span>' : ''}<span class="sp"></span>${!prim ? `<button type="button" class="btn btn-ghost btn-sm" data-ea="primary" data-i="${p.id}">Make primary</button><button type="button" class="icon-btn" data-ea="rmPay" data-i="${p.id}" aria-label="Remove payout method ${i + 1}">${icon('trash', 'ic')}</button>` : ''}</div>
           ${!prim ? input(`ep${p.id}n`, 'Payout Method Name', k('name'), p.name, x.name) : ''}${body}</div>`;
       }).join('');
-      return `<section class="cd-s"><h3 class="sub-h">Business information</h3><div class="grid2">${input('eName', 'Business Name', 'name', D.name, e.name)}${input('eEmail', 'Contact Email', 'email', D.email, e.email, 'type="email"')}${input('ePhone', 'Contact Phone', 'phone', D.phone, e.phone, 'type="tel" dir="ltr"')}${select('eInd', 'Industry', 'industry', D.industry, INDUSTRIES, 'Select industry', '')}${select('eOwn', 'Business Owner Nationality', 'owner', D.owner, OWNERS, 'Not set', '')}</div>
+      return `<div class="note">${icon('info', 'ic')}<p>Changes are not applied right away. They are sent to the Underwriting team as a KYC case and take effect once approved.</p></div>
+        <section class="cd-s"><h3 class="sub-h">Business information</h3><div class="grid2">${input('eName', 'Business Name', 'name', D.name, e.name)}${input('eEmail', 'Contact Email', 'email', D.email, e.email, 'type="email"')}${input('ePhone', 'Contact Phone', 'phone', D.phone, e.phone, 'type="tel" dir="ltr"')}${select('eInd', 'Industry', 'industry', D.industry, INDUSTRIES, 'Select industry', '')}${select('eOwn', 'Business Owner Nationality', 'owner', D.owner, OWNERS, 'Not set', '')}</div>
           <p class="hint" style="margin:0">Merchant type and activities decide the pricing rules, so they are not edited here.</p></section>
         <section class="cd-s"><h3 class="sub-h">Website and social media links</h3>${D.websites.map((w, i) => `<div class="eweb"><div class="fld" style="flex:1"><label class="sr-only" for="eW${i}">Link ${i + 1}</label><input class="inp ${e.web[i] ? 'err' : ''}" id="eW${i}" dir="ltr" data-e="web:${i}" value="${esc(w)}" placeholder="www.merchant.com">${fe(e.web[i])}</div>${D.websites.length > 1 ? `<button type="button" class="icon-btn" data-ea="rmLink" data-i="${i}" aria-label="Remove link ${i + 1}">${icon('x', 'ic')}</button>` : ''}</div>`).join('')}${fe(e.webAny)}<button type="button" class="link-btn" data-ea="addLink" style="align-self:flex-start">${icon('plus', 'ic')}Add another link</button></section>
         ${hasCh('POS') ? `<section class="cd-s"><h3 class="sub-h">Store image</h3><p class="hint" style="margin:0">Required for POS services. JPG, PNG · max 5 MB.</p><div class="st-row">${D.storeImage ? `<span class="muted">${esc(D.storeImage)}</span>` : ''}<button type="button" class="btn btn-outline btn-sm" data-ea="store">${icon('upload', 'ic')}${D.storeImage ? 'Replace image' : 'Upload image'}</button></div></section>` : ''}
@@ -931,7 +1007,7 @@
     };
     const draw = () => {
       const keep = api.body.scrollTop; api.body.innerHTML = html(); api.body.scrollTop = keep;
-      api.foot.innerHTML = `<span class="sp hint">${tried && errs().any ? 'Fix the highlighted fields to save.' : ''}</span><button type="button" class="btn btn-outline" data-ex="cancel">Cancel</button><button type="button" class="btn btn-primary" data-ex="save">Save changes</button>`;
+      api.foot.innerHTML = `<span class="sp hint">${tried && errs().any ? 'Fix the highlighted fields to save.' : ''}</span><button type="button" class="btn btn-outline" data-ex="cancel">Cancel</button><button type="button" class="btn btn-primary" data-ex="save">${k ? 'Resubmit for review' : 'Send for review'}</button>`;
       api.foot.querySelector('[data-ex=cancel]').onclick = () => api.close();
       api.foot.querySelector('[data-ex=save]').onclick = save;
     };
@@ -942,19 +1018,16 @@
     };
     const save = () => {
       tried = true; if (errs().any) { draw(); const bad = api.body.querySelector('.err, .ferr'); bad && bad.scrollIntoView({ block: 'center' }); return; }
-      const before = { biz: JSON.stringify([S.merchant.name, S.merchant.email, S.merchant.phone, S.industry, S.owner]), web: JSON.stringify(S.websites), store: S.storeImage, pay: JSON.stringify([S.payouts, S.primary]) };
-      S.merchant.name = D.name.trim(); S.merchant.email = D.email.trim(); S.merchant.phone = D.phone.trim(); S.industry = D.industry; S.owner = D.owner;
-      S.websites = D.websites.map(x => x.trim()).filter(Boolean); S.storeImage = D.storeImage;
-      S.payouts = D.payouts.map(p => Object.assign({}, p, { name: p.name.trim() })); S.primary = D.primary; S.nextPayout = D.nextPayout;
-      const done = [];
-      if (before.biz !== JSON.stringify([S.merchant.name, S.merchant.email, S.merchant.phone, S.industry, S.owner])) done.push('business information');
-      if (before.web !== JSON.stringify(S.websites)) done.push('website and social media links');
-      if (before.store !== S.storeImage) done.push('store image');
-      if (before.pay !== JSON.stringify([S.payouts, S.primary])) done.push('payout methods');
-      if (done.length) log(`updated the application details: ${done.join(', ')}`, 'pencil');
-      saved = true; api.close(true); rerender(); toast(done.length ? 'Application details updated' : 'No changes to save');
+      const P = { name: D.name.trim(), email: D.email.trim(), phone: D.phone.trim(), industry: D.industry, owner: D.owner, websites: D.websites.map(x => x.trim()).filter(Boolean), storeImage: D.storeImage, payouts: D.payouts.map(p => Object.assign({}, p, { name: p.name.trim() })), primary: D.primary, nextPayout: D.nextPayout };
+      const changes = kycChanges(P);
+      saved = true; api.close(true);
+      if (!changes.length) { toast('Nothing to send: the details are the same as the application'); return; }
+      const iso = new Date(CLOCK).toISOString();
+      if (k) { Object.assign(k, { status: 'Underwriting Review', changes, proposed: P, reject: null, since: iso }); log('resubmitted the KYC update to Underwriting', 'send', changes.map(c => c.label).join(', '), k.key); }
+      else { const n = S.kyc.reduce((m, x) => Math.max(m, x.n), 0) + 1; k = { n, key: 'kyc:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status: 'Underwriting Review', changes, proposed: P, by: ME.name, role: ME.role, at: nowStr(), since: iso }; S.kyc.push(k); log('sent a KYC update to Underwriting', 'send', changes.map(c => c.label).join(', '), k.key); }
+      rerender(); toast(`Sent to Underwriting as ${k.caseId}`);
     };
-    drawer({ size: 'xl', title: 'Edit application details', sub: esc(S.merchant.name),
+    drawer({ size: 'xl', title: k ? 'Edit and resubmit the KYC update' : 'Edit application details', sub: esc(S.merchant.name),
       beforeClose(a) {
         if (saved || JSON.stringify(D) === orig) return true;
         confirmBox({ title: 'Discard changes?', body: 'Your changes to the application details won\'t be saved.', ok: 'Discard', danger: true }).then(ok => { if (ok) a.close(true); });
@@ -988,13 +1061,14 @@
   function readOnlyView() {
     const head = profileHead(true);
     const live = S.order.filter(id => caseStatus(id) === 'Live'), canceled = S.order.filter(id => caseStatus(id) === 'Canceled');
-    const pending = S.order.filter(id => !['Live', 'Canceled'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const pendingN = pending.filter(id => caseStatus(id) !== 'New').length;
-    const allCanceled = S.order.length > 0 && !pending.length && !live.length;
+    const pending = S.order.filter(id => !['Live', 'Canceled'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const kycPending = S.kyc.filter(k => ['Underwriting Review', 'Rejected'].includes(k.status)), kycDone = S.kyc.filter(k => !['Underwriting Review', 'Rejected'].includes(k.status)), pendingN = pending.filter(id => caseStatus(id) !== 'New').length + kycPending.length;
+    const allCanceled = S.order.length > 0 && !pending.length && !live.length && !S.kyc.some(k => k.status !== 'Canceled');
     const banner = allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
     /* Active services: the live cases. Just the service and its full log, no detail view. */
     const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a"><button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
-    const casesMsg = !S.order.length ? 'No cases yet.' : !pending.length && !canceled.length ? 'No pending cases. Every case is live.' : !pending.length ? 'No pending cases.' : '';
-    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div><button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length ? `<div class="crows">${pending.concat(canceled).map(caseRow).join('')}</div>` : ''}</section>`;
+    const noPend = !pending.length && !kycPending.length, noOther = !canceled.length && !kycDone.length;
+    const casesMsg = !S.order.length && !S.kyc.length ? 'No cases yet.' : noPend && noOther ? 'No pending cases. Every case is live.' : noPend ? 'No pending cases.' : '';
+    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div><button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length ? `<div class="crows">${pending.map(caseRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
     const frow = (lbl, file, thumb) => `<div class="frow"><div class="fi-w">${thumb ? `<span class="fthumb" aria-hidden="true">${icon('photo', 'ic-24')}</span>` : ''}<div class="fi"><b>${esc(lbl)}</b><span class="muted">${esc(file)}</span></div></div><div class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(file)}" data-l="${esc(lbl)}">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(file)}">${icon('download', 'ic')}Download</button></div></div>`;
@@ -1072,6 +1146,10 @@
     svcLogs: d => { const id = d.id; drawer({ size: 'md', title: 'Activity log', sub: `${esc(label(id))} · ${esc((S.cases[id] || {}).caseId || '')}`, render(api) { api.body.innerHTML = caseLogHTML(id); } }); return false; },
     dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
     editGeneral: () => { openEditGeneral(); return false; },
+    openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
+    kycApprove: d => { const k = kycById(d.id); k && kycApprove(k); },
+    kycReject: d => { const k = kycById(d.id); k && kycReject(k); return false; },
+    kycFix: d => { const k = kycById(d.id); k && openEditGeneral(k); return false; },
     postComment: () => { const t = (S.commentDraft || '').trim(); if (!t) { toast('Write a comment first'); return false; } S.comments.push({ id: S.comments.length + 1, who: ME.name, role: ME.role, init: ME.init, t: nowStr(), text: t }); S.commentDraft = ''; log('added a comment', 'pencil', t); },
     fix: () => { S.fixing = true; scrollTo(0, 0); },
     stopFix: () => { S.fixing = false; scrollTo(0, 0); },
@@ -1126,7 +1204,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'openKyc', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
