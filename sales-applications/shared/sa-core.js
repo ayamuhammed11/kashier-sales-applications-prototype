@@ -790,6 +790,7 @@
   /* Request a new service on a submitted application (FIN-30790): it becomes a new, independent case; existing cases stay read-only and unchanged. */
   function submitCase(id) {
     if (svcIssues(id).length) { toast('Finish the service setup first'); return false; }
+    if (missingFor(id).length) { toast('Upload the documents this service needs first'); openServiceDocs(id); return false; }
     const go = () => { setCase(id, caseRoute(id)); log(`requested a new service: ${label(id)}`, 'send', `${S.cases[id].caseId} · ${caseRoute(id) === 'Waiting Rate Approval' ? 'rates need approval' : 'no approval needed'}`, id); rerender(); toast(`${label(id)} submitted as ${S.cases[id].caseId}`); };
     if (needsApproval().some(f => f.id === id && !rejectedStill(f))) openJustify(go); else go();
     return false;
@@ -805,6 +806,49 @@
     if (st === 'Canceled' || st === 'New') return '';
     return `<ol class="track">${steps.map((t, k) => `<li class="${k < cur ? 'done' : k === cur ? 'now' : ''}"><span class="d">${k < cur ? icon('tick', 'ic-14', 2.5) : k + 1}</span><b>${t}</b><span class="hint">${k === 0 ? esc(S.submittedAt) : t === 'Live' ? esc(liveOf(id)) : t === 'Rate Approval' && k <= cur ? (st === 'Waiting Rate Approval' ? `${approvedN} approved · ${fl.length - reviewed} to review` : 'All rates approved') : ''}</span></li>`).join('')}</ol>`;
   }
+  /* Documents a new service needs. Only what the service itself triggers (its channel, or the Bank Misr PSP annex) is asked for, and
+     anything already uploaded on the application, for any other service, is reused and never asked for again. */
+  function serviceDocs(id) {
+    const c = S.svc[id], out = [];
+    DOC_RULES.forEach(r => {
+      if (!r.channel && !r.bankPsp) return;   // universal documents belong to the application, not to one service
+      if (r.entities && !r.entities.includes(S.entity)) return;
+      if (r.owners && !r.owners.includes(S.owner)) return;
+      if (r.channel && r.channel !== chOf(id)) return;
+      if (r.bankPsp && !(c.model === 'PSP' && c.lines.some(l => l.bank === r.bankPsp))) return;
+      r.docs.forEach(d => { if (!out.some(x => x.name === d)) out.push({ name: d, rule: r.name }); });
+    });
+    return out;
+  }
+  function serviceNeeds(id) {
+    const items = serviceDocs(id).map(x => ({ kind: 'doc', name: x.name, rule: x.rule, done: docDone(x.name), file: S.docs[x.name] ? Object.values(S.docs[x.name]).filter(Boolean).join(', ') : '' }));
+    if (chOf(id) === 'POS') items.push({ kind: 'store', name: 'Store image', rule: 'POS services', done: !!S.storeImage, file: S.storeImage });
+    if (chOf(id) === 'Online') items.push({ kind: 'link', name: 'Website or social media link', rule: 'Online services', done: S.websites.some(x => x.trim() && urlOk(x)), file: S.websites.filter(x => x.trim()).join(', ') });
+    return items;
+  }
+  const missingFor = id => serviceNeeds(id).filter(x => !x.done);
+  function openServiceDocs(id) {
+    let api, linkErr = '';
+    const draw = () => {
+      const items = serviceNeeds(id), miss = items.filter(x => !x.done).length;
+      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>${items.length ? 'Documents already uploaded on this application are reused for every service. Upload only what is still missing for this one.' : `${esc(label(id))} needs no documents beyond the ones already on the application.`}</p></div>
+        <div class="frows">${items.map(x => `<div class="frow"><div class="fi"><b>${esc(x.name)}</b><span class="muted">Needed for ${esc(x.rule)}</span></div><div class="fa">${x.done ? `<span class="tag ok">${icon('check', 'ic-14')}Already uploaded</span>` : x.kind === 'link' ? `<input class="inp" id="sdLink" dir="ltr" placeholder="www.merchant.com" style="min-width:200px"><button type="button" class="btn btn-outline btn-sm" data-sd="link">Add link</button>` : `<button type="button" class="btn btn-outline btn-sm" data-sd="${x.kind}" data-n="${esc(x.name)}">${icon('upload', 'ic')}Upload</button>`}</div>${x.done && x.file ? `<div class="muted" style="flex-basis:100%;font-size:13px">${esc(x.file)}</div>` : ''}${x.kind === 'link' && !x.done && linkErr ? `<div style="flex-basis:100%">${'<span class="ferr">' + icon('warn', 'ic-14') + linkErr + '</span>'}</div>` : ''}</div>`).join('')}</div>`;
+      api.foot.innerHTML = `<span class="sp hint">${miss ? `${miss} still missing` : 'Everything needed is uploaded'}</span><button type="button" class="btn btn-primary" data-sd="done">Done</button>`;
+      api.foot.querySelector('[data-sd=done]').onclick = () => api.close();
+    };
+    drawer({ size: 'md', title: `Documents for ${esc(label(id))}`, sub: esc(S.merchant.name), onClose() { rerender(); },
+      render(a) {
+        api = a; draw();
+        a.body.addEventListener('click', e => {
+          const b = e.target.closest('[data-sd]'); if (!b) return; const k = b.dataset.sd;
+          if (k === 'doc') { const f = fake(b.dataset.n) + '.pdf'; S.docs[b.dataset.n] = { File: f }; log(`uploaded document: ${b.dataset.n}`, 'upload', f, id); }
+          else if (k === 'store') { S.storeImage = 'storefront.jpg'; log('uploaded Store Image', 'upload', 'storefront.jpg', id); }
+          else if (k === 'link') { const v = (a.body.querySelector('#sdLink').value || '').trim(); if (!urlOk(v)) { linkErr = 'Enter a valid website or social media link'; draw(); return; } linkErr = ''; S.websites = S.websites.filter(x => x.trim()).concat(v); log('added a website / social media link', 'link', v, id); }
+          else return;
+          draw();
+        });
+      } });
+  }
   /* Who rejected a case and why: the Sales Manager / Head of Sales (a rate) or the Underwriting team. */
   function rejectBox(id) {
     const r = (S.cases[id] || {}).reject || {}, uw = r.source === 'uw';
@@ -813,10 +857,11 @@
   /* A row in the profile's case list: ID, service and status. Opening it shows the whole case. */
   function caseRow(id) {
     const st = caseStatus(id), c = S.cases[id] || {}, svc = S.svc[id];
-    const draft = st === 'New', ready = draft && !svcIssues(id).length, rej = st === 'Rejected', cx = st === 'Canceled';
-    const note = draft ? (ready ? 'Not submitted yet. It becomes its own case when you submit it.' : `Not submitted yet. ${esc(svcIssues(id)[0])}.`) : '';
+    const miss = draft0 => (draft0 ? missingFor(id) : []);
+    const draft = st === 'New', missing = miss(draft), ready = draft && !svcIssues(id).length && !missing.length, rej = st === 'Rejected', cx = st === 'Canceled';
+    const note = draft ? (svcIssues(id).length ? `Not submitted yet. ${esc(svcIssues(id)[0])}.` : missing.length ? `Not submitted yet. Documents needed: ${missing.map(x => esc(x.name)).join(', ')}.` : 'Not submitted yet. It becomes its own case when you submit it.') : '';
     const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openCase" data-id="${esc(id)}" aria-label="View case ${esc(c.caseId || label(id))}">View case${icon('right', 'ic mirror')}</button>`;
-    const acts = draft ? `<button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button><button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button>`
+    const acts = draft ? `<button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button>${missing.length && !svcIssues(id).length ? `<button type="button" class="btn btn-outline btn-sm" data-act="svcDocs" data-id="${esc(id)}">${icon('upload', 'ic')}Upload documents (${missing.length})</button>` : ''}<button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button>`
       : rej ? `<button type="button" class="btn btn-primary btn-sm" data-act="fix">Review and resubmit</button>${view}`
       : cx ? `<button type="button" class="btn btn-outline btn-sm" data-act="reopen" data-id="${esc(id)}">Reopen Case</button>${view}`
       : view;
@@ -1153,6 +1198,7 @@
     postComment: () => { const t = (S.commentDraft || '').trim(); if (!t) { toast('Write a comment first'); return false; } S.comments.push({ id: S.comments.length + 1, who: ME.name, role: ME.role, init: ME.init, t: nowStr(), text: t }); S.commentDraft = ''; log('added a comment', 'pencil', t); },
     fix: () => { S.fixing = true; scrollTo(0, 0); },
     stopFix: () => { S.fixing = false; scrollTo(0, 0); },
+    svcDocs: d => { openServiceDocs(d.id); return false; },
     submitCase: d => submitCase(d.id),
     openCase: d => { openCase(d.id); return false; },
     cancel: d => openCancel(d.id),
@@ -1204,7 +1250,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'openKyc', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
