@@ -110,7 +110,6 @@
   const WAIT_SLA = { 'Waiting Rate Approval': 48, 'Underwriting Review': 72, 'Bank Submission': 120 };   // target hours per stage
   const ROLES = { sales: { name: 'Aya Muhammed', init: 'AM', label: 'Salesperson' }, manager: { name: 'Nadia Salah', init: 'NS', label: 'Sales Manager' }, head: { name: 'Karim Zaki', init: 'KZ', label: 'Head of Sales' } };
   /* Statuses belong to cases (one per service), never to the application, so the list has no status tabs: filter by Case status instead. */
-  const CASE_STATUSES = ['Rejected', 'Waiting Rate Approval', 'Underwriting Review', 'Bank Submission', 'Live', 'Canceled'];
   const CHIP = { 'Not submitted': 'neu', New: 'info', Rejected: 'bad', 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Canceled: 'neu', Live: 'ok' };
 
   /* ----- sample data (Aya's prototype merchants, extended) ----- */
@@ -165,7 +164,6 @@
     ...(st.role !== 'sales' ? [{ key: 'sales', type: 'multi', icon: 'user', label: 'Salesperson', hint: 'Applications assigned to these salespeople.', options: [...new Set(scoped().map(r => r.sales))].sort() }] : []),
     ...(st.role !== 'sales' ? [{ key: 'wait', type: 'multi', icon: 'clock', label: 'Waiting time', hint: 'How long the longest pending case has been waiting.', options: ['Under 1 day', '1 to 2 days', '2 to 5 days', 'Over 5 days'] }] : []),
     { key: 'astatus', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the application.', options: APP_STATUSES },
-    { key: 'cstatus', type: 'multi', icon: 'clock', label: 'Case status', hint: 'Applications with at least one case in these statuses.', options: CASE_STATUSES.map(v => v === 'Live' ? { value: 'Live', label: 'Cases completed' } : v) },
     { key: 'assigned', type: 'date', icon: 'calendar', label: 'Assigned', hint: 'When the lead was assigned.' },
     { key: 'last', type: 'date', icon: 'clock', label: 'Last activity', hint: 'The latest change on the application.' }
   ];
@@ -179,7 +177,7 @@
   const lateOf = r => r.cases.some(c => c.hours != null && c.hours > WAIT_SLA[c.status]);
   const fmtWait = h => h < 1 ? 'Under 1h' : h < 24 ? `${Math.floor(h)}h` : `${Math.floor(h / 24)}d ${Math.floor(h % 24)}h`;
   const rangeOf = h => h == null ? undefined : h < 24 ? 'Under 1 day' : h < 48 ? '1 to 2 days' : h < 120 ? '2 to 5 days' : 'Over 5 days';
-  const getv = (r, k) => k === 'wait' ? rangeOf(waitOf(r)) : k === 'cstatus' ? r.cases.map(c => c.status) : k === 'astatus' ? appStatus(r) : r[k];
+  const getv = (r, k) => k === 'wait' ? rangeOf(waitOf(r)) : k === 'astatus' ? appStatus(r) : r[k];
   const searchHit = r => !st.q || [r.biz, r.contact, r.email, r.mid].join(' ').toLowerCase().includes(st.q.toLowerCase());
   const base = vals => scoped().filter(r => searchHit(r) && KFilter.matches(vals || st.filters, r, FIELDS(), getv));
   const rows = () => {
