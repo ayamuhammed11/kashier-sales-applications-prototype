@@ -347,7 +347,7 @@
         return false;
       },
       dCancel: () => { dr.api.close(); return false; },
-      dSave: () => { const id = dr.id, add = dr.mode === 'add'; dr.saved = true; if (!add) SA.log(`updated service setup: ${SA.label(id)}`); dr.api.close(true); SA.toast(add ? `${SA.label(id)} added` : `${SA.label(id)} saved`); const row = document.getElementById('row-' + id.replace(/\W/g, '')); row && row.scrollIntoView({ block: 'nearest' }); return false; },
+      dSave: () => { const id = dr.id, add = dr.mode === 'add'; dr.saved = true; if (!add) SA.log(`updated service setup: ${SA.label(id)}`); dr.api.close(true); SA.toast(add ? `${SA.label(id)} added` : `${SA.label(id)} saved`); if (add && SA.submitted()) setTimeout(() => SA.openServiceSetup(id)); const row = document.getElementById('row-' + id.replace(/\W/g, '')); row && row.scrollIntoView({ block: 'nearest' }); return false; },
       terms: (d, el) => {
         SA.popover(el, `<div class="pop-b" style="padding:12px;gap:10px"><label class="sub-h" for="tp">Number of POS terminals</label><input class="inp" id="tp" inputmode="numeric" value="${esc(SA.S.terminals)}" placeholder="e.g. 2"><span class="hint">Whole number, 1 or more. Logged in the activity log.</span><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn btn-outline btn-sm" data-c>Cancel</button><button type="button" class="btn btn-primary btn-sm" data-s>Save</button></div></div>`, p => {
           const i = p.querySelector('#tp'), s = p.querySelector('[data-s]'); const ok = () => /^\d+$/.test(i.value.trim()) && +i.value >= 1; s.disabled = !ok(); i.oninput = () => { s.disabled = !ok(); };

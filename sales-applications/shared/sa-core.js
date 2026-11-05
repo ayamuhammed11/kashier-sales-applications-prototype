@@ -790,7 +790,7 @@
   /* Request a new service on a submitted application (FIN-30790): it becomes a new, independent case; existing cases stay read-only and unchanged. */
   function submitCase(id) {
     if (svcIssues(id).length) { toast('Finish the service setup first'); return false; }
-    if (missingFor(id).length) { toast('Upload the documents this service needs first'); openServiceDocs(id); return false; }
+    if (missingFor(id).length) { toast('Finish the documents and contracts this service needs first'); openServiceSetup(id); return false; }
     const go = () => { setCase(id, caseRoute(id)); log(`requested a new service: ${label(id)}`, 'send', `${S.cases[id].caseId} · ${caseRoute(id) === 'Waiting Rate Approval' ? 'rates need approval' : 'no approval needed'}`, id); rerender(); toast(`${label(id)} submitted as ${S.cases[id].caseId}`); };
     if (needsApproval().some(f => f.id === id && !rejectedStill(f))) openJustify(go); else go();
     return false;
@@ -826,26 +826,48 @@
     if (chOf(id) === 'Online') items.push({ kind: 'link', name: 'Website or social media link', rule: 'Online services', done: S.websites.some(x => x.trim() && urlOk(x)), file: S.websites.filter(x => x.trim()).join(', ') });
     return items;
   }
-  const missingFor = id => serviceNeeds(id).filter(x => !x.done);
-  function openServiceDocs(id) {
-    let api, linkErr = '';
+  /* A PF service needs its own signed "<Method> - PF Contract"; one already uploaded (Card on Online and POS share it) is reused. */
+  function contractNeeds(id) {
+    if (S.svc[id].model !== 'PF') return [];
+    const label = `${nmOf(id)} - PF Contract`;
+    return [{ kind: 'contract', name: label, rule: `${nmOf(id)} on PF`, done: !!S.reqContracts[label], file: S.reqContracts[label] || '' }];
+  }
+  const missingFor = id => serviceNeeds(id).concat(contractNeeds(id)).filter(x => !x.done);
+  /* Setting up a service after the application was submitted is done in steps:
+     1. Service and rates (the add-service drawer), 2. Documents, 3. Contracts. Submitting the request is the last step. */
+  function openServiceSetup(id, start) {
+    let api, linkErr = '', step = start || (serviceNeeds(id).some(x => !x.done) ? 2 : 3);
+    const STEPS = ['Service and rates', 'Documents', 'Contracts'];
+    const itemHTML = x => `<div class="frow"><div class="fi"><b>${esc(x.name)}</b><span class="muted">Needed for ${esc(x.rule)}</span></div><div class="fa">${x.done ? `<span class="tag ok">${icon('check', 'ic-14')}Already uploaded</span>` : x.kind === 'link' ? `<input class="inp" id="sdLink" dir="ltr" placeholder="www.merchant.com" style="min-width:200px"><button type="button" class="btn btn-outline btn-sm" data-sd="link">Add link</button>` : `<button type="button" class="btn btn-outline btn-sm" data-sd="${x.kind}" data-n="${esc(x.name)}">${icon('upload', 'ic')}Upload</button>`}</div>${x.done && x.file ? `<div class="muted" style="flex-basis:100%;font-size:13px">${esc(x.file)}</div>` : ''}${x.kind === 'link' && !x.done && linkErr ? `<div style="flex-basis:100%"><span class="ferr">${icon('warn', 'ic-14')}${linkErr}</span></div>` : ''}</div>`;
     const draw = () => {
-      const items = serviceNeeds(id), miss = items.filter(x => !x.done).length;
-      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>${items.length ? 'Documents already uploaded on this application are reused for every service. Upload only what is still missing for this one.' : `${esc(label(id))} needs no documents beyond the ones already on the application.`}</p></div>
-        <div class="frows">${items.map(x => `<div class="frow"><div class="fi"><b>${esc(x.name)}</b><span class="muted">Needed for ${esc(x.rule)}</span></div><div class="fa">${x.done ? `<span class="tag ok">${icon('check', 'ic-14')}Already uploaded</span>` : x.kind === 'link' ? `<input class="inp" id="sdLink" dir="ltr" placeholder="www.merchant.com" style="min-width:200px"><button type="button" class="btn btn-outline btn-sm" data-sd="link">Add link</button>` : `<button type="button" class="btn btn-outline btn-sm" data-sd="${x.kind}" data-n="${esc(x.name)}">${icon('upload', 'ic')}Upload</button>`}</div>${x.done && x.file ? `<div class="muted" style="flex-basis:100%;font-size:13px">${esc(x.file)}</div>` : ''}${x.kind === 'link' && !x.done && linkErr ? `<div style="flex-basis:100%">${'<span class="ferr">' + icon('warn', 'ic-14') + linkErr + '</span>'}</div>` : ''}</div>`).join('')}</div>`;
-      api.foot.innerHTML = `<span class="sp hint">${miss ? `${miss} still missing` : 'Everything needed is uploaded'}</span><button type="button" class="btn btn-primary" data-sd="done">Done</button>`;
-      api.foot.querySelector('[data-sd=done]').onclick = () => api.close();
+      const items = step === 2 ? serviceNeeds(id) : contractNeeds(id), miss = items.filter(x => !x.done).length;
+      const stepper = `<ol class="wz" aria-label="Setup steps">${STEPS.map((t, k) => `<li class="${k + 1 < step ? 'done' : k + 1 === step ? 'now' : ''}"><button type="button" data-sd="goto" data-s="${k + 1}"><span class="d">${k + 1 < step ? icon('tick', 'ic-14', 2.5) : k + 1}</span><span>${t}</span></button></li>`).join('')}</ol>`;
+      const intro = step === 2
+        ? (items.length ? 'Documents already uploaded on this application are reused for every service. Upload only what is still missing for this one.' : `${esc(label(id))} needs no documents beyond the ones already on the application.`)
+        : (items.length ? 'Each PF method needs its own signed contract. A contract already uploaded for the same method is reused.' : `${esc(label(id))} needs no contract.`);
+      api.setTitle(`Set up ${esc(label(id))}`, esc(S.merchant.name));
+      api.body.innerHTML = `${stepper}<div class="note">${icon('info', 'ic')}<p>${intro}</p></div>${items.length ? `<div class="frows">${items.map(itemHTML).join('')}</div>` : ''}`;
+      api.foot.innerHTML = `<span class="sp hint">${miss ? `${miss} still missing` : 'Everything needed for this step is uploaded'}</span><button type="button" class="btn btn-outline" data-sd="back">Back</button>${step === 2 ? `<button type="button" class="btn btn-primary" data-sd="next" ${miss ? 'disabled' : ''}>Continue to contracts</button>` : `<button type="button" class="btn btn-primary" data-sd="submit" ${miss ? 'disabled' : ''}>Submit request</button>`}`;
     };
-    drawer({ size: 'md', title: `Documents for ${esc(label(id))}`, sub: esc(S.merchant.name), onClose() { rerender(); },
+    const editService = () => { api.close(true); setTimeout(() => V.act && V.act.editSvc && V.act.editSvc({ id })); };
+    drawer({ size: 'md', title: `Set up ${esc(label(id))}`, sub: esc(S.merchant.name), onClose() { rerender(); },
       render(a) {
         api = a; draw();
         a.body.addEventListener('click', e => {
           const b = e.target.closest('[data-sd]'); if (!b) return; const k = b.dataset.sd;
+          if (k === 'goto') { const n = +b.dataset.s; if (n === 1) return editService(); step = n; draw(); return; }
           if (k === 'doc') { const f = fake(b.dataset.n) + '.pdf'; S.docs[b.dataset.n] = { File: f }; log(`uploaded document: ${b.dataset.n}`, 'upload', f, id); }
           else if (k === 'store') { S.storeImage = 'storefront.jpg'; log('uploaded Store Image', 'upload', 'storefront.jpg', id); }
+          else if (k === 'contract') { const f = fake(b.dataset.n) + '-signed.pdf'; S.reqContracts[b.dataset.n] = f; log(`uploaded contract: ${b.dataset.n}`, 'upload', f, id); }
           else if (k === 'link') { const v = (a.body.querySelector('#sdLink').value || '').trim(); if (!urlOk(v)) { linkErr = 'Enter a valid website or social media link'; draw(); return; } linkErr = ''; S.websites = S.websites.filter(x => x.trim()).concat(v); log('added a website / social media link', 'link', v, id); }
           else return;
           draw();
+        });
+        a.foot.addEventListener('click', e => {
+          const b = e.target.closest('[data-sd]'); if (!b || b.disabled) return; const k = b.dataset.sd;
+          if (k === 'back') { if (step === 2) editService(); else { step = 2; draw(); } }
+          else if (k === 'next') { step = 3; draw(); }
+          else if (k === 'submit') { api.close(true); setTimeout(() => submitCase(id)); }
         });
       } });
   }
@@ -859,9 +881,9 @@
     const st = caseStatus(id), c = S.cases[id] || {}, svc = S.svc[id];
     const miss = draft0 => (draft0 ? missingFor(id) : []);
     const draft = st === 'New', missing = miss(draft), ready = draft && !svcIssues(id).length && !missing.length, rej = st === 'Rejected', cx = st === 'Canceled';
-    const note = draft ? (svcIssues(id).length ? `Not submitted yet. ${esc(svcIssues(id)[0])}.` : missing.length ? `Not submitted yet. Documents needed: ${missing.map(x => esc(x.name)).join(', ')}.` : 'Not submitted yet. It becomes its own case when you submit it.') : '';
+    const note = draft ? (svcIssues(id).length ? `Not submitted yet. ${esc(svcIssues(id)[0])}.` : missing.length ? `Not submitted yet. Still needed: ${missing.map(x => esc(x.name)).join(', ')}.` : 'Not submitted yet. It becomes its own case when you submit it.') : '';
     const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openCase" data-id="${esc(id)}" aria-label="View case ${esc(c.caseId || label(id))}">View case${icon('right', 'ic mirror')}</button>`;
-    const acts = draft ? `<button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button>${missing.length && !svcIssues(id).length ? `<button type="button" class="btn btn-outline btn-sm" data-act="svcDocs" data-id="${esc(id)}">${icon('upload', 'ic')}Upload documents (${missing.length})</button>` : ''}<button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button>`
+    const acts = draft ? `<button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button>${!svcIssues(id).length ? `<button type="button" class="btn btn-outline btn-sm" data-act="svcDocs" data-id="${esc(id)}">${missing.length ? `Continue setup (${missing.length})` : 'Review setup'}</button>` : ''}<button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button>`
       : rej ? `<button type="button" class="btn btn-primary btn-sm" data-act="fix">Review and resubmit</button>${view}`
       : cx ? `<button type="button" class="btn btn-outline btn-sm" data-act="reopen" data-id="${esc(id)}">Reopen Case</button>${view}`
       : view;
@@ -1198,7 +1220,7 @@
     postComment: () => { const t = (S.commentDraft || '').trim(); if (!t) { toast('Write a comment first'); return false; } S.comments.push({ id: S.comments.length + 1, who: ME.name, role: ME.role, init: ME.init, t: nowStr(), text: t }); S.commentDraft = ''; log('added a comment', 'pencil', t); },
     fix: () => { S.fixing = true; scrollTo(0, 0); },
     stopFix: () => { S.fixing = false; scrollTo(0, 0); },
-    svcDocs: d => { openServiceDocs(d.id); return false; },
+    svcDocs: d => { openServiceSetup(d.id); return false; },
     submitCase: d => submitCase(d.id),
     openCase: d => { openCase(d.id); return false; },
     cancel: d => openCancel(d.id),
@@ -1345,6 +1367,6 @@
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
     commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
-    addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, get ME() { return ME; }
+    openServiceSetup, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, get ME() { return ME; }
   };
 })();
