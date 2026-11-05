@@ -512,10 +512,12 @@ body.locked { overflow: hidden; }
 
 /* Service setup in steps: Service and rates, Documents, Contracts. */
 .wz { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.wz li button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); text-align: start; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--cadet-base); }
-.wz li.now button { border-color: var(--primary); background: var(--primary-10); color: var(--primary); }
-.wz li.done button { color: var(--foreground, #202020); }
+.wz li button, .wz li .wzb { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); text-align: start; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--cadet-base); }
+.wz li.now button, .wz li.now .wzb { border-color: var(--primary); background: var(--primary-10); color: var(--primary); }
+.wz li.done button, .wz li.done .wzb { color: var(--foreground, #202020); }
 .wz .d { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0; background: var(--white); }
 .wz li.now .d { border-color: var(--primary); color: var(--primary); }
 .wz li.done .d { background: var(--success); border-color: var(--success); color: var(--white); }
 @media (max-width: 480px) { .wz { grid-template-columns: 1fr; } }
+
+.drawer .db > .wz { margin-block-end: 4px; }

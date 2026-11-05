@@ -155,7 +155,7 @@
   let V = null;           // the variant: { key, render(), live: {}, onGoto(target) }
   const KEY = () => 'sa-dir-' + (V && V.key);
   function save() { try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch (e) { } }
-  function load() { try { const s = JSON.parse(localStorage.getItem(KEY()) || 'null'); if (s && s.merchant) { S = Object.assign(blankState(), s); if (!s.cases) { S.cases = {}; if (s.status && s.status !== 'New') S.order.forEach(id => { S.cases[id] = { status: s.status, prev: s.prevStatus, cancelComment: s.cancelComment }; }); } delete S.status; } } catch (e) { } ME = ROLES[S.viewAs] || ROLES.sales; }
+  function load() { try { const s = JSON.parse(localStorage.getItem(KEY()) || 'null'); if (s && s.merchant) { S = Object.assign(blankState(), s); if (!s.cases) { S.cases = {}; if (s.status && s.status !== 'New') S.order.forEach(id => { S.cases[id] = { status: s.status, prev: s.prevStatus, cancelComment: s.cancelComment }; }); } delete S.status; } } catch (e) { } ME = ROLES[S.viewAs] || ROLES.sales; if (S.appId && !S.fixing) { const gone = S.order.filter(id => (S.cases[id] || {}).status === undefined); gone.forEach(id => { delete S.svc[id]; }); S.order = S.order.filter(id => !gone.includes(id)); } }
   const log = (text, ic = 'pencil', detail = '', id) => { S.log.unshift({ t: nowStr(), who: ME.name, text, ic, detail, id }); };
 
   /* ---------- Pricing ---------- */
@@ -532,7 +532,7 @@
   }
 
   /* ---------- Justification modal (FIN-28503) ---------- */
-  function openJustify(onSaved) {
+  function openJustify(onSaved, onCancel) {
     const fl = needsApproval().filter(f => !rejectedStill(f)); if (!fl.length) { onSaved && onSaved(); return; }
     const draft = {}; fl.forEach(f => { draft[f.key] = S.just[f.key] || ''; });
     const body = fl.map((f, i) => `<div class="jrow"><div class="jhead"><span class="tag info">${chOf(f.id)}</span><b>${esc(nmOf(f.id))}${f.line.bank ? ' · ' + esc(f.line.bank) : ''}</b><span class="tag ${f.approver === 'Head of Sales' ? 'bad' : 'req'}" style="margin-inline-start:auto">${f.approver}</span></div><div class="jrate">${f.t.label}: <b>${rateText(f.sel)}</b> <span class="muted">· published ${pubText(f.p)}</span></div><label class="sr-only" for="j${i}">Justification for ${esc(label(f.id))} ${esc(f.t.label)}</label><textarea class="inp" id="j${i}" data-j="${esc(f.key)}" placeholder="Why does this merchant need this rate?">${esc(draft[f.key])}</textarea></div>`).join('');
@@ -542,7 +542,7 @@
         const y = api.el.querySelector('[data-y]'), left = api.el.querySelector('[data-left]');
         const upd = () => { const n = fl.filter(f => !draft[f.key].trim()).length; y.disabled = n > 0; left.textContent = n ? `${n} left to justify` : ''; };
         api.el.querySelectorAll('[data-j]').forEach(t => t.oninput = () => { draft[t.dataset.j] = t.value; upd(); });
-        api.el.querySelector('[data-n]').onclick = api.close;
+        api.el.querySelector('[data-n]').onclick = () => { api.close(); onCancel && onCancel(); };
         y.onclick = () => { Object.assign(S.just, draft); log(`added justifications for ${fl.length} rate${fl.length > 1 ? 's' : ''} below published`, 'pencil'); api.close(); rerender(); onSaved && onSaved(); };
         upd();
       } });
@@ -788,11 +788,11 @@
     return `<section class="card sec" id="approval" aria-labelledby="apH"><div class="sec-h"><div class="tt"><h2 id="apH">Rates waiting for your approval</h2><p>${mineLeft ? `${mineLeft} rate${mineLeft > 1 ? 's' : ''} need${mineLeft > 1 ? '' : 's'} your decision.` : 'You have decided every rate assigned to you.'}${S.submitComment ? ` Salesperson's note: “${esc(S.submitComment)}”` : ''}</p></div></div><div class="ap-list">${rows}</div></section>`;
   }
   /* Request a new service on a submitted application (FIN-30790): it becomes a new, independent case; existing cases stay read-only and unchanged. */
-  function submitCase(id) {
+  function submitCase(id, fromSetup) {
     if (svcIssues(id).length) { toast('Finish the service setup first'); return false; }
     if (missingFor(id).length) { toast('Finish the documents and contracts this service needs first'); openServiceSetup(id); return false; }
-    const go = () => { setCase(id, caseRoute(id)); log(`requested a new service: ${label(id)}`, 'send', `${S.cases[id].caseId} · ${caseRoute(id) === 'Waiting Rate Approval' ? 'rates need approval' : 'no approval needed'}`, id); rerender(); toast(`${label(id)} submitted as ${S.cases[id].caseId}`); };
-    if (needsApproval().some(f => f.id === id && !rejectedStill(f))) openJustify(go); else go();
+    const go = () => { setupSnap = null; setCase(id, caseRoute(id)); log(`requested a new service: ${label(id)}`, 'send', `${S.cases[id].caseId} · ${caseRoute(id) === 'Waiting Rate Approval' ? 'rates need approval' : 'no approval needed'}`, id); rerender(); toast(`${label(id)} submitted as ${S.cases[id].caseId}`); };
+    if (needsApproval().some(f => f.id === id && !rejectedStill(f))) openJustify(go, fromSetup ? () => openServiceSetup(id, setupSteps(id).length) : undefined); else go();
     return false;
   }
   const liveOf = id => (S.cases[id] && S.cases[id].liveSince) || S.liveSince || '';
@@ -833,29 +833,43 @@
     return [{ kind: 'contract', name: label, rule: `${nmOf(id)} on PF`, done: !!S.reqContracts[label], file: S.reqContracts[label] || '' }];
   }
   const missingFor = id => serviceNeeds(id).concat(contractNeeds(id)).filter(x => !x.done);
-  /* Setting up a service after the application was submitted is done in steps:
-     1. Service and rates (the add-service drawer), 2. Documents, 3. Contracts. Submitting the request is the last step. */
+  /* Setting up a service after the application was submitted is done in steps, and is added completely or not at all:
+     1. Service and rates (the add-service drawer), 2. Documents, 3. Contracts (PF only). Cancelling at any step discards the request. */
+  let setupSnap = null;
+  function beginSetup() { setupSnap = JSON.stringify({ docs: S.docs, storeImage: S.storeImage, websites: S.websites, reqContracts: S.reqContracts, logN: S.log.length }); }
+  function cancelSetup(id) {
+    if (id && S.svc[id]) removeService(id, { quiet: true });
+    if (setupSnap) { const o = JSON.parse(setupSnap); S.docs = o.docs; S.storeImage = o.storeImage; S.websites = o.websites; S.reqContracts = o.reqContracts; S.log.splice(0, Math.max(0, S.log.length - o.logN)); }
+    setupSnap = null; rerender();
+  }
+  const setupSteps = id => ['Service and rates', 'Documents'].concat(!id || (S.svc[id] && S.svc[id].model === 'PF') ? ['Contracts'] : []);
+  function stepperHTML(id, step, interactive) {
+    const st = setupSteps(id);
+    return `<ol class="wz" style="grid-template-columns:repeat(${st.length},minmax(0,1fr))" aria-label="Setup steps">${st.map((t, k) => { const inner = `<span class="d">${k + 1 < step ? icon('tick', 'ic-14', 2.5) : k + 1}</span><span>${t}</span>`; return `<li class="${k + 1 < step ? 'done' : k + 1 === step ? 'now' : ''}">${interactive ? `<button type="button" data-sd="goto" data-s="${k + 1}">${inner}</button>` : `<span class="wzb">${inner}</span>`}</li>`; }).join('')}</ol>`;
+  }
   function openServiceSetup(id, start) {
-    let api, linkErr = '', step = start || (serviceNeeds(id).some(x => !x.done) ? 2 : 3);
-    const STEPS = ['Service and rates', 'Documents', 'Contracts'];
+    let api, linkErr = '', finished = false, step = start || 2;
     const itemHTML = x => `<div class="frow"><div class="fi"><b>${esc(x.name)}</b><span class="muted">Needed for ${esc(x.rule)}</span></div><div class="fa">${x.done ? `<span class="tag ok">${icon('check', 'ic-14')}Already uploaded</span>` : x.kind === 'link' ? `<input class="inp" id="sdLink" dir="ltr" placeholder="www.merchant.com" style="min-width:200px"><button type="button" class="btn btn-outline btn-sm" data-sd="link">Add link</button>` : `<button type="button" class="btn btn-outline btn-sm" data-sd="${x.kind}" data-n="${esc(x.name)}">${icon('upload', 'ic')}Upload</button>`}</div>${x.done && x.file ? `<div class="muted" style="flex-basis:100%;font-size:13px">${esc(x.file)}</div>` : ''}${x.kind === 'link' && !x.done && linkErr ? `<div style="flex-basis:100%"><span class="ferr">${icon('warn', 'ic-14')}${linkErr}</span></div>` : ''}</div>`;
     const draw = () => {
+      const last = setupSteps(id).length; if (step > last) step = last;
       const items = step === 2 ? serviceNeeds(id) : contractNeeds(id), miss = items.filter(x => !x.done).length;
-      const stepper = `<ol class="wz" aria-label="Setup steps">${STEPS.map((t, k) => `<li class="${k + 1 < step ? 'done' : k + 1 === step ? 'now' : ''}"><button type="button" data-sd="goto" data-s="${k + 1}"><span class="d">${k + 1 < step ? icon('tick', 'ic-14', 2.5) : k + 1}</span><span>${t}</span></button></li>`).join('')}</ol>`;
       const intro = step === 2
         ? (items.length ? 'Documents already uploaded on this application are reused for every service. Upload only what is still missing for this one.' : `${esc(label(id))} needs no documents beyond the ones already on the application.`)
         : (items.length ? 'Each PF method needs its own signed contract. A contract already uploaded for the same method is reused.' : `${esc(label(id))} needs no contract.`);
       api.setTitle(`Set up ${esc(label(id))}`, esc(S.merchant.name));
-      api.body.innerHTML = `${stepper}<div class="note">${icon('info', 'ic')}<p>${intro}</p></div>${items.length ? `<div class="frows">${items.map(itemHTML).join('')}</div>` : ''}`;
-      api.foot.innerHTML = `<span class="sp hint">${miss ? `${miss} still missing` : 'Everything needed for this step is uploaded'}</span><button type="button" class="btn btn-outline" data-sd="back">Back</button>${step === 2 ? `<button type="button" class="btn btn-primary" data-sd="next" ${miss ? 'disabled' : ''}>Continue to contracts</button>` : `<button type="button" class="btn btn-primary" data-sd="submit" ${miss ? 'disabled' : ''}>Submit request</button>`}`;
+      api.body.innerHTML = `${stepperHTML(id, step, true)}<div class="note">${icon('info', 'ic')}<p>${intro}</p></div>${items.length ? `<div class="frows">${items.map(itemHTML).join('')}</div>` : ''}`;
+      api.foot.innerHTML = `<button type="button" class="btn btn-ghost" data-sd="cancel">Cancel</button><span class="sp hint">${miss ? `${miss} still missing` : ''}</span><button type="button" class="btn btn-outline" data-sd="back">Back</button><button type="button" class="btn btn-primary" data-sd="${step < last ? 'next' : 'submit'}" ${miss ? 'disabled' : ''}>${step < last ? 'Next' : 'Submit request'}</button>`;
     };
-    const editService = () => { api.close(true); setTimeout(() => V.act && V.act.editSvc && V.act.editSvc({ id })); };
-    drawer({ size: 'md', title: `Set up ${esc(label(id))}`, sub: esc(S.merchant.name), onClose() { rerender(); },
+    const goEdit = () => { finished = true; api.close(true); setTimeout(() => V.act && V.act.editSvc && V.act.editSvc({ id, flow: true })); };
+    const discard = () => confirmBox({ title: 'Cancel this service request?', body: `${esc(label(id))} is not added, and the documents uploaded in this setup are discarded.`, ok: 'Cancel request', danger: true }).then(ok => { if (ok) { finished = true; api.close(true); cancelSetup(id); } });
+    drawer({ size: 'md', title: `Set up ${esc(label(id))}`, sub: esc(S.merchant.name),
+      beforeClose() { if (finished) return true; discard(); return false; },
+      onClose() { rerender(); },
       render(a) {
         api = a; draw();
         a.body.addEventListener('click', e => {
           const b = e.target.closest('[data-sd]'); if (!b) return; const k = b.dataset.sd;
-          if (k === 'goto') { const n = +b.dataset.s; if (n === 1) return editService(); step = n; draw(); return; }
+          if (k === 'goto') { const n = +b.dataset.s; if (n === 1) return goEdit(); step = n; draw(); return; }
           if (k === 'doc') { const f = fake(b.dataset.n) + '.pdf'; S.docs[b.dataset.n] = { File: f }; log(`uploaded document: ${b.dataset.n}`, 'upload', f, id); }
           else if (k === 'store') { S.storeImage = 'storefront.jpg'; log('uploaded Store Image', 'upload', 'storefront.jpg', id); }
           else if (k === 'contract') { const f = fake(b.dataset.n) + '-signed.pdf'; S.reqContracts[b.dataset.n] = f; log(`uploaded contract: ${b.dataset.n}`, 'upload', f, id); }
@@ -865,9 +879,10 @@
         });
         a.foot.addEventListener('click', e => {
           const b = e.target.closest('[data-sd]'); if (!b || b.disabled) return; const k = b.dataset.sd;
-          if (k === 'back') { if (step === 2) editService(); else { step = 2; draw(); } }
-          else if (k === 'next') { step = 3; draw(); }
-          else if (k === 'submit') { api.close(true); setTimeout(() => submitCase(id)); }
+          if (k === 'cancel') discard();
+          else if (k === 'back') { if (step === 2) goEdit(); else { step -= 1; draw(); } }
+          else if (k === 'next') { step += 1; draw(); }
+          else if (k === 'submit') { finished = true; api.close(true); setTimeout(() => submitCase(id, true)); }
         });
       } });
   }
@@ -1128,7 +1143,7 @@
   function readOnlyView() {
     const head = profileHead(true);
     const live = S.order.filter(id => caseStatus(id) === 'Live'), canceled = S.order.filter(id => caseStatus(id) === 'Canceled');
-    const pending = S.order.filter(id => !['Live', 'Canceled'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const kycPending = S.kyc.filter(k => ['Underwriting Review', 'Rejected'].includes(k.status)), kycDone = S.kyc.filter(k => !['Underwriting Review', 'Rejected'].includes(k.status)), pendingN = pending.filter(id => caseStatus(id) !== 'New').length + kycPending.length;
+    const pending = S.order.filter(id => !['Live', 'Canceled', 'New'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const kycPending = S.kyc.filter(k => ['Underwriting Review', 'Rejected'].includes(k.status)), kycDone = S.kyc.filter(k => !['Underwriting Review', 'Rejected'].includes(k.status)), pendingN = pending.filter(id => caseStatus(id) !== 'New').length + kycPending.length;
     const allCanceled = S.order.length > 0 && !pending.length && !live.length && !S.kyc.some(k => k.status !== 'Canceled');
     const banner = allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
     /* Active services: the live cases. Just the service and its full log, no detail view. */
@@ -1367,6 +1382,6 @@
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
     commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
-    openServiceSetup, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, get ME() { return ME; }
+    openServiceSetup, beginSetup, cancelSetup, stepperHTML, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, get ME() { return ME; }
   };
 })();

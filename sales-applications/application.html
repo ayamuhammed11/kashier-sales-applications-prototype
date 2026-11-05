@@ -207,11 +207,17 @@
   let dr = null; // { mode, id, ch, q, snap, saved, api, adv: {li: bool}, sel: {li: ruleId}, showRules: {li: bool} }
   const snapshot = () => JSON.stringify({ svc: SA.S.svc, order: SA.S.order, terminals: SA.S.terminals, just: SA.S.just, log: SA.S.log });
   const restore = s => { const o = JSON.parse(s); Object.assign(SA.S, o); };
-  function openSvcDrawer(mode, id) {
-    dr = { mode, id: id || null, ch: 'Online', q: '', snap: snapshot(), saved: false, adv: {}, sel: {}, showRules: {} };
+  function openSvcDrawer(mode, id, flow) {
+    dr = { mode, flow: !!flow, id: id || null, ch: 'Online', q: '', snap: snapshot(), saved: false, adv: {}, sel: {}, showRules: {} };
     if (id) SA.S.svc[id].lines.forEach((l, li) => { dr.adv[li] = !!l.adv; });
+    if (flow && mode === 'add') SA.beginSetup();
     SA.drawer({ size: 'xl', title: mode === 'add' ? 'Add service' : `Edit ${SA.label(id)}`, sub: mode === 'add' ? 'Pick a service, then set its model, institution and rates.' : esc(SA.SVC_HINT[SA.nmOf(id)]),
       beforeClose(api) {
+        if (dr.flow && mode === 'edit' && !dr.saved) {   // back from the documents step: closing cancels the whole request
+          const sid = dr.id;
+          SA.confirmBox({ title: 'Cancel this service request?', body: `${esc(SA.label(sid))} is not added.`, ok: 'Cancel request', danger: true }).then(ok => { if (ok) { dr.saved = true; api.close(true); SA.cancelSetup(sid); } });
+          return false;
+        }
         if (dr.saved || snapshot() === dr.snap) { if (!dr.saved) restore(dr.snap); return true; }
         SA.confirmBox({ title: mode === 'add' ? 'Discard this service?' : 'Discard changes?', body: mode === 'add' ? `${esc(SA.label(dr.id))} won't be added.` : `Your changes to ${esc(SA.label(dr.id))} won't be saved.`, ok: 'Discard', danger: true }).then(ok => { if (ok) { restore(dr.snap); api.close(true); } });
         return false;
@@ -264,13 +270,13 @@
     if (!dr.id) return `<span class="sp hint">Pick a service to continue.</span><button type="button" class="btn btn-outline" data-act="dCancel">Cancel</button>`;
     const st = SA.svcState(dr.id), posMiss = SA.chOf(dr.id) === 'POS' && !(/^\d+$/.test(String(SA.S.terminals).trim()) && +SA.S.terminals >= 1);
     const msg = st.issues.length ? `${st.issues[0]}. You can finish this later.` : posMiss ? 'Enter the number of terminals. You can finish this later.' : st.flags.length ? `${st.flags.length} rate${st.flags.length > 1 ? 's' : ''} below published. You'll add a justification when you continue` : 'Ready';
-    return `<span class="sp hint">${esc(msg)}</span><button type="button" class="btn btn-outline" data-act="dCancel">Cancel</button><button type="button" class="btn btn-primary" data-act="dSave">${dr.mode === 'add' ? 'Add service' : 'Save changes'}</button>`;
+    return `<span class="sp hint">${esc(msg)}</span><button type="button" class="btn btn-outline" data-act="dCancel">Cancel</button><button type="button" class="btn btn-primary" data-act="dSave">${dr.flow ? 'Next' : dr.mode === 'add' ? 'Add service' : 'Save changes'}</button>`;
   }
   function drawSvc() {
     if (!dr || !dr.api || !dr.api.el.isConnected) return;
     if (dr.id && !SA.S.svc[dr.id]) dr.id = null;
     dr.api.setTitle(dr.mode === 'add' ? (dr.id ? `Add ${esc(SA.label(dr.id))}` : 'Add service') : `Edit ${esc(SA.label(dr.id))}`, dr.id ? esc(SA.SVC_HINT[SA.nmOf(dr.id)]) : 'Pick a service, then set its model, institution and rates.');
-    dr.api.body.innerHTML = dr.id ? setupBody() : pickBody();
+    dr.api.body.innerHTML = (dr.flow ? SA.stepperHTML(dr.id, 1, false) : '') + (dr.id ? setupBody() : pickBody());
     let f = dr.api.el.querySelector('.df'); if (!f) { f = document.createElement('div'); f.className = 'df'; dr.api.el.append(f); }
     f.dataset.live = 'dfoot'; f.innerHTML = drawFoot();
   }
@@ -331,8 +337,8 @@
     reset() { SA.S.step = 0; },
     act: {
       checklist: (d, el) => { SA.popover(el, `<div class="pop-b hub-pop">${SA.checklistHTML()}</div>`, p => p.querySelector('button')?.focus(), { width: 420 }); return false; },
-      addSvc: () => { openSvcDrawer('add'); return false; },
-      editSvc: d => { openSvcDrawer('edit', d.id); return false; },
+      addSvc: () => { openSvcDrawer('add', null, SA.submitted()); return false; },
+      editSvc: d => { openSvcDrawer('edit', d.id, !!d.flow); return false; },
       dCh: d => { dr.ch = d.v; },
       dPick: d => { SA.addService(d.id); dr.id = d.id; dr.sel = {}; dr.adv = {}; dr.showRules = {}; setTimeout(() => dr && dr.api.el.querySelector('#dm')?.focus()); },
       dBack: () => { const id = dr.id; restore(dr.snap); dr.id = null; dr.ch = SA.chOf(id); },
@@ -347,7 +353,13 @@
         return false;
       },
       dCancel: () => { dr.api.close(); return false; },
-      dSave: () => { const id = dr.id, add = dr.mode === 'add'; dr.saved = true; if (!add) SA.log(`updated service setup: ${SA.label(id)}`); dr.api.close(true); SA.toast(add ? `${SA.label(id)} added` : `${SA.label(id)} saved`); if (add && SA.submitted()) setTimeout(() => SA.openServiceSetup(id)); const row = document.getElementById('row-' + id.replace(/\W/g, '')); row && row.scrollIntoView({ block: 'nearest' }); return false; },
+      dSave: () => { const id = dr.id, add = dr.mode === 'add';
+        if (dr.flow) {
+          const st = SA.svcState(id), posMiss = SA.chOf(id) === 'POS' && !(/^\d+$/.test(String(SA.S.terminals).trim()) && +SA.S.terminals >= 1);
+          if (!st.ready || posMiss) { SA.toast('Finish the service and its rates first'); return false; }
+          dr.saved = true; dr.api.close(true); setTimeout(() => SA.openServiceSetup(id, 2)); return false;
+        }
+        dr.saved = true; if (!add) SA.log(`updated service setup: ${SA.label(id)}`); dr.api.close(true); SA.toast(add ? `${SA.label(id)} added` : `${SA.label(id)} saved`); const row = document.getElementById('row-' + id.replace(/\W/g, '')); row && row.scrollIntoView({ block: 'nearest' }); return false; },
       terms: (d, el) => {
         SA.popover(el, `<div class="pop-b" style="padding:12px;gap:10px"><label class="sub-h" for="tp">Number of POS terminals</label><input class="inp" id="tp" inputmode="numeric" value="${esc(SA.S.terminals)}" placeholder="e.g. 2"><span class="hint">Whole number, 1 or more. Logged in the activity log.</span><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn btn-outline btn-sm" data-c>Cancel</button><button type="button" class="btn btn-primary btn-sm" data-s>Save</button></div></div>`, p => {
           const i = p.querySelector('#tp'), s = p.querySelector('[data-s]'); const ok = () => /^\d+$/.test(i.value.trim()) && +i.value >= 1; s.disabled = !ok(); i.oninput = () => { s.disabled = !ok(); };
