@@ -504,3 +504,8 @@ body.locked { overflow: hidden; }
 .st-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
 .st-row .muted { overflow-wrap: anywhere; }
 .fprev-lg { min-height: 60vh; justify-content: center; }
+
+/* Edit button in the profile card, and the edit drawer. */
+.prof-edit { align-self: flex-start; order: 3; }
+.eweb { display: flex; gap: 8px; align-items: flex-start; }
+.drawer .items { display: flex; flex-direction: column; gap: 12px; }

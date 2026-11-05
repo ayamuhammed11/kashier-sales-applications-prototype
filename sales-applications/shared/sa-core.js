@@ -826,6 +826,7 @@
   function profileHead(sub) {
     const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
+      ${sub ? `<button type="button" class="btn btn-outline prof-edit" data-act="editGeneral">${icon('pencil', 'ic')}Edit</button>` : ''}
       <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}${sub && S.mid ? ` <span class="mid" title="Account MID">${esc(S.mid)}</span>` : ''} ${appChip()}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
         <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div></section>`;
   }
@@ -874,6 +875,107 @@
     };
     caseDr = { draw, tab: 'details' };
     drawer({ size: 'xl', title: esc(label(id)), sub: '', onClose() { caseDr = null; }, render(api) { caseDr.api = api; draw(); } });
+  }
+  /* Edit the general information of a submitted application: business info, website / social links, store image (POS) and payout methods.
+     Pricing and the cases are not touched. Changes are made on a copy and only applied on Save. */
+  function openEditGeneral() {
+    const clone = o => JSON.parse(JSON.stringify(o));
+    const D = { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.length ? S.websites.slice() : [''], storeImage: S.storeImage, payouts: clone(S.payouts), primary: S.primary, nextPayout: S.nextPayout };
+    const orig = JSON.stringify(D); let tried = false, saved = false, api;
+    const payIssues = p => {
+      const o = {};
+      if (p.id !== D.primary && !p.name.trim()) o.name = 'Enter the payout method name';
+      if (p.type === 'bank') {
+        if (!p.bank) o.bank = 'Choose the bank'; if (!p.branch) o.branch = 'Choose the branch';
+        if (!/^[\p{L} .'-]+$/u.test(p.holder.trim())) o.holder = 'Enter the account holder name';
+        if (!/^\d{8,20}$/.test(p.acct.trim())) o.acct = 'Enter the account number: 8 to 20 digits.';
+      } else {
+        if (!p.provider) o.provider = 'Choose the wallet provider';
+        if (!/^01\d{9}$/.test(p.mobile.trim())) o.mobile = 'Enter the 11-digit wallet mobile number, e.g. 01012345678.';
+        if (!/^[\p{L} .'-]+$/u.test(p.wholder.trim())) o.wholder = 'Enter the wallet holder name';
+      }
+      return o;
+    };
+    const errs = () => {
+      const e = { pay: {}, web: {} };
+      if (!D.name.trim()) e.name = 'Enter the business name';
+      if (!emailOk(D.email)) e.email = 'Enter a valid email, e.g. name@company.com';
+      if (!phoneOk(D.phone)) e.phone = 'Include the country code, e.g. +20 100 123 4567';
+      const filled = D.websites.map(x => x.trim()).filter(Boolean);
+      D.websites.forEach((w, i) => { if (w.trim() && !urlOk(w)) e.web[i] = 'Enter a valid website or social media link'; });
+      if (hasCh('Online') && !filled.length) e.webAny = 'Online services need at least one website or social media link';
+      if (!D.payouts.length) e.payAny = 'Add at least one payout method';
+      D.payouts.forEach(p => { const x = payIssues(p); if (Object.keys(x).length) e.pay[p.id] = x; });
+      e.any = !!(e.name || e.email || e.phone || e.webAny || e.payAny || Object.keys(e.web).length || Object.keys(e.pay).length);
+      return e;
+    };
+    const E = () => tried ? errs() : { pay: {}, web: {} };
+    const fe = m => m ? `<span class="ferr">${icon('warn', 'ic-14')}${m}</span>` : '';
+    const input = (id, lbl, key, val, err, extra = '') => `<div class="fld"><label for="${id}">${lbl}</label><input class="inp ${err ? 'err' : ''}" id="${id}" data-e="${key}" value="${esc(val)}" ${extra}>${fe(err)}</div>`;
+    const select = (id, lbl, key, val, opts, ph, err) => `<div class="fld"><label for="${id}">${lbl}</label><select class="sel ${val ? '' : 'is-empty'} ${err ? 'err' : ''}" id="${id}" data-e="${key}"><option value="">${ph}</option>${opts.map(o => `<option ${val === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>${fe(err)}</div>`;
+    const html = () => {
+      const e = E();
+      const pay = D.payouts.map((p, i) => {
+        const x = e.pay[p.id] || {}, prim = p.id === D.primary, k = f => `pay:${p.id}:${f}`;
+        const body = p.type === 'bank'
+          ? `<div class="grid2">${select(`ep${p.id}b`, 'Bank Name', k('bank'), p.bank, Object.keys(PAYOUT_BANKS), 'Select bank…', x.bank)}${select(`ep${p.id}br`, 'Bank Branch Name', k('branch'), p.branch, p.bank ? PAYOUT_BANKS[p.bank] : [], p.bank ? 'Select branch…' : 'Select a bank first', x.branch)}${input(`ep${p.id}h`, 'Account Holder Name', k('holder'), p.holder, x.holder)}${input(`ep${p.id}a`, 'Account Number', k('acct'), p.acct, x.acct, 'inputmode="numeric" dir="ltr"')}</div>`
+          : `<div class="grid2">${select(`ep${p.id}pr`, 'Wallet Provider', k('provider'), p.provider, WALLETS, 'Select provider…', x.provider)}${input(`ep${p.id}m`, 'Wallet Mobile Number', k('mobile'), p.mobile, x.mobile, 'inputmode="numeric" dir="ltr"')}${input(`ep${p.id}w`, 'Wallet Holder Name', k('wholder'), p.wholder, x.wholder)}</div>`;
+        return `<div class="item"><div class="item-h"><b>Payout method ${i + 1}</b><span class="tag info">${p.type === 'bank' ? 'Bank Account' : 'E-Wallet'}</span>${prim ? '<span class="tag ok">Primary</span>' : ''}<span class="sp"></span>${!prim ? `<button type="button" class="btn btn-ghost btn-sm" data-ea="primary" data-i="${p.id}">Make primary</button><button type="button" class="icon-btn" data-ea="rmPay" data-i="${p.id}" aria-label="Remove payout method ${i + 1}">${icon('trash', 'ic')}</button>` : ''}</div>
+          ${!prim ? input(`ep${p.id}n`, 'Payout Method Name', k('name'), p.name, x.name) : ''}${body}</div>`;
+      }).join('');
+      return `<section class="cd-s"><h3 class="sub-h">Business information</h3><div class="grid2">${input('eName', 'Business Name', 'name', D.name, e.name)}${input('eEmail', 'Contact Email', 'email', D.email, e.email, 'type="email"')}${input('ePhone', 'Contact Phone', 'phone', D.phone, e.phone, 'type="tel" dir="ltr"')}${select('eInd', 'Industry', 'industry', D.industry, INDUSTRIES, 'Select industry', '')}${select('eOwn', 'Business Owner Nationality', 'owner', D.owner, OWNERS, 'Not set', '')}</div>
+          <p class="hint" style="margin:0">Merchant type and activities decide the pricing rules, so they are not edited here.</p></section>
+        <section class="cd-s"><h3 class="sub-h">Website and social media links</h3>${D.websites.map((w, i) => `<div class="eweb"><div class="fld" style="flex:1"><label class="sr-only" for="eW${i}">Link ${i + 1}</label><input class="inp ${e.web[i] ? 'err' : ''}" id="eW${i}" dir="ltr" data-e="web:${i}" value="${esc(w)}" placeholder="www.merchant.com">${fe(e.web[i])}</div>${D.websites.length > 1 ? `<button type="button" class="icon-btn" data-ea="rmLink" data-i="${i}" aria-label="Remove link ${i + 1}">${icon('x', 'ic')}</button>` : ''}</div>`).join('')}${fe(e.webAny)}<button type="button" class="link-btn" data-ea="addLink" style="align-self:flex-start">${icon('plus', 'ic')}Add another link</button></section>
+        ${hasCh('POS') ? `<section class="cd-s"><h3 class="sub-h">Store image</h3><p class="hint" style="margin:0">Required for POS services. JPG, PNG · max 5 MB.</p><div class="st-row">${D.storeImage ? `<span class="muted">${esc(D.storeImage)}</span>` : ''}<button type="button" class="btn btn-outline btn-sm" data-ea="store">${icon('upload', 'ic')}${D.storeImage ? 'Replace image' : 'Upload image'}</button></div></section>` : ''}
+        <section class="cd-s"><h3 class="sub-h">Payout methods</h3>${fe(e.payAny)}<div class="items">${pay}</div><div class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="bank">${icon('plus', 'ic')}Add bank account</button><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="wallet">${icon('plus', 'ic')}Add e-wallet</button></div></section>`;
+    };
+    const draw = () => {
+      const keep = api.body.scrollTop; api.body.innerHTML = html(); api.body.scrollTop = keep;
+      api.foot.innerHTML = `<span class="sp hint">${tried && errs().any ? 'Fix the highlighted fields to save.' : ''}</span><button type="button" class="btn btn-outline" data-ex="cancel">Cancel</button><button type="button" class="btn btn-primary" data-ex="save">Save changes</button>`;
+      api.foot.querySelector('[data-ex=cancel]').onclick = () => api.close();
+      api.foot.querySelector('[data-ex=save]').onclick = save;
+    };
+    const setField = (key, val) => {
+      if (key.startsWith('web:')) { D.websites[+key.slice(4)] = val; return; }
+      if (key.startsWith('pay:')) { const [, id, f] = key.split(':'); const p = D.payouts.find(x => x.id === +id); p[f] = val; if (f === 'bank') p.branch = ''; return; }
+      D[key] = val;
+    };
+    const save = () => {
+      tried = true; if (errs().any) { draw(); const bad = api.body.querySelector('.err, .ferr'); bad && bad.scrollIntoView({ block: 'center' }); return; }
+      const before = { biz: JSON.stringify([S.merchant.name, S.merchant.email, S.merchant.phone, S.industry, S.owner]), web: JSON.stringify(S.websites), store: S.storeImage, pay: JSON.stringify([S.payouts, S.primary]) };
+      S.merchant.name = D.name.trim(); S.merchant.email = D.email.trim(); S.merchant.phone = D.phone.trim(); S.industry = D.industry; S.owner = D.owner;
+      S.websites = D.websites.map(x => x.trim()).filter(Boolean); S.storeImage = D.storeImage;
+      S.payouts = D.payouts.map(p => Object.assign({}, p, { name: p.name.trim() })); S.primary = D.primary; S.nextPayout = D.nextPayout;
+      const done = [];
+      if (before.biz !== JSON.stringify([S.merchant.name, S.merchant.email, S.merchant.phone, S.industry, S.owner])) done.push('business information');
+      if (before.web !== JSON.stringify(S.websites)) done.push('website and social media links');
+      if (before.store !== S.storeImage) done.push('store image');
+      if (before.pay !== JSON.stringify([S.payouts, S.primary])) done.push('payout methods');
+      if (done.length) log(`updated the application details: ${done.join(', ')}`, 'pencil');
+      saved = true; api.close(true); rerender(); toast(done.length ? 'Application details updated' : 'No changes to save');
+    };
+    drawer({ size: 'xl', title: 'Edit application details', sub: esc(S.merchant.name),
+      beforeClose(a) {
+        if (saved || JSON.stringify(D) === orig) return true;
+        confirmBox({ title: 'Discard changes?', body: 'Your changes to the application details won\'t be saved.', ok: 'Discard', danger: true }).then(ok => { if (ok) a.close(true); });
+        return false;
+      },
+      render(a) {
+        api = a; draw();
+        a.body.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.e; if (k && e.target.tagName !== 'SELECT') setField(k, e.target.value); });
+        a.body.addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.e; if (k && e.target.tagName === 'SELECT') { setField(k, e.target.value); draw(); } });
+        a.body.addEventListener('click', e => {
+          const b = e.target.closest('[data-ea]'); if (!b) return; const i = +b.dataset.i;
+          switch (b.dataset.ea) {
+            case 'addLink': D.websites.push(''); draw(); setTimeout(() => { const n = a.body.querySelector(`#eW${D.websites.length - 1}`); n && n.focus(); }); break;
+            case 'rmLink': D.websites.splice(i, 1); draw(); break;
+            case 'store': D.storeImage = 'storefront-updated.jpg'; draw(); break;
+            case 'addPay': { const p = { id: D.nextPayout++, type: b.dataset.t, name: '', bank: '', branch: '', holder: '', acct: '', provider: '', mobile: '', wholder: '' }; D.payouts.push(p); if (D.primary == null) D.primary = p.id; draw(); break; }
+            case 'rmPay': D.payouts = D.payouts.filter(p => p.id !== i); if (D.primary === i) D.primary = D.payouts[0] ? D.payouts[0].id : null; draw(); break;
+            case 'primary': D.primary = i; draw(); break;
+          }
+        });
+      } });
   }
   /* Comments (after the first submission only): a running conversation on the application between the salesperson, managers and the onboarding team. */
   function commentsSection() {
@@ -969,6 +1071,7 @@
     dlFile: d => { toast(`Downloading ${d.f}`); return false; },
     svcLogs: d => { const id = d.id; drawer({ size: 'md', title: 'Activity log', sub: `${esc(label(id))} · ${esc((S.cases[id] || {}).caseId || '')}`, render(api) { api.body.innerHTML = caseLogHTML(id); } }); return false; },
     dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
+    editGeneral: () => { openEditGeneral(); return false; },
     postComment: () => { const t = (S.commentDraft || '').trim(); if (!t) { toast('Write a comment first'); return false; } S.comments.push({ id: S.comments.length + 1, who: ME.name, role: ME.role, init: ME.init, t: nowStr(), text: t }); S.commentDraft = ''; log('added a comment', 'pencil', t); },
     fix: () => { S.fixing = true; scrollTo(0, 0); },
     stopFix: () => { S.fixing = false; scrollTo(0, 0); },
@@ -1023,7 +1126,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'openCase', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
