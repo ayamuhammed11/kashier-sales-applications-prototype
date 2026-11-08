@@ -1318,8 +1318,9 @@
 
   /* ---------- Shell ---------- */
   /* Agent-portal navigation, grouped as on staging. My Applications sits under Merchants. */
+  const IN_SA = /\/sales-applications\//.test(location.pathname), UP = IN_SA ? '../' : '', SAD = IN_SA ? '' : 'sales-applications/';
   const NAV = [['', [['home', 'Home']]],
-    ['Merchants', [['user-group', 'My Applications', true], ['building-storefront', 'Merchants'], ['briefcase', 'Business Industries'], ['document-text', 'Document Types'], ['clipboard-document-check', 'Document Rules']]],
+    ['Merchants', [['user-group', 'My Applications', IN_SA, SAD + 'list.html'], ['inbox-stack', 'Cases', false, UP + 'cases.html'], ['building-storefront', 'Merchants'], ['briefcase', 'Business Industries'], ['document-text', 'Document Types'], ['clipboard-document-check', 'Document Rules']]],
     ['Payments', [['shopping-bag', 'Orders'], ['arrows-right-left', 'Transfers'], ['scale', 'Reconciliation']]],
     ['Settlements', [['calendar-days', 'Settlement Windows'], ['bolt', 'Instant Settlements'], ['arrow-path-rounded-square', 'Automated Settlement'], ['wallet', 'Accounts'], ['lock-closed', 'On-Hold'], ['sun', 'Vacations']]],
     ['Products', [['gift', 'Bundles'], ['banknotes', 'Lending'], ['rectangle-group', 'Kashier Services']]],
@@ -1327,19 +1328,19 @@
     ['POS', [['device-tablet', 'Terminals'], ['queue-list', 'Kashier POS Batches'], ['inbox-stack', 'POS Bank Batches'], ['key', 'POS Key Exchanges']]],
     ['Team', [['users', 'User Management'], ['shield-check', 'Roles & Permissions']]]];
   const navIcon = n => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${(window.AGENT_ICONS || {})[n] || ''}</svg>`;
-  const navLink = ([i, l, cur]) => `<a href="#" class="nlink" ${cur ? 'aria-current="page"' : ''}>${navIcon(i)}<span>${esc(l)}</span></a>`;
+  const navLink = ([i, l, cur, href]) => `<a href="${href || '#'}" class="nlink" ${cur || (href && location.pathname.endsWith(href.replace(/^(\.\.\/|sales-applications\/)/, '').replace(/^/, '/'))) ? 'aria-current="page"' : ''}>${navIcon(i)}<span>${esc(l)}</span></a>`;
   /* Prototype bar links: one list for every page, so order and labels never drift. */
   const PAGES = [['list.html', 'List', 'My Applications list'], ['application.html', 'Application', 'The chosen application form'], ['variant-a.html', 'A · Rail', 'Sections + sticky rail'], ['variant-b.html', 'B · Steps', 'Full-page steps'], ['variant-c.html', 'C · Blocks', 'Services first, inline blocks'], ['compare.html', 'Compare', 'A, B and C side by side'], ['audit.html', 'Audit', 'Audit of the current prototype']];
   function shell() {
     const qs = new URLSearchParams(location.search);
     const here = location.pathname.split('/').pop() || 'application.html';
     document.body.innerHTML = `<div class="proto" role="navigation" aria-label="Prototype controls"><b>Sales Applications</b>
-      <span class="grp">${PAGES.map(([href, l, t]) => `<a href="${href}" title="${t}" ${href === here ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</span>
+      <span class="grp">${PAGES.map(([href, l, t]) => `<a href="${SAD}${href}" title="${t}" ${href === here ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</span>
       <span class="sp"></span>
       <span class="grp">${V.protoControls ? V.protoControls() : '<label class="lbl" for="preset">State</label><select id="preset"><option value="">Keep my changes</option><option value="new">New lead</option><option value="progress">In progress</option><option value="ready">Ready to submit</option><option value="waiting">Submitted · waiting approval</option><option value="returned">Returned · rate rejected</option></select><label class="lbl" for="viewAs">View as</label><select id="viewAs">' + Object.values(ROLES).map(r => `<option value="${r.key}" ${r.key === ME.key ? 'selected' : ''}>${r.role}</option>`).join('') + '</select>'}<button type="button" id="rtl" aria-pressed="${document.dir === 'rtl'}">RTL</button></span></div>
-      <div class="app"><aside class="sidebar sidenav" id="sidebar" aria-label="Main"><a href="#" class="logo"><img src="../img/Kashier-logo.svg" alt="Kashier"></a><nav class="routes">${NAV.map(([g, items], gi) => g ? `<div class="ngrp"><button type="button" class="ngrp-t" aria-expanded="true" aria-controls="ng${gi}">${g}<svg class="ic-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${(window.AGENT_ICONS || {})['chevron-down'] || ''}</svg></button><div class="ngrp-l" id="ng${gi}">${items.map(navLink).join('')}</div></div>` : items.map(navLink).join('')).join('')}</nav></aside>
+      <div class="app"><aside class="sidebar sidenav" id="sidebar" aria-label="Main"><a href="#" class="logo"><img src="${UP}img/Kashier-logo.svg" alt="Kashier"></a><nav class="routes">${NAV.map(([g, items], gi) => g ? `<div class="ngrp"><button type="button" class="ngrp-t" aria-expanded="true" aria-controls="ng${gi}">${g}<svg class="ic-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${(window.AGENT_ICONS || {})['chevron-down'] || ''}</svg></button><div class="ngrp-l" id="ng${gi}">${items.map(navLink).join('')}</div></div>` : items.map(navLink).join('')).join('')}</nav></aside>
       <div class="nav-scrim" id="navScrim"></div>
-      <div class="main-col"><header class="mbar"><button class="icon-btn" id="navOpen" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">${icon('menu', 'ic-24')}</button><img class="mlogo" src="../img/Kashier-logo.svg" alt="Kashier"><span class="pav">${ME.init}</span></header>
+      <div class="main-col"><header class="mbar"><button class="icon-btn" id="navOpen" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">${icon('menu', 'ic-24')}</button><img class="mlogo" src="${UP}img/Kashier-logo.svg" alt="Kashier"><span class="pav">${ME.init}</span></header>
       <main class="container" id="main"><div id="page"></div></main></div></div>`;
     const open = v => { document.getElementById('sidebar').classList.toggle('open', v); document.getElementById('navScrim').classList.toggle('show', v); document.getElementById('navOpen').setAttribute('aria-expanded', v); };
     document.getElementById('navOpen').onclick = () => open(true); document.getElementById('navScrim').onclick = () => open(false);

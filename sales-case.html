@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kashier | Case</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="sales-applications/shared/base.css">
+<link rel="stylesheet" href="sales-applications/shared/sa.css">
+<link rel="stylesheet" href="components/filter-bar.css">
+<style>
+  .wrap { max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+  .hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .hdr > div:first-child { flex: 1; min-width: 0; }
+  .meta { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; color: var(--cadet-base); font-size: 14px; margin-block-start: 8px; }
+  .tag { font-size: 12px; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; background: var(--muted); color: var(--cadet-base); border: 1px solid var(--border); }
+  .linkb { background: none; border: 0; padding: 0; color: var(--link); font-weight: 600; cursor: pointer; font: inherit; }
+  .row { display: flex; align-items: flex-start; gap: 16px; padding: 16px 0; border-top: 1px solid var(--border-subtle); flex-wrap: wrap; }
+  .row .i { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px; }
+  .row .n { font-weight: 600; } .row .f { font-size: 13px; color: var(--cadet-base); overflow-wrap: anywhere; } .row .f.bad { color: var(--destructive); }
+  .row .a { display: flex; gap: 8px; align-items: center; }
+  .rate { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; max-width: 420px; }
+  .rate b { white-space: nowrap; }
+  .note { border-top: 1px solid var(--border-subtle); padding-top: 12px; } .note .k { font-size: 12px; color: var(--cadet-base); }
+  .info { padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 14px; }
+  .info.bad { background: var(--error-10); border-color: #FFD0D6; } .info.ok { background: var(--lemon-10); border-color: var(--lemon-20); }
+  .empty { text-align: center; padding: 48px 16px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
+</style>
+</head>
+<body>
+<script src="components/filter-bar.js"></script>
+<script src="sales-applications/shared/agent-icons.js"></script>
+<script src="sales-applications/shared/sa-core.js"></script>
+<script src="rate-decisions.js"></script>
+<script src="cases-core.js"></script>
+<script src="uw-core.js"></script>
+<script>
+/* One case page for both kinds of case, kept simple: an overview, then one block per part.
+   A service case is the service's pricing, its own documents and its contract. An application details case is a change to the
+   merchant's business details or payout methods. A page shows either, or both when the application has both in review. */
+(function () {
+  const { icon, esc } = SA, C = Cases, U = UW;
+  const id = new URLSearchParams(location.search).get('id');
+  const me = C.user();
+  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
+  const sc = s => `<span class="sc ${CHIP[s] || 'neu'}">${esc(U.STATUS[s] ? U.STATUS[s].label : s)}</span>`;
+  const tierName = k => k === 'local' ? 'Local rates' : k.indexOf('intl-') === 0 ? 'International · ' + k.slice(5) : k.replace(/-/g, ' ');
+  const dl = rows => `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v == null || v === '' ? '—' : esc(v)}</dd>`).join('')}</dl>`;
+  const profile = `<button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button>`;
+  const crumb = last => `<nav class="crumb" aria-label="Breadcrumb"><a href="cases.html">Cases</a><svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${AGENT_ICONS['chevron-right']}</svg><span aria-current="page">${esc(last)}</span></nav>`;
+  const go = msg => { location.href = 'cases.html'; try { sessionStorage.setItem('cases-toast', msg); } catch (e) { /* storage unavailable */ } };
+
+  function rates(c) {
+    const lines = c.svc.lines || [];
+    if (!lines.length) return '<span class="f">No rates were entered for this service.</span>';
+    return lines.map(l => `<div><b>${esc(l.bank || 'No bank')}</b> <span class="f">${esc(c.model)} · ${esc(c.channel)}</span>${Object.keys(l.rates || {}).map(k => `<div class="rate"><span>${esc(tierName(k))}</span><b>${esc(l.rates[k].rate)}% + ${esc(l.rates[k].fee)} EGP</b></div>`).join('')}</div>`).join('');
+  }
+  /* The decision sits with the item it belongs to. */
+  function decision(x, c) {
+    const open = c.status === 'Underwriting Review', d = `data-case="${esc(c.id)}"`;
+    if (x.missing) return '<span class="sc bad">Rejected</span>';
+    if (x.state === 'ok' || x.state === 'flag') return `<span class="sc ${x.state === 'ok' ? 'ok' : 'bad'}">${x.state === 'ok' ? 'Approved' : 'Rejected'}</span>${open ? `<button class="linkb" type="button" ${d} data-clear="${esc(x.key)}">Undo</button>` : ''}`;
+    return open ? `<button class="btn btn-outline-danger btn-sm" type="button" ${d} data-flag="${esc(x.key)}" data-lbl="${esc(x.label)}">Reject</button><button class="btn btn-primary btn-sm" type="button" ${d} data-ok="${esc(x.key)}">Approve</button>` : '';
+  }
+  function row(x, c) {
+    const detail = x.from != null ? `${esc(x.from)} &rarr; <b>${esc(x.to)}</b>` : x.key === 'pricing' ? rates(c) : x.files && x.files.length ? esc(x.files.join(' · ')) : '';
+    return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
+  }
+  /* One block per case: the title, its status, and the items to decide. */
+  function part(c) {
+    const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type === 'application';
+    const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
+      : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the application.</div>`
+      : c.status === 'Live' ? `<div class="info ok"><b>Live${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> This service is now worked from the Merchant module.</div>` : '';
+    return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
+      ${c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div>
+      ${app ? '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>' : ''}
+      ${note}<div>${p.list.map(x => row(x, c)).join('')}</div></section>`;
+  }
+  function relatedCard(list) {
+    if (!list.length) return '';
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Also in review on this application</h2></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.service)}</span><span class="f">${esc(r.caseId)} · ${r.type === 'application' ? 'Application details' : 'Service case'}</span></div><div class="a">${sc(r.status)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
+  }
+  function logsDrawer(c) {
+    SA.drawer({ title: 'Activity logs', sub: esc(c.merchant.name) + ' · ' + esc(c.caseId), render(api) {
+      const ev = U.activity(c);
+      api.body.innerHTML = ev.length ? `<ul class="log">${ev.map(e => `<li><span class="li">${icon(e.ic || 'pencil', 'ic-16')}</span><div><div class="t num">${esc(e.t)}</div><div><b>${esc(e.who)}</b> ${esc(e.text)}</div>${e.detail ? `<div class="d">${esc(e.detail)}</div>` : ''}</div></li>`).join('')}</ul>` : '<p class="hint">No activity yet.</p>';
+    } });
+  }
+
+  function render() {
+    const c = U.get(id), page = document.getElementById('page');
+    if (!c) { page.innerHTML = `<div class="wrap"><div class="card empty"><h3>Case not found</h3><p class="hint">It may be assigned to another agent, or the sales application was reset.</p><a class="btn btn-outline" href="cases.html">Back to Cases</a></div></div>`; return; }
+    document.title = 'Kashier | ' + c.caseId;
+    const rel = U.related(c), mgr = me.canReassign, app = c.type === 'application';
+    // A service case also carries the application's open changes to business details and payout methods, so one visit settles both.
+    const parts = [c].concat(app ? [] : rel), links = app ? rel : [];
+    const both = parts.some(x => x.type === 'service') && parts.some(x => x.type === 'application');
+    const notes = c.local.notes;
+    const info = [['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity], ['Submitted', c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
+      .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
+    page.innerHTML = `<div class="wrap">
+      <header class="hdr"><div>${crumb(c.caseId)}<h1>${esc(c.merchant.name)}</h1>
+        <div class="meta">${both ? '<span class="tag">Service case</span><span class="tag">Application details</span>' : `<span class="tag">${app ? 'Application details' : 'Service case'}</span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
+      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Overview</h2></div></div>${dl(info)}
+        ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
+      ${parts.map(part).join('')}
+      ${relatedCard(links)}
+      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
+        <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
+        ${notes.map(n => `<div class="note"><div class="k">${esc(n.by)} · ${esc(C.fmtDate(n.ts))}</div><div>${esc(n.text)}</div></div>`).join('')}</section></div>`;
+    bind(c);
+  }
+
+  function flagModal(cid, key, label) {
+    SA.modal({ title: 'Reject this item?', sub: esc(label), body: '<div class="fld"><label for="flC">Decision comment</label><textarea class="inp" id="flC" rows="3" placeholder="What does Sales need to fix?"></textarea><span class="hint">The salesperson sees this if the case comes back to them.</span></div>',
+      foot: '<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-danger" data-y disabled>Reject</button>',
+      bind(api) {
+        const t = api.el.querySelector('#flC'), y = api.el.querySelector('[data-y]');
+        t.oninput = () => { y.disabled = !t.value.trim(); }; api.el.querySelector('[data-n]').onclick = api.close;
+        y.onclick = () => { U.setReview(U.get(cid), key, 'flag', t.value.trim()); api.close(); decided(cid); };
+      } });
+  }
+  /* After each decision: once every item of a case is decided, that case settles itself. */
+  function decided(cid) {
+    const r = U.settle(cid), c = U.get(cid), no = c ? c.caseId : 'Case', app = c && c.type === 'application';
+    if (!r) return render();
+    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? ' approved. The changes are applied.' : ' approved and sent to the bank');
+    if (cid === id) go(msg); else { render(); SA.toast(msg); }
+  }
+  function bind(c) {
+    const q = s => document.querySelectorAll(s), one = s => document.querySelector(s);
+    q('[data-ok]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.ok, 'ok'); decided(b.dataset.case); });
+    q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
+    q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
+    q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-live]').forEach(b => b.onclick = () => { U.goLive(U.get(b.dataset.live)); render(); SA.toast('Marked live'); });
+    const s = one('#assignSel'); if (s) s.onchange = () => { U.assign(c, s.value); SA.toast('Reassigned to ' + s.value); render(); };
+    const n = one('[data-note]'); if (n) n.onclick = () => { const t = one('#noteTx').value.trim(); if (t) { U.addNote(c, t); render(); } };
+  }
+  const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
+  SA.mount({ key: 'case', render,
+    protoControls: () => `<label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
+    bindProto() { document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; } });
+})();
+</script>
+</body>
+</html>

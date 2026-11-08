@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kashier | Cases</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="sales-applications/shared/base.css">
+<link rel="stylesheet" href="sales-applications/shared/sa.css">
+<link rel="stylesheet" href="components/filter-bar.css">
+<style>
+  /* My Applications list: agent-portal shell, styleguide list page (tables.md) */
+  .wrap { max-width: 1600px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+  .ph > .ph-row { justify-content: flex-end; }
+  .wrap > [data-live="body"] { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+  /* status tabs */
+  /* Tabs (components.md §10). The baseline is a 1px background line, so the selected tab's 2px underline
+     sits on it inside the scroller instead of being clipped by a negative margin. */
+  .stabs { display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; background: linear-gradient(var(--border), var(--border)) left bottom / 100% 1px no-repeat; background-attachment: local; }
+  .stabs::-webkit-scrollbar { display: none; }
+  .stabs button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border: 0; background: none; font-weight: 600; color: var(--muted-fg); border-block-end: 2px solid transparent; white-space: nowrap; flex-shrink: 0; }
+  .stabs button:first-child { padding-inline-start: 4px; }
+  .stabs button:hover { color: var(--foreground); }
+  .stabs button[aria-selected="true"] { color: var(--primary); border-color: var(--primary); }
+  .stabs .c { font-size: 12px; font-weight: 600; min-width: 22px; padding: 0 6px; border-radius: 99px; background: var(--muted); color: var(--cadet-base); text-align: center; }
+  .stabs [aria-selected="true"] .c { background: var(--primary-10); color: var(--primary); }
+  .stabs .c.attn { background: var(--mango-10); color: var(--mango-70); }
+  .lnav { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  /* A: divider before the Live tab */
+  .stabs .tsep { flex: 0 0 1px; align-self: center; height: 20px; margin-inline: 8px; background: var(--border); }
+  /* B: In progress / Live view switch (segmented control), visually a level above the status tabs */
+  .vsw { display: inline-flex; align-self: flex-start; padding: 2px; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); }
+  .vsw button { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border: 0; border-radius: calc(var(--radius) - 2px); background: none; font-weight: 600; color: var(--muted-fg); white-space: nowrap; }
+  .vsw button:hover { color: var(--foreground); }
+  .vsw button[aria-selected="true"] { background: var(--white); color: var(--foreground); }
+  .vsw .c { font-size: 12px; font-weight: 600; min-width: 22px; padding: 0 6px; border-radius: 99px; background: var(--white); color: var(--cadet-base); text-align: center; }
+  .vsw [aria-selected="true"] .c { background: var(--primary-10); color: var(--primary); }
+  @media (pointer: coarse) { .vsw button { height: 44px; } }
+  .lnote { margin: 0; color: var(--muted-fg); font-size: 14px; padding-block-end: 12px; border-block-end: 1px solid var(--border); }
+
+  /* card header: title + search (as staging), then the filter bar */
+  .lcard { background: var(--white); border: 1px solid var(--border-subtle); border-radius: var(--radius); min-width: 0; }
+  /* Topbar search (layout.md §6b): 370px from 1440, 280px at 1280; below that it is a full-width row under the title */
+  .hdr { flex-wrap: wrap; }
+  .hdr .tsearch { align-self: center; display: flex; }
+  .hdr .tsearch .kf-search { width: 280px; max-width: none; flex: 0 0 auto; }
+  @media (min-width: 1440px) { .hdr .tsearch .kf-search { width: 370px; } }
+  @media (max-width: 1279px) { .hdr .tsearch { order: 3; flex-basis: 100%; } .hdr .tsearch .kf-search { width: 100%; } }
+  .lcard { overflow: hidden; }
+
+  /* table */
+  table.dt { min-width: 860px; }
+  .dt td { cursor: pointer; }
+  .dt .mer { display: flex; align-items: center; gap: 12px; }
+  .mav { width: 36px; height: 36px; border-radius: 4px; background: var(--primary); color: var(--white); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .dt .two .p { font-weight: 600; }
+  .dt td.num { white-space: nowrap; }
+  .sub2 { display: block; margin-block-start: 4px; font-size: 12px; color: var(--muted-fg); max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-block-end: 6px; }
+  .cs .csv { font-size: 12px; color: var(--cadet-base); }
+  .cs .sub2 { flex-basis: 100%; margin-block-start: 0; }
+  .sub2.h { color: var(--destructive); }
+  .thsort { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; }
+  .thsort .sa { display: inline-grid; opacity: .4; } .thsort .sa.on { opacity: 1; color: var(--primary); } .thsort .sa.up svg { transform: rotate(180deg); }
+  .wt { font-weight: 600; } .wt.late { color: var(--destructive); }
+  .sub2.m { color: var(--mango-70); font-weight: 600; }
+  .dt td:first-child { min-width: 240px; }
+  .dt .mer .two { min-width: 0; }
+  .dt .mer .two .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 210px; }
+  .dt th, .dt td { padding-inline: 12px; }
+  .dt th:first-child, .dt td:first-child { padding-inline-start: 16px; }
+  .dt td.go { width: 40px; padding-inline: 4px 12px; }
+  .dt .two .p { white-space: nowrap; }
+  .rc { color: var(--foreground); }
+  .dt .go { width: 32px; color: var(--cadet-base); }
+  .dt tr:focus-visible td { background: var(--primary-10); outline: none; }
+  .sc.ok2 { background: var(--lemon-10); color: var(--lemon-80); border: 1px solid var(--lemon-20); }
+  .pager select { border: 1px solid var(--border); border-radius: 4px; height: 28px; padding: 0 6px; background: var(--white); }
+  @media (pointer: coarse) { .pager select { height: 44px; } }
+
+  /* phone: record cards (lists.md §1) */
+  .rcards-l { display: none; }
+  /* Below 1280 the table doesn't fit beside the 293px sidebar: record cards instead (lists.md §1), 2-up on tablets */
+  @media (max-width: 1279px) {
+    .tscroll { display: none; }
+    .rcards-l { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 0 12px 12px; }
+    .rc { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); text-align: start; width: 100%; }
+    .rc .top { display: flex; align-items: center; gap: 12px; }
+    .rc .top .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .rc .top .t b { font-weight: 600; }
+    .rc .top .t span, .rc .meta { font-size: 12px; color: var(--muted-fg); }
+    .rc .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  }
+  @media (min-width: 768px) and (max-width: 1279px) { .rcards-l { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 767px) { .pager .rpp { display: none; } }
+  .skel-row td span { display: block; height: 12px; border-radius: 2px; background: linear-gradient(90deg, var(--muted) 0%, #ECEEEE 50%, var(--muted) 100%); background-size: 200% 100%; animation: sk 1s linear infinite; }
+</style>
+</head>
+<body>
+<script src="components/filter-bar.js"></script>
+<script src="sales-applications/shared/agent-icons.js"></script>
+<script src="sales-applications/shared/sa-core.js"></script>
+<script src="rate-decisions.js"></script>
+<script src="cases-core.js"></script>
+<script src="uw-core.js"></script>
+<script>
+/* Cases: the Underwriting team's list, in the same agent-portal shell, filter bar and table as My Applications.
+   Statuses are the sales application's own case statuses, so a case reads the same on both sides. */
+(function () {
+  const { icon, esc } = SA, C = Cases, U = UW;
+  const TODAY = '2026-10-21';
+  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
+  const NAME = { submitted: 'Underwriting Review', 'pending-configurations': 'Bank Submission', rejected: 'Rejected', live: 'Live', approved: 'Approved' };
+  const STATUSES = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live', 'Approved'];
+  const TYPES = ['Service case', 'Application case'];
+  const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
+  const me = C.user();
+  const banksOf = c => [...new Set([].concat.apply([], (c.app.summary.serviceConfigs || []).map(sc => (sc.configs || []).map(x => x.bank))).filter(Boolean))];
+
+  /* One row per case: a sales service case, a sales application case (business details / payout methods), or an application case from the Merchant module. */
+  const ROWS = U.asCases().map(c => ({
+    id: c.no, href: c.href || 'case-details.html?app=' + encodeURIComponent(c.app.id), biz: c.app.biz, sub: c.service || c.mid || 'MID pending',
+    status: NAME[c.status], type: c.kind === 'service' ? TYPES[0] : TYPES[1], banks: banksOf(c), actor: c.app.actor, assignee: c.assignee || '',
+    since: c.since, day: String(c.since).slice(0, 10), open: c.status === 'submitted' || c.status === 'pending-configurations', raw: c }))
+    // What needs a decision first (oldest waiting on top), then the rest, newest first.
+    .sort((a, b) => (STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status)) || (a.open ? 1 : -1) * (new Date(a.since) - new Date(b.since)));
+
+  const st = { q: '', page: 1, size: 10, data: 'loaded', filters: {} };
+  const FIELDS = () => [
+    { key: 'status', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the case.', options: STATUSES },
+    { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'A service case reviews one service; an application case reviews business details and payout methods.', options: TYPES },
+    { key: 'bank', type: 'multi', icon: 'store', label: 'Financial institution', hint: 'The banks and vendors the case goes to.', options: [...new Set([].concat.apply([], ROWS.map(r => r.banks)))].sort() },
+    { key: 'actor', type: 'multi', icon: 'user', label: 'Submitted by', hint: 'The salesperson who submitted it.', options: [...new Set(ROWS.map(r => r.actor))].sort() },
+    ...(me.canReassign ? [{ key: 'assignee', type: 'multi', icon: 'user', label: 'Assignee', hint: 'The underwriting agent the case is assigned to.', options: [...new Set(ROWS.map(r => r.assignee).filter(Boolean))].sort() }] : []),
+    { key: 'day', type: 'date', icon: 'calendar', label: 'Last activity', hint: 'When the case last changed stage.' }
+  ];
+  const getv = (r, k) => k === 'bank' ? r.banks : r[k];
+  const searchHit = r => !st.q || [r.id, r.biz, r.sub, r.actor].join(' ').toLowerCase().includes(st.q.toLowerCase());
+  const base = vals => ROWS.filter(r => searchHit(r) && KFilter.matches(vals || st.filters, r, FIELDS(), getv));
+  const init = n => n.replace(/^Dr\.\s*/, '').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const when = r => r.open ? esc(C.ageOf(r.since)) : '<span class="muted">None</span>';
+
+  function header() {
+    return `<header class="hdr"><div class="hdr-l"><nav class="crumb" aria-label="Breadcrumb"><a href="#">Home</a><svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${AGENT_ICONS['chevron-right']}</svg><span aria-current="page">Cases</span></nav>
+      <h1>Cases</h1><p class="desc">${me.canReassign ? 'Every case sent to Underwriting. Reassign cases between agents from the case.' : 'The cases assigned to you. Open one to review it, then approve it or reject it back to Sales.'}</p></div>
+      <div class="tsearch" id="topSearch"></div>
+      <button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
+  }
+  function table(list) {
+    const head = '<th>Case</th><th>Merchant</th><th>Status</th><th>Assignee</th><th>Waiting</th><th>Last activity</th>';
+    if (!list.length) {
+      const filtered = st.q || Object.keys(st.filters || {}).length;
+      return `<div class="empty"><span class="ei">${icon('search', 'ic-24')}</span><h3>${filtered ? 'No cases match' : 'No cases yet'}</h3><p>${filtered ? 'Try different filters or another search.' : 'A case opens here once a salesperson submits a service and every rate is approved.'}</p>${!filtered && !U.state() ? `<a class="btn btn-primary" href="${U.DEMO_URL}">Load demo application</a>` : ''}</div>`;
+    }
+    const page = list.slice((st.page - 1) * st.size, st.page * st.size);
+    return `<div class="tscroll"><table class="dt"><thead><tr>${head}<th><span class="sr-only">Open</span></th></tr></thead><tbody>
+      ${page.map(r => `<tr tabindex="0" data-href="${esc(r.href)}" aria-label="Open ${esc(r.id)}"><td class="two"><span class="p">${esc(r.id)}</span><span class="s">${esc(r.type)}</span></td>
+        <td><div class="mer"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="two"><span class="p">${esc(r.biz)}</span><span class="s">${esc(r.sub)}</span></span></div></td>
+        <td><span class="sc ${CHIP[r.status]}">${esc(r.status)}</span></td>
+        <td>${r.assignee ? esc(r.assignee) : '<span class="muted">Unassigned</span>'}</td><td class="num">${when(r)}</td>
+        <td class="two num"><span class="p" style="font-weight:400">${esc(C.fmtDate(r.since))}</span><span class="s">Submitted by ${esc(r.actor)}</span></td><td class="go">${icon('right', 'ic mirror')}</td></tr>`).join('')}</tbody></table></div>
+      <div class="rcards-l">${page.map(r => `<a class="rc" href="${esc(r.href)}"><span class="top"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="t"><b>${esc(r.biz)}</b><span>${esc(r.id)} · ${esc(r.sub)}</span></span><span class="sc ${CHIP[r.status]}">${esc(r.status)}</span></span></a>`).join('')}</div>`;
+  }
+  function pager(list) {
+    if (!list.length) return '';
+    const pages = Math.max(1, Math.ceil(list.length / st.size)); st.page = Math.min(st.page, pages);
+    const a = (st.page - 1) * st.size + 1, b = Math.min(st.page * st.size, list.length);
+    return `<div class="pager"><span>${a} – ${b} of ${list.length}</span><span class="r"><span class="rpp"><label for="rpp">Rows per page</label> <select id="rpp" data-act-change="size">${[10, 20, 50].map(n => `<option ${n === st.size ? 'selected' : ''}>${n}</option>`).join('')}</select></span><button type="button" data-act="prev" aria-label="Previous page" ${st.page === 1 ? 'disabled' : ''}>${icon('left', 'ic-16 mirror')}</button><span>${st.page} / ${pages}</span><button type="button" data-act="next" aria-label="Next page" ${st.page === pages ? 'disabled' : ''}>${icon('right', 'ic-16 mirror')}</button></span></div>`;
+  }
+  function refresh() {
+    const tbl = document.querySelector('[data-live="tbl"]'); if (!tbl) return;
+    const list = base(); tbl.innerHTML = table(list) + pager(list);
+  }
+  const V = {
+    key: 'cases',
+    protoControls: () => `<label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
+    bindProto() { document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; },
+    render() {
+      const list = base();
+      document.getElementById('page').innerHTML = `<div class="wrap"><div class="ph">${header()}</div><div data-live="body"><div class="owned"><div id="fbHost"></div><div class="lcard" data-live="tbl">${table(list)}${pager(list)}</div></div></div></div>`;
+      // Bank Misr takes its cases as one batch a day; the link shows only where the bank's sheets are available.
+      const showBm = () => { if (!window.BMExport || !BMExport.available() || document.getElementById('bmLink')) return; document.getElementById('fbHost').insertAdjacentHTML('beforebegin', '<a class="btn btn-outline" id="bmLink" href="bm-batch.html" style="align-self:flex-start;margin-block-end:12px">Bank Misr batch</a>'); };
+      showBm(); window.addEventListener('bm-ready', showBm);
+      KFilter.search(document.getElementById('topSearch'), { placeholder: 'Find a case...', value: st.q, onSearch: q => { st.q = q; st.page = 1; refresh(); } });
+      KFilter.mount(document.getElementById('fbHost'), {
+        fields: FIELDS(), noun: ['case', 'cases'], today: TODAY, initial: st.filters,
+        onExport: () => {
+          const rows = base(), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+          const csv = [['Case ID', 'Type', 'Merchant', 'Service', 'Status', 'Submitted by', 'Assignee', 'Last activity']].concat(rows.map(r => [r.id, r.type, r.biz, r.sub, r.status, r.actor, r.assignee, r.day])).map(l => l.map(q).join(',')).join('\n');
+          const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'cases.csv'; a.click();
+          SA.toast(rows.length + ' cases exported as CSV');
+        },
+        count: vals => base(vals).length,
+        onChange: v => { st.filters = v; st.page = 1; refresh(); }
+      });
+    },
+    chg: { size: el => { st.size = +el.value; st.page = 1; } },
+    act: { prev: () => { st.page--; refresh(); return false; }, next: () => { st.page++; refresh(); return false; } }
+  };
+  document.addEventListener('click', e => { const tr = e.target.closest('tr[data-href]'); if (tr) location.href = tr.dataset.href; });
+  document.addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[data-href]'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); location.href = tr.dataset.href; } });
+  SA.mount(V);
+  try { const m = sessionStorage.getItem('cases-toast'); if (m) { sessionStorage.removeItem('cases-toast'); SA.toast(m); } } catch (e) { /* storage unavailable */ }
+})();
+</script>
+</body>
+</html>
