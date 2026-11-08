@@ -28,6 +28,9 @@
   .info.bad { background: var(--error-10); border-color: #FFD0D6; } .info.ok { background: var(--lemon-10); border-color: var(--lemon-20); }
   .empty { text-align: center; padding: 48px 16px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
   .sub { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 16px; margin-block-start: 8px; } .sub h3 { font-size: 16px; }
+  /* compact pop-ups */
+  .modal { max-width: 420px; } .modal .mh { padding: 16px 20px 4px; } .modal h2 { font-size: 18px; } .modal .mb { padding: 4px 20px 8px; gap: 8px; } .modal .mf { padding: 8px 20px 16px; } .modal textarea.inp { min-height: 64px; } .modal .hint { font-size: 12px; }
+  .files { display: flex; flex-direction: column; gap: 8px; margin-block-start: 6px; } .file { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; } .file .nm { font-size: 13px; color: var(--cadet-base); overflow-wrap: anywhere; flex: 1; min-width: 140px; }
   .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
 </style>
 </head>
@@ -68,8 +71,10 @@
   }
   function row(x, c) {
     const detail = x.from != null ? `${esc(x.from)} &rarr; <b>${esc(x.to)}</b>` : x.key === 'pricing' ? rates(c) : x.files && x.files.length ? esc(x.files.join(' · ')) : '';
-    return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
+    const fl = (x.list || []).map(f => `<div class="file"><span class="nm">${esc(f)}</span><button class="btn btn-outline btn-sm" type="button" data-view="${esc(f)}" data-l="${esc(x.label)}">${icon('eye', 'ic')}View</button><button class="btn btn-outline btn-sm" type="button" data-dl="${esc(f)}">${icon('download', 'ic')}Download</button></div>`).join('');
+    return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${fl ? `<div class="files">${fl}</div>` : detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
   }
+  const nFiles = p => p.list.reduce((n, x) => n + (x.list ? x.list.length : 0), 0);
   /* One block per case: the title, its status, and the items to decide. */
   function part(c, nested) {
     const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type === 'application';
@@ -81,7 +86,7 @@
       return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
-      ${c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div>
+      <div style="display:flex;gap:8px;align-items:center">${nFiles(p) ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}">${icon('download', 'ic')}Download all (${nFiles(p)})</button>` : ''}${c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
       ${app ? '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>' : ''}
       ${note}<div>${p.list.map(x => row(x, c)).join('')}</div></section>`;
   }
@@ -127,8 +132,11 @@
     bind(c);
   }
 
+  /* The prototype keeps file names only, so a download is a small placeholder file under the real name. */
+  function saveText(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  function save(name) { saveText(name, 'Prototype placeholder for ' + name + '. The prototype does not store real files.\n'); SA.toast('Downloading ' + name); }
   function flagModal(cid, key, label) {
-    SA.modal({ title: 'Reject this item?', sub: esc(label), body: '<div class="fld"><label for="flC">Decision comment</label><textarea class="inp" id="flC" rows="3" placeholder="What does Sales need to fix?"></textarea><span class="hint">The salesperson sees this if the case comes back to them.</span></div>',
+    SA.modal({ title: 'Reject this item?', sub: esc(label), body: '<div class="fld"><label for="flC">Decision comment</label><textarea class="inp" id="flC" rows="2" placeholder="What does Sales need to fix?"></textarea></div>',
       foot: '<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-danger" data-y disabled>Reject</button>',
       bind(api) {
         const t = api.el.querySelector('#flC'), y = api.el.querySelector('[data-y]');
@@ -149,6 +157,9 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-view]').forEach(b => b.onclick = () => SA.drawer({ size: 'xl', title: esc(b.dataset.l), sub: esc(b.dataset.view), render(api) { api.body.innerHTML = `<div class="fprev fprev-lg">${icon('doc', 'ic-24')}<b>${esc(b.dataset.view)}</b><span class="hint">Preview of the uploaded file. The prototype does not store real files.</span></div>`; api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-dl-d="${esc(b.dataset.view)}">${icon('download', 'ic')}Download</button>`; api.foot.querySelector('[data-dl-d]').onclick = () => save(b.dataset.view); } }));
+    q('[data-dl]').forEach(b => b.onclick = () => save(b.dataset.dl));
+    q('[data-dlall]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.dlall), names = [].concat.apply([], U.progress(cc).list.map(x => x.list || [])); saveText((cc.caseId + '-files.txt'), 'Files uploaded for ' + cc.caseId + ' (' + cc.merchant.name + ')\n\n' + names.join('\n') + '\n'); SA.toast('Downloading ' + names.length + ' file' + (names.length === 1 ? '' : 's')); });
     q('[data-live]').forEach(b => b.onclick = () => { U.goLive(U.get(b.dataset.live)); render(); SA.toast('Marked live'); });
     const s = one('#assignSel'); if (s) s.onchange = () => { U.assign(c, s.value); SA.toast('Reassigned to ' + s.value); render(); };
     const n = one('[data-note]'); if (n) n.onclick = () => { const t = one('#noteTx').value.trim(); if (t) { U.addNote(c, t); render(); } };

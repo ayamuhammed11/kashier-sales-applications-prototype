@@ -183,12 +183,12 @@ window.UW = (function () {
       c.changes.forEach((x, i) => add('chg:' + i, x.label, 'changes', { from: x.from, to: x.to }));
       return out;
     }
-    const files = d => Object.keys(s.docs[d] || {}).map(f => s.docs[d][f]).filter(Boolean).join(', ');
+    const names = d => Object.keys(s.docs[d] || {}).map(f => s.docs[d][f]).filter(Boolean), files = d => names(d).join(', ');
     add('pricing', 'Services & pricing', 'pricing');
-    if (c.channel === 'Online') { add('doc:Brand Authorization Letter', 'Brand Authorization Letter', 'documents', { files: [files('Brand Authorization Letter')] }); add('web', 'Website or social media link', 'documents', { files: [(s.websites || []).filter(Boolean).join(', ')] }); }
-    if (c.channel === 'POS') { add('doc:Store Lease / Location Proof', 'Store Lease / Location Proof', 'documents', { files: [files('Store Lease / Location Proof')] }); add('store', 'Store image', 'documents', { files: [s.storeImage] }); }
-    if (c.svc.model === 'PSP' && (c.svc.lines || []).some(l => l.bank === 'Bank Misr')) add('doc:BM PSP Agreement Annex', 'BM PSP Agreement Annex', 'documents', { files: [files('BM PSP Agreement Annex')] });
-    if (c.svc.model === 'PF') { const n = nmOf(c.sid) + ' - PF Contract'; add('con:' + n, n, 'contracts', { files: [(s.reqContracts || {})[n]] }); }
+    if (c.channel === 'Online') { add('doc:Brand Authorization Letter', 'Brand Authorization Letter', 'documents', { files: [files('Brand Authorization Letter')], list: names('Brand Authorization Letter') }); add('web', 'Website or social media link', 'documents', { files: [(s.websites || []).filter(Boolean).join(', ')] }); }
+    if (c.channel === 'POS') { add('doc:Store Lease / Location Proof', 'Store Lease / Location Proof', 'documents', { files: [files('Store Lease / Location Proof')], list: names('Store Lease / Location Proof') }); add('store', 'Store image', 'documents', { files: [s.storeImage], list: [s.storeImage].filter(Boolean) }); }
+    if (c.svc.model === 'PSP' && (c.svc.lines || []).some(l => l.bank === 'Bank Misr')) add('doc:BM PSP Agreement Annex', 'BM PSP Agreement Annex', 'documents', { files: [files('BM PSP Agreement Annex')], list: names('BM PSP Agreement Annex') });
+    if (c.svc.model === 'PF') { const n = nmOf(c.sid) + ' - PF Contract'; add('con:' + n, n, 'contracts', { files: [(s.reqContracts || {})[n]], list: [(s.reqContracts || {})[n]].filter(Boolean) }); }
     // A required document or contract that was never uploaded blocks approval: the case has to go back to Sales.
     out.forEach(x => { if (x.files) { x.files = x.files.filter(Boolean); if (!x.files.length) { x.state = 'flag'; x.missing = true; x.reason = 'Required item was not uploaded'; } } });
     return out;
