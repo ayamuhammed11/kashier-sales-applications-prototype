@@ -176,8 +176,8 @@
   }
   const V = {
     key: 'cases',
-    protoControls: () => `<a class="lbl" style="color:inherit;text-decoration:underline" href="${U.DEMO_URL}">Load demo cases</a><label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
-    bindProto() { document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; },
+    protoControls: () => `<button type="button" id="resetDemo" style="background:none;border:0;color:inherit;text-decoration:underline;cursor:pointer;font:inherit">Reset demo cases</button><label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
+    bindProto() { document.getElementById('resetDemo').onclick = () => { U.resetDemo(); location.reload(); }; document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; },
     render() {
       const list = base();
       document.getElementById('page').innerHTML = `<div class="wrap"><div class="ph">${header()}</div><div data-live="body"><div class="owned"><div id="fbHost"></div><div class="lcard" data-live="tbl">${table(list)}${pager(list)}</div></div></div></div>`;
