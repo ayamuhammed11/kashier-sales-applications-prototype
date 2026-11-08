@@ -27,6 +27,7 @@
   .info { padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--border); font-size: 14px; }
   .info.bad { background: var(--error-10); border-color: #FFD0D6; } .info.ok { background: var(--lemon-10); border-color: var(--lemon-20); }
   .empty { text-align: center; padding: 48px 16px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .sub { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 16px; margin-block-start: 8px; } .sub h3 { font-size: 16px; }
   .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
 </style>
 </head>
@@ -70,15 +71,25 @@
     return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
   }
   /* One block per case: the title, its status, and the items to decide. */
-  function part(c) {
+  function part(c, nested) {
     const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type === 'application';
     const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
       : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the application.</div>`
       : c.status === 'Live' ? `<div class="info ok"><b>Live${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> This service is now worked from the Merchant module.</div>` : '';
+    if (nested) {
+      const what = c.changes.map(x => x.label).join(', ');
+      return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
+    }
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
       ${c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div>
       ${app ? '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>' : ''}
       ${note}<div>${p.list.map(x => row(x, c)).join('')}</div></section>`;
+  }
+  /* Every change to the merchant's business details or payout methods on this application, in one card, one block per request. */
+  function group(list) {
+    if (!list.length) return '';
+    const openN = list.filter(x => x.status === 'Underwriting Review').length;
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Application details</h2><p>${list.length} change request${list.length === 1 ? '' : 's'} to the business details or payout methods${openN ? ' · ' + openN + ' in review' : ''}. Nothing is applied until every item of a request is approved.</p></div></div>${list.map(x => part(x, true)).join('')}</section>`;
   }
   function relatedCard(list) {
     if (!list.length) return '';
@@ -97,8 +108,8 @@
     document.title = 'Kashier | ' + c.caseId;
     const rel = U.related(c), mgr = me.canReassign, app = c.type === 'application';
     // A service case also carries the application's open changes to business details and payout methods, so one visit settles both.
-    const parts = [c].concat(app ? [] : rel), links = app ? rel : [];
-    const both = parts.some(x => x.type === 'service') && parts.some(x => x.type === 'application');
+    const parts = [c], grp = app ? [] : rel, links = app ? rel : [];
+    const both = !app && grp.length > 0;
     const notes = c.local.notes;
     const info = [['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity], ['Submitted', c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
       .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
@@ -107,7 +118,8 @@
         <div class="meta">${both ? '<span class="tag">Service case</span><span class="tag">Application details</span>' : `<span class="tag">${app ? 'Application details' : 'Service case'}</span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Overview</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
-      ${parts.map(part).join('')}
+      ${parts.map(x => part(x)).join('')}
+      ${group(grp)}
       ${relatedCard(links)}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>

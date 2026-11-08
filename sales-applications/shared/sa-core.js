@@ -1373,6 +1373,20 @@
         }
       });
     }
+    /* ?kyc=1 : sample application-details cases (changes to business details and payout methods), in different states. */
+    if (qs.get('kyc')) {
+      const mk = (status, mut, extra, hoursAgo) => {
+        const P = { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.filter(Boolean), storeImage: S.storeImage, payouts: S.payouts.map(p => Object.assign({}, p)), primary: S.primary, nextPayout: S.nextPayout };
+        mut(P);
+        const n = S.kyc.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+        S.kyc.push(Object.assign({ n, key: 'kyc:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status, changes: kycChanges(P), proposed: P, by: 'Aya Muhammed', role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: new Date(CLOCK - hoursAgo * 36e5).toISOString() }, extra || {}));
+      };
+      mk('Underwriting Review', P => { P.email = 'finance@deltapharma.eg'; P.phone = '+20 100 555 0199'; }, null, 30);
+      mk('Underwriting Review', P => { const p = P.payouts[0]; p.bank = 'CIB'; p.branch = 'Smart Village'; p.acct = '1003998877665'; }, null, 90);
+      mk('Underwriting Review', P => { P.name = 'Delta Pharma Group LLC'; P.industry = 'Retail & E-commerce'; P.websites = ['www.deltapharma.eg', 'www.deltapharma.shop']; }, null, 8);
+      mk('Rejected', P => { P.owner = 'Foreign Owner'; }, { reject: { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: 'Owner nationality does not match the National ID on file.', at: '10/18/2026, 11:30:00 AM' } }, 60);
+      mk('Approved', P => { P.websites = ['www.deltapharma.eg', 'www.deltapharma.com']; }, { decision: { by: 'Rana Adel', at: '10/17/2026, 09:10:00 AM' } }, 100);
+    }
     if (qs.get('as') && ROLES[qs.get('as')]) { S.viewAs = qs.get('as'); ME = ROLES[S.viewAs]; const v = document.getElementById('viewAs'); if (v) v.value = S.viewAs; }
   }
   function mount(variant, variants) {

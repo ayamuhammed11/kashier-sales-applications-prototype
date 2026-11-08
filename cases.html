@@ -115,7 +115,7 @@
   const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
   const NAME = { submitted: 'Underwriting Review', 'pending-configurations': 'Bank Submission', rejected: 'Rejected', live: 'Live', approved: 'Approved' };
   const STATUSES = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live', 'Approved'];
-  const TYPES = ['Service case', 'Application case'];
+  const TYPES = ['Service case', 'Application details', 'Merchant application'];
   const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
   const me = C.user();
   const banksOf = c => [...new Set([].concat.apply([], (c.app.summary.serviceConfigs || []).map(sc => (sc.configs || []).map(x => x.bank))).filter(Boolean))];
@@ -123,7 +123,7 @@
   /* One row per case: a sales service case, a sales application case (business details / payout methods), or an application case from the Merchant module. */
   const ROWS = U.asCases().map(c => ({
     id: c.no, href: c.href || 'case-details.html?app=' + encodeURIComponent(c.app.id), biz: c.app.biz, sub: c.service || c.mid || 'MID pending',
-    status: NAME[c.status], type: c.kind === 'service' ? TYPES[0] : TYPES[1], banks: banksOf(c), actor: c.app.actor, assignee: c.assignee || '',
+    status: NAME[c.status], type: c.kind === 'service' ? TYPES[0] : c.kind === 'application' ? TYPES[1] : TYPES[2], banks: banksOf(c), actor: c.app.actor, assignee: c.assignee || '',
     since: c.since, day: String(c.since).slice(0, 10), open: c.status === 'submitted' || c.status === 'pending-configurations', raw: c }))
     // What needs a decision first (oldest waiting on top), then the rest, newest first.
     .sort((a, b) => (STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status)) || (a.open ? 1 : -1) * (new Date(a.since) - new Date(b.since)));
@@ -131,7 +131,7 @@
   const st = { q: '', page: 1, size: 10, data: 'loaded', filters: {} };
   const FIELDS = () => [
     { key: 'status', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the case.', options: STATUSES },
-    { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'A service case reviews one service; an application case reviews business details and payout methods.', options: TYPES },
+    { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'A service case reviews one service. Application details reviews a change to business details or payout methods. A merchant application is a whole application from the Merchant module.', options: TYPES },
     { key: 'bank', type: 'multi', icon: 'store', label: 'Financial institution', hint: 'The banks and vendors the case goes to.', options: [...new Set([].concat.apply([], ROWS.map(r => r.banks)))].sort() },
     { key: 'actor', type: 'multi', icon: 'user', label: 'Submitted by', hint: 'The salesperson who submitted it.', options: [...new Set(ROWS.map(r => r.actor))].sort() },
     ...(me.canReassign ? [{ key: 'assignee', type: 'multi', icon: 'user', label: 'Assignee', hint: 'The underwriting agent the case is assigned to.', options: [...new Set(ROWS.map(r => r.assignee).filter(Boolean))].sort() }] : []),
@@ -176,7 +176,7 @@
   }
   const V = {
     key: 'cases',
-    protoControls: () => `<label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
+    protoControls: () => `<a class="lbl" style="color:inherit;text-decoration:underline" href="${U.DEMO_URL}">Load demo cases</a><label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
     bindProto() { document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; },
     render() {
       const list = base();

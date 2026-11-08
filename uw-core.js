@@ -28,7 +28,7 @@ window.UW = (function () {
   function sa() { try { const s = JSON.parse(localStorage.getItem(SA_KEY) || 'null'); return s && s.appId && s.cases ? s : null; } catch (e) { return null; } }
   function saSave(s) { try { localStorage.setItem(SA_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
   /* A ready-made submitted application, for a first visit: opens the sales prototype with two cases in Underwriting Review. */
-  const DEMO_URL = 'sales-applications/application.html?state=ready&cases=' + encodeURIComponent('Online Card~Underwriting Review') + '|' + encodeURIComponent('Online Wallet~Underwriting Review') + '|' + encodeURIComponent('POS Card~Bank Submission') + '&as=uw';
+  const DEMO_URL = 'sales-applications/application.html?state=ready&kyc=1&as=uw&cases=' + ['Online Card~Underwriting Review@30', 'Online Wallet~Underwriting Review@100', 'POS Card~Underwriting Review@5', 'Online Bank Installments~Rejected:uw'].map(encodeURIComponent).join('|');
 
   /* ── This module's own store ── */
   function readLocal() { try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { return {}; } }
@@ -164,9 +164,10 @@ window.UW = (function () {
      business details / payout methods, and an application case with the application's services still in review. */
   function related(c) {
     const s = sa(); if (!s) return [];
-    const ids = c.type === 'service' ? (s.kyc || []).filter(k => k.status === 'Underwriting Review').map(k => k.key)
+    const rank = x => x.status === 'Underwriting Review' ? 0 : 1;
+    const ids = c.type === 'service' ? (s.kyc || []).filter(k => KYC_SHOWN.indexOf(k.status) > -1).map(k => k.key)
       : s.order.filter(id => s.cases[id] && s.cases[id].status === 'Underwriting Review');
-    return ids.map(get).filter(Boolean);
+    return ids.map(get).filter(Boolean).sort((a, b) => rank(a) - rank(b));
   }
 
   /* Activity on one case: the sales application's log, filtered to it. */
