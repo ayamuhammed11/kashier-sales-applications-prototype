@@ -31,6 +31,9 @@
   /* compact pop-ups */
   .modal { max-width: 420px; } .modal .mh { padding: 16px 20px 4px; } .modal h2 { font-size: 18px; } .modal .mb { padding: 4px 20px 8px; gap: 8px; } .modal .mf { padding: 8px 20px 16px; } .modal textarea.inp { min-height: 64px; } .modal .hint { font-size: 12px; }
   .files { display: flex; flex-direction: column; gap: 8px; margin-block-start: 6px; } .file { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; } .file .nm { font-size: 13px; color: var(--cadet-base); overflow-wrap: anywhere; flex: 1; min-width: 140px; }
+  .rg { border-top: 1px solid var(--border-subtle); padding-top: 16px; display: flex; flex-direction: column; gap: 8px; } .rg h3 { font-size: 16px; } .rg p { margin: 0; font-size: 13px; color: var(--cadet-base); }
+  .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; } .fgrid .wide { grid-column: 1 / -1; } @media (max-width: 640px) { .fgrid { grid-template-columns: 1fr; } }
+  .bv { min-height: 40px; display: flex; align-items: center; padding: 0 12px; background: var(--muted); border-radius: var(--radius); overflow-wrap: anywhere; } .inp.bad { border-color: var(--destructive); }
   .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
 </style>
 </head>
@@ -85,16 +88,32 @@
       const what = c.changes.map(x => x.label).join(', ');
       return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
+    const rd = U.readiness(c), block = open && !app && p.list.every(x => x.state === 'ok') && rd && !rd.complete ? `<div class="info bad"><b>Every item is approved.</b> Complete the required fields in Bank readiness below to send this case to the bank.</div>` : '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
       <div style="display:flex;gap:8px;align-items:center">${nFiles(p) ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}">${icon('download', 'ic')}Download all (${nFiles(p)})</button>` : ''}${c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
       ${app ? '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>' : ''}
-      ${note}<div>${p.list.map(x => row(x, c)).join('')}</div></section>`;
+      ${note}${block}<div>${p.list.map(x => row(x, c)).join('')}</div></section>`;
   }
   /* Every change to the merchant's business details or payout methods on this application, in one card, one block per request. */
   function group(list) {
     if (!list.length) return '';
     const openN = list.filter(x => x.status === 'Underwriting Review').length;
     return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Application details</h2><p>${list.length} change request${list.length === 1 ? '' : 's'} to the business details or payout methods${openN ? ' · ' + openN + ' in review' : ''}. Nothing is applied until every item of a request is approved.</p></div></div>${list.map(x => part(x, true)).join('')}</section>`;
+  }
+  /* The data the banks need, by who supplies it. A case cannot go to the bank until every required field is complete. */
+  function readinessCard(c) {
+    const r = U.readiness(c); if (!r) return '';
+    const input = f => {
+      const id = 'bf-' + f.k, cls = 'inp' + (f.required && !f.done ? ' bad' : '');
+      const ctl = !f.editable ? `<div class="bv">${f.value ? esc(f.value) : '<span style="color:var(--cadet-base)">' + (f.auto ? 'Not available' : 'Not set') + '</span>'}</div>`
+        : f.type === 'select' ? `<select class="sel" id="${id}" data-bf="${f.k}"><option value="">Select</option>${f.options.map(o => `<option ${o === f.value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+        : `<input class="${cls}" id="${id}" data-bf="${f.k}" value="${esc(f.value)}">`;
+      return `<div class="fld${f.wide ? ' wide' : ''}"><label for="${id}">${esc(f.label)}${f.required ? '' : ' <span class="opt">(optional)</span>'}${f.auto ? ' <span class="tag">Auto</span>' : ''}</label>${ctl}</div>`;
+    };
+    const block = g => g.fields.length ? `<div class="rg"><h3>${esc(g.title)}</h3><p>${esc(g.note)}</p><div class="fgrid">${g.fields.map(input).join('')}</div></div>` : '';
+    return `<section class="card sec"><div class="sec-h"><div class="ptitle"><h2>Bank readiness</h2><span class="sc ${r.complete ? 'ok' : 'warn'}">${r.complete ? 'Complete' : r.done + ' of ' + r.total + ' required'}</span></div></div>
+      <p style="margin:0;color:var(--cadet-base)">${r.complete ? 'Everything the banks need for this service is in place.' : 'The case cannot be sent to the bank until every required field is complete. Missing: ' + esc(r.missing.join(', ')) + '.'}</p>
+      ${r.groups.filter(g => g.key !== 'bank' || r.sent).map(block).join('')}</section>`;
   }
   function relatedCard(list) {
     if (!list.length) return '';
@@ -125,6 +144,7 @@
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
       ${group(grp)}
+      ${app ? '' : readinessCard(c)}
       ${relatedCard(links)}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
@@ -148,6 +168,7 @@
   function decided(cid) {
     const r = U.settle(cid), c = U.get(cid), no = c ? c.caseId : 'Case', app = c && c.type === 'application';
     if (!r) return render();
+    if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
     const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? ' approved. The changes are applied.' : ' approved and sent to the bank');
     if (cid === id) go(msg); else { render(); SA.toast(msg); }
   }
@@ -157,6 +178,7 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-bf]').forEach(e => e.onchange = () => { U.setField(c, e.dataset.bf, e.value); const r = U.settle(c.id); if (r === 'approved' || r === 'rejected') go(c.caseId + (r === 'approved' ? ' approved and sent to the bank' : ' rejected and returned to Sales')); else render(); });
     q('[data-view]').forEach(b => b.onclick = () => SA.drawer({ size: 'xl', title: esc(b.dataset.l), sub: esc(b.dataset.view), render(api) { api.body.innerHTML = `<div class="fprev fprev-lg">${icon('doc', 'ic-24')}<b>${esc(b.dataset.view)}</b><span class="hint">Preview of the uploaded file. The prototype does not store real files.</span></div>`; api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-dl-d="${esc(b.dataset.view)}">${icon('download', 'ic')}Download</button>`; api.foot.querySelector('[data-dl-d]').onclick = () => save(b.dataset.view); } }));
     q('[data-dl]').forEach(b => b.onclick = () => save(b.dataset.dl));
     q('[data-dlall]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.dlall), names = [].concat.apply([], U.progress(cc).list.map(x => x.list || [])); saveText((cc.caseId + '-files.txt'), 'Files uploaded for ' + cc.caseId + ' (' + cc.merchant.name + ')\n\n' + names.join('\n') + '\n'); SA.toast('Downloading ' + names.length + ' file' + (names.length === 1 ? '' : 's')); });

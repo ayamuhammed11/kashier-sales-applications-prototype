@@ -63,7 +63,22 @@ window.UW = (function () {
       app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'sent a KYC update to Underwriting', ic: 'send', detail: changes.map(x => x.label).join(', '), id: key });
     });
     app.nextCase = c + 1;
+    fillDemo(app, m, READY[m.name]);
     return app;
+  }
+  /* Demo: 'full' applications have everything the banks need; 'partial' ones only a few merchant details, so the gate has something to block. */
+  const READY = { 'Cairo Fresh Market': 'full', 'Heliopolis Fitness Club': 'full', 'Garden City Florist': 'full', 'Dokki Dental Clinic': 'full', 'Ismailia Kids Academy': 'full', 'Luxor Heritage Tours': 'full',
+    'Giza Learning Hub': 'partial', 'Zayed Real Estate': 'partial', 'Maadi Home Decor': 'partial', 'Matrouh Beach Resort': 'partial', 'Aswan Spice Bazaar': 'partial' };
+  function fillDemo(app, m, level) {
+    if (!level) return;
+    const n = parseInt(app.appId.slice(-2), 10), pad = (x, len) => String(x).padStart(len, '0');
+    app.legal = { legalName: m.name + ' Co.', taxNo: '2' + pad(n * 7919, 8), ownerName: ['Youssef Adel', 'Omar Khalil', 'Salma Hany', 'Mona Adel', 'Laila Mansour', 'Yasmin Farouk'][n % 6] };
+    if (level === 'full') Object.assign(app.legal, { legalForm: 'LLC', crNo: '10' + pad(n * 104729, 7), ownerIdType: 'National ID', ownerIdNo: '290' + pad(n * 9973, 11), ownerNat: 'Egyptian', activity: m.industry + ' merchant, sells to retail customers', addr1: n + ' Main Street', gov: 'Cairo', city: 'Nasr City', country: 'Egypt' });
+    if (level !== 'full') return;
+    app.order.forEach(id => {
+      const cs = app.cases[id], b = cs.bank = { avgTicket: '1500', intModel: 'Merchant website', intType: '3P', signatory: app.legal.ownerName, outlet: m.name + ' main outlet', outletCity: 'Cairo', outletAddr: app.legal.addr1 + ', Cairo', delName: app.legal.ownerName, delIdNo: app.legal.ownerIdNo, delNat: 'Egyptian' };
+      if (cs.status === 'Bank Submission' || cs.status === 'Live') Object.assign(b, { docsStatus: 'Sent', batch: 'BM-2026-10-' + pad(n + 5, 2), ref: 'HPS-' + pad(n * 311, 6), decision: cs.status === 'Live' ? 'Approved' : 'Pending' });
+    });
   }
   const bank = (b, f, t) => ({ label: 'Payout method changed', from: 'Bank account · ' + b + ' · Main Branch', to: 'Bank account · ' + t, set: P => { P.payouts[0].bank = f; P.payouts[0].branch = 'Smart Village'; } });
   const DOCS_ON = ['Brand Authorization Letter'], DOCS_POS = ['Store Lease / Location Proof'], DOCS_BM = ['BM PSP Agreement Annex'];
@@ -235,12 +250,75 @@ window.UW = (function () {
   }
   const goLive = c => move(c, 'Live', { liveSince: new Date(CLOCK).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }, 'marked the ' + c.service + ' case live', 'The bank approved and the credentials arrived.');
 
+
+  /* ── Bank readiness ──
+     The data the banks' KYC forms need, grouped by who supplies it (KYC Workbook vs Sales Application, field gap analysis):
+       merchant  - facts about the merchant that Sales should collect; Underwriting can fill a gap and every change is logged
+       service   - facts about this one service (integration, outlet, delegate, signatory)
+       auto      - calculated from the application (MCC, discount code, descriptor), never typed
+       bank      - filled once the case is with the bank (batch number, reference, bank decision and comment)
+     A case cannot be sent to the bank until every required merchant, service and calculated field is complete. */
+  const GOV = ['Alexandria', 'Aswan', 'Assiut', 'Beheira', 'Beni Suef', 'Cairo', 'Dakahlia', 'Damietta', 'Fayoum', 'Gharbia', 'Giza', 'Ismailia', 'Kafr El Sheikh', 'Luxor', 'Matrouh', 'Menofia', 'Minya', 'New Valley', 'North Sinai', 'Port Said', 'Qalyubia', 'Qena', 'Red Sea', 'Sharkia', 'Sohag', 'South Sinai', 'Suez'];
+  const MCC = { 'Retail & E-commerce': '5399', Education: '8299', 'Food & Beverage': '5812', 'Healthcare / Pharmacy': '5912', 'Travel & Tourism': '4722', 'Real Estate': '6513', 'Entertainment & Media': '7999', Automotive: '5511', 'Professional Services': '8999', 'Technology / SaaS': '7372', 'Fashion & Beauty': '5651', 'Logistics & Delivery': '4215', Marketplace: '5399', 'Non-profit / NGO': '8398' };
+  const ind = c => c.entity === 'Individual Seller', reg = c => c.entity === 'Registered Business', online = c => c.channel === 'Online', pos = c => c.channel === 'POS';
+  const FIELDS = [
+    { k: 'legalName', l: 'Legal name', g: 'merchant' }, { k: 'legalForm', l: 'Legal form', g: 'merchant', t: 'select', o: ['Sole proprietorship', 'LLC', 'Joint stock company', 'Partnership', 'Other'], req: c => !ind(c) },
+    { k: 'taxNo', l: 'Tax card number', g: 'merchant', req: c => !ind(c) }, { k: 'crNo', l: 'Commercial registration number', g: 'merchant', req: reg },
+    { k: 'ownerName', l: 'Owner full name', g: 'merchant' }, { k: 'ownerIdType', l: 'Owner ID type', g: 'merchant', t: 'select', o: ['National ID', 'Passport'] },
+    { k: 'ownerIdNo', l: 'Owner ID number', g: 'merchant' }, { k: 'ownerNat', l: 'Owner nationality', g: 'merchant' },
+    { k: 'activity', l: 'Business activity description', g: 'merchant', wide: true },
+    { k: 'addr1', l: 'Business address line 1', g: 'merchant', wide: true }, { k: 'addr2', l: 'Business address line 2', g: 'merchant', opt: true, wide: true },
+    { k: 'gov', l: 'Governorate', g: 'merchant', t: 'select', o: GOV }, { k: 'city', l: 'City', g: 'merchant' }, { k: 'country', l: 'Country', g: 'merchant', def: 'Egypt' },
+    { k: 'postal', l: 'Postal code', g: 'merchant', opt: true }, { k: 'altPhone', l: 'Alternate phone', g: 'merchant', opt: true },
+    { k: 'avgTicket', l: 'Average ticket size (EGP)', g: 'service', req: online }, { k: 'intModel', l: 'Integration model', g: 'service', t: 'select', o: ['Payment link', 'Merchant website', 'Merchant app'], req: online },
+    { k: 'intType', l: 'Integration type', g: 'service', t: 'select', o: ['2P', '2.5P', '3P'], req: online },
+    { k: 'signatory', l: 'Authorized signatory name', g: 'service', req: c => c.model === 'PF' },
+    { k: 'outlet', l: 'Outlet name', g: 'service', req: pos }, { k: 'outletCity', l: 'Outlet city', g: 'service', req: pos }, { k: 'outletAddr', l: 'Outlet address', g: 'service', req: pos, wide: true },
+    { k: 'delName', l: 'Delegate full name', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delIdNo', l: 'Delegate ID number', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delNat', l: 'Delegate nationality', g: 'service', req: c => pos(c) && reg(c) },
+    { k: 'mcc', l: 'MCC', g: 'auto', calc: (c, s) => MCC[c.industry] || '' }, { k: 'discount', l: 'Bank discount code', g: 'auto', calc: (c, s) => MCC[c.industry] ? 'DC-' + MCC[c.industry] : '' },
+    { k: 'descriptor', l: 'Bank descriptor', g: 'auto', calc: (c, s) => ('KASHIER*' + c.merchant.name).toUpperCase().slice(0, 25) }, { k: 'agCode', l: 'NBE AG code', g: 'auto', calc: (c, s) => MCC[c.industry] ? 'AG-' + MCC[c.industry] : '', req: pos },
+    { k: 'docsStatus', l: 'Documents sent to the bank', g: 'bank', t: 'select', o: ['Not sent', 'Sent', 'Sent, issues found'] }, { k: 'docsNote', l: 'Document issues', g: 'bank', opt: true, wide: true },
+    { k: 'batch', l: 'Bank batch number', g: 'bank', opt: true }, { k: 'ref', l: 'Bank notes / HPS reference', g: 'bank', opt: true }, { k: 'cbe', l: 'CBE initiative', g: 'bank', opt: true }, { k: 'caseNo', l: 'Case #', g: 'bank', opt: true },
+    { k: 'decision', l: 'Bank decision', g: 'bank', t: 'select', o: ['Pending', 'Approved', 'Rejected', 'Waiting merchant reply'] }, { k: 'bankComment', l: 'Bank comment', g: 'bank', opt: true, wide: true },
+  ];
+  const GROUP = { merchant: ['Merchant details', 'Collected by Sales. Fill any gap here; every change is logged.'], service: ['This service', 'Specific to this service.'], auto: ['Calculated', 'Worked out from the application. Nothing to type.'], bank: ['After sending to the bank', 'Filled once the case is with the bank.'] };
+  function valueOf(c, f) {
+    const s = stateFor(c.appId); if (!s) return '';
+    if (f.calc) return f.calc(c, s);
+    const store = f.g === 'merchant' ? (s.legal || {}) : ((s.cases[c.sid] || {}).bank || {});
+    const v = store[f.k];
+    if (v != null && v !== '') return v;
+    if (f.k === 'bankAcct') return '';
+    return f.def || '';
+  }
+  /* The fields that apply to this case, with their values, and which required ones are still empty. */
+  function readiness(c) {
+    if (c.type !== 'service') return null;
+    const sent = c.status === 'Bank Submission' || c.status === 'Live';
+    const applies = f => f.opt || !f.req || f.req(c);     // a conditional field shows only where it applies (POS, Online, companies...)
+    const groups = ['merchant', 'service', 'auto', 'bank'].map(g => ({ key: g, title: GROUP[g][0], note: GROUP[g][1], fields: FIELDS.filter(f => f.g === g && applies(f)).map(f => {
+      const required = !f.opt && g !== 'bank', v = valueOf(c, f);
+      return { k: f.k, label: f.l, type: f.t || 'text', options: f.o || null, wide: !!f.wide, value: v, required: required, auto: !!f.calc, editable: !f.calc && (g !== 'bank' || sent), done: !required || String(v).trim() !== '' };
+    }) }));
+    const req = [].concat.apply([], groups.map(g => g.fields)).filter(f => f.required);
+    return { groups: groups, total: req.length, done: req.filter(f => f.done).length, missing: req.filter(f => !f.done).map(f => f.label), complete: req.every(f => f.done), sent: sent };
+  }
+  function setField(c, k, v) {
+    const s = stateFor(c.appId), f = FIELDS.filter(x => x.k === k)[0]; if (!s || !f || f.calc) return false;
+    const holder = f.g === 'merchant' ? (s.legal = s.legal || {}) : ((s.cases[c.sid].bank = s.cases[c.sid].bank || {}));
+    const old = holder[k] == null ? '' : String(holder[k]), nv = String(v == null ? '' : v).trim();
+    if (old === nv) return false;
+    holder[k] = nv;
+    addLog(s, c.sid, 'updated ' + f.l.charAt(0).toLowerCase() + f.l.slice(1), 'pencil', (old || 'Not set') + ' → ' + (nv || 'Not set')); save(s); return true;
+  }
+
   /* Each section carries its own decision. Once every section is decided the case settles: all approved moves it on
      (to the bank, or the changes are applied); any rejected section returns the whole case to Sales with the reasons. */
   function settle(id) {
     const c = get(id); if (!c || c.status !== 'Underwriting Review') return null;
     const p = progress(c); if (p.list.some(x => x.state === 'todo')) return null;
     if (p.flagged.length) { reject(c, p.flagged.map(f => f.label + ': ' + f.reason).join('. ')); return 'rejected'; }
+    const r = readiness(c); if (r && !r.complete) return 'blocked';   // approved, but the bank needs more data first
     approve(c); return 'approved';
   }
 
@@ -269,5 +347,5 @@ window.UW = (function () {
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
     addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
-    resetDemo: resetDemo };
+    resetDemo: resetDemo, readiness: readiness, setField: setField };
 })();
