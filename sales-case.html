@@ -230,7 +230,7 @@
     page.innerHTML = `<div class="wrap">
       <header class="hdr"><div>${crumb(c.caseId)}<h1>${app ? esc(c.merchant.name) : esc(c.service)}</h1>
         <div class="meta"><span class="tag">${app ? (c.isNew ? 'Application details \u00b7 new' : 'Application details \u00b7 change') : 'Service case'}</span><span class="tag mid" title="The merchant's MID">${esc(c.mid)}</span>${app ? '' : `<span>${esc(c.merchant.name)}</span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
-      ${app ? '' : phases(c, U.progress(c))}
+      ${app || !U.PHASE2 ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
