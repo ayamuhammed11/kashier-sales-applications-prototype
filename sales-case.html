@@ -30,7 +30,7 @@
   .sub { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 16px; margin-block-start: 8px; } .sub h3 { font-size: 16px; }
   /* compact pop-ups */
   .modal { max-width: 420px; } .modal .mh { padding: 16px 20px 4px; } .modal h2 { font-size: 18px; } .modal .mb { padding: 4px 20px 8px; gap: 8px; } .modal .mf { padding: 8px 20px 16px; } .modal textarea.inp { min-height: 64px; } .modal .hint { font-size: 12px; }
-  .files { display: flex; flex-direction: column; gap: 8px; margin-block-start: 6px; } .file { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; } .file .nm { font-size: 13px; color: var(--cadet-base); overflow-wrap: anywhere; flex: 1; min-width: 140px; }
+  .files { display: flex; flex-direction: column; gap: 8px; margin-block-start: 6px; } .fitem { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; } .fitem .fnm { font-size: 13px; color: var(--cadet-base); overflow-wrap: anywhere; flex: 1; min-width: 140px; }
   .rg { border-top: 1px solid var(--border-subtle); padding-top: 16px; display: flex; flex-direction: column; gap: 8px; } .rg h3 { font-size: 16px; } .rg p { margin: 0; font-size: 13px; color: var(--cadet-base); }
   .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; } .fgrid .wide { grid-column: 1 / -1; } @media (max-width: 640px) { .fgrid { grid-template-columns: 1fr; } }
   .bv { min-height: 40px; display: flex; align-items: center; padding: 0 12px; background: var(--muted); border-radius: var(--radius); overflow-wrap: anywhere; } .inp.bad { border-color: var(--destructive); }
@@ -42,7 +42,8 @@
   .phases .done { border-color: var(--lemon-20); } .phases .done .d { background: var(--lemon-10); color: var(--lemon-80); border-color: var(--lemon-20); } .phases .done em { color: var(--lemon-80); }
   .phases .bad { border-color: #FFD0D6; background: #fffafb; } .phases .bad .d { background: var(--error-10); color: var(--destructive); border-color: #FFD0D6; } .phases .bad em { color: var(--destructive); }
   .phases .later { background: var(--muted); border-style: dashed; } .phases .later b, .phases .later span.s, .phases .later em { color: var(--cadet-base); }
-  .grp { display: flex; flex-direction: column; } .grp + .grp { margin-block-start: 8px; } .grp h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); margin: 8px 0 0; }
+  .gh { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-block-start: 8px; } .gh h3 { margin: 0 !important; }
+  .sgrp { display: flex; flex-direction: column; } .sgrp + .sgrp { margin-block-start: 8px; } .sgrp h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); margin: 8px 0 0; }
   .chips { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; }
   .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
 </style>
@@ -87,7 +88,7 @@
   }
   function row(x, c) {
     const detail = x.from != null ? `${esc(x.from)} &rarr; <b>${esc(x.to)}</b>` : x.key === 'pricing' ? rates(c) : x.files && x.files.length ? esc(x.files.join(' · ')) : '';
-    const fl = (x.list || []).map(f => `<div class="file"><span class="nm">${esc(f)}</span><button class="btn btn-outline btn-sm" type="button" data-view="${esc(f)}" data-l="${esc(x.label)}">${icon('eye', 'ic')}View</button><button class="btn btn-outline btn-sm" type="button" data-dl="${esc(f)}">${icon('download', 'ic')}Download</button></div>`).join('');
+    const fl = (x.list || []).map(f => `<div class="fitem"><span class="fnm">${esc(f)}</span><button class="btn btn-outline btn-sm" type="button" data-view="${esc(f)}" data-l="${esc(x.label)}">${icon('eye', 'ic')}View</button><button class="btn btn-outline btn-sm" type="button" data-dl="${esc(f)}">${icon('download', 'ic')}Download</button></div>`).join('');
     return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${fl ? `<div class="files">${fl}</div>` : detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
   }
   const nFiles = p => p.list.reduce((n, x) => n + (x.list ? x.list.length : 0), 0);
@@ -104,9 +105,9 @@
     }
     const rd = U.readiness(c), block = open && !app && p.list.every(x => x.state === 'ok') && rd && !rd.complete ? `<div class="info bad"><b>Every item is approved.</b> Complete the required fields in Bank readiness below to send this case to the bank.</div>` : '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
-      <div style="display:flex;gap:8px;align-items:center">${nFiles(p) ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}">${icon('download', 'ic')}Download all (${nFiles(p)})</button>` : ''}${U.PHASE2 && c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">${U.PHASE2 && c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
       ${app ? '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>' : ''}
-      ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); return xs.length ? `<div class="grp"><h3>${h}</h3>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
+      ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
   }
   /* The data the banks need, by who supplies it. A case cannot go to the bank until every required field is complete. */
   function readinessCard(c) {
@@ -192,7 +193,7 @@
     q('[data-bf]').forEach(e => e.onchange = () => { U.setField(c, e.dataset.bf, e.value); const r = U.settle(c.id); if (r === 'approved' || r === 'rejected') go(c.caseId + (r === 'approved' ? ' approved and sent to the bank' : ' rejected and returned to Sales')); else render(); });
     q('[data-view]').forEach(b => b.onclick = () => SA.drawer({ size: 'xl', title: esc(b.dataset.l), sub: esc(b.dataset.view), render(api) { api.body.innerHTML = `<div class="fprev fprev-lg">${icon('doc', 'ic-24')}<b>${esc(b.dataset.view)}</b><span class="hint">Preview of the uploaded file. The prototype does not store real files.</span></div>`; api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-dl-d="${esc(b.dataset.view)}">${icon('download', 'ic')}Download</button>`; api.foot.querySelector('[data-dl-d]').onclick = () => save(b.dataset.view); } }));
     q('[data-dl]').forEach(b => b.onclick = () => save(b.dataset.dl));
-    q('[data-dlall]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.dlall), names = [].concat.apply([], U.progress(cc).list.map(x => x.list || [])); saveText((cc.caseId + '-files.txt'), 'Files uploaded for ' + cc.caseId + ' (' + cc.merchant.name + ')\n\n' + names.join('\n') + '\n'); SA.toast('Downloading ' + names.length + ' file' + (names.length === 1 ? '' : 's')); });
+    q('[data-dlall]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.dlall), sec = b.dataset.sec, nm = sec === 'contracts' ? 'contracts' : 'documents', names = [].concat.apply([], U.progress(cc).list.filter(x => x.tab === sec).map(x => x.list || [])); saveText(cc.caseId + '-' + nm + '.txt', 'The ' + nm + ' uploaded for ' + cc.caseId + ' (' + cc.merchant.name + ')\n\n' + names.join('\n') + '\n'); SA.toast('Downloading ' + names.length + ' ' + nm.slice(0, -1) + (names.length === 1 ? '' : 's')); });
     q('[data-live]').forEach(b => b.onclick = () => { U.goLive(U.get(b.dataset.live)); render(); SA.toast('Marked live'); });
     const s = one('#assignSel'); if (s) s.onchange = () => { U.assign(c, s.value); SA.toast('Reassigned to ' + s.value); render(); };
     const n = one('[data-note]'); if (n) n.onclick = () => { const t = one('#noteTx').value.trim(); if (t) { U.addNote(c, t); render(); } };
