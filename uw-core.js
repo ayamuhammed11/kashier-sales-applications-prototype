@@ -59,7 +59,7 @@ window.UW = (function () {
     });
     (m.kyc || []).forEach((k, i) => {
       const P = { name: m.name, email: m.email, phone: m.phone, industry: m.industry, owner: '', websites: m.web ? [m.web] : [], storeImage: m.store || '', payouts: app.payouts.map(p => Object.assign({}, p)), primary: 1, nextPayout: 2 };
-      const changes = k.changes.map(x => { if (x.set) x.set(P); return { label: x.label, from: x.from, to: x.to }; });
+      const changes = k.changes.map(x => { if (x.set) x.set(P); return { label: x.label, from: typeof x.from === 'function' ? x.from(app) : x.from, to: typeof x.to === 'function' ? x.to(app) : x.to }; });
       const key = 'kyc:' + (i + 1);
       app.kyc.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: k.st, changes: changes, proposed: P, by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(k.h || 20),
         reject: k.st === 'Rejected' ? { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: k.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: k.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
@@ -83,7 +83,9 @@ window.UW = (function () {
       if (cs.status === 'Bank Submission' || cs.status === 'Live') Object.assign(b, { docsStatus: 'Sent', batch: 'BM-2026-10-' + pad(n + 5, 2), ref: 'HPS-' + pad(n * 311, 6), decision: cs.status === 'Live' ? 'Approved' : 'Pending' });
     });
   }
-  const bank = (b, f, t) => ({ label: 'Payout method changed', from: 'Bank account · ' + b + ' · Main Branch', to: 'Bank account · ' + t, set: P => { P.payouts[0].bank = f; P.payouts[0].branch = 'Smart Village'; } });
+  const pay = p => (p.name ? p.name + ': ' : '') + 'Bank account · ' + p.bank + ' · ' + p.branch + ' · ' + p.holder + ' · ' + p.acct;
+  const bankChange = (bk, br, acct) => ({ label: 'Payout method changed', from: a => pay(a.payouts[0]), to: a => pay(Object.assign({}, a.payouts[0], { bank: bk, branch: br, acct: acct })), set: P => { P.payouts[0].bank = bk; P.payouts[0].branch = br; P.payouts[0].acct = acct; } });
+  const walletAdd = { label: 'Payout method added', from: 'None', to: a => 'E-wallet · Vodafone Cash · 01012345678 · ' + a.merchant.name, set: P => { P.payouts.push({ id: 2, type: 'wallet', name: '', provider: 'Vodafone Cash', mobile: '01012345678', wholder: P.name }); P.nextPayout = 3; } };
   const DOCS_ON = ['Brand Authorization Letter'], DOCS_POS = ['Store Lease / Location Proof'], DOCS_BM = ['BM PSP Agreement Annex'];
   const DEMO = [
     { name: 'Cairo Fresh Market', industry: 'Retail & E-commerce', email: 'youssef@cairofresh.com', phone: '+20 100 123 4567', by: 'Mostafa Khaled', at: '28 Sept 2026', web: 'www.cairofresh.com', store: 'storefront-cairo.jpg', docs: DOCS_ON.concat(DOCS_POS),
@@ -98,9 +100,10 @@ window.UW = (function () {
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Live', h: 300 }, { id: 'Online Bank Installments', model: 'PSP', bank: 'Bank Misr', st: 'Bank Submission', h: 80, rates: { selling: rate(1.4, 1.5) } }] },
     { name: 'Zayed Real Estate', industry: 'Real Estate', email: 'yasmin@zayedre.com', phone: '+20 111 909 3030', by: 'Mostafa Khaled', at: '15 Oct 2026', web: 'www.zayedre.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'CIB', st: 'Underwriting Review', h: 4 }],
-      kyc: [{ st: 'Underwriting Review', h: 15, changes: [bank('NBE', 'CIB', 'CIB · Smart Village')] }] },
+      kyc: [{ st: 'Underwriting Review', h: 15, changes: [bankChange('CIB', 'Smart Village', '1003998877665')] }] },
     { name: 'Garden City Florist', industry: 'Retail & E-commerce', email: 'heba@gcflorist.com', phone: '+20 100 612 9090', by: 'Nour Hamdy', at: '22 Sept 2026', web: 'www.gcflorist.com', docs: DOCS_ON,
-      svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }] },
+      svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }],
+      kyc: [{ st: 'Underwriting Review', h: 10, changes: [walletAdd] }] },
     { name: 'Ismailia Kids Academy', industry: 'Education', email: 'rasha@ismailiakids.edu', phone: '+20 122 777 0101', by: 'Aya Muhammed', at: '05 Oct 2026', web: 'www.ismailiakids.edu', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'QNB Alahli', st: 'Bank Submission', h: 90 }],
       kyc: [{ st: 'Approved', h: 50, changes: [{ label: 'Website / social media', from: 'www.ismailiakids.edu', to: 'www.ismailiakids.edu, www.ismailiakids.net', set: P => { P.websites = ['www.ismailiakids.edu', 'www.ismailiakids.net']; } }] }] },
@@ -343,7 +346,7 @@ window.UW = (function () {
     const s = stateFor(c.appId); if (!s) return [];
     const rank = x => x.status === 'Underwriting Review' ? 0 : 1;
     const ids = c.type === 'service' ? (s.kyc || []).filter(k => KYC_SHOWN.indexOf(k.status) > -1).map(k => k.key)
-      : s.order.filter(id => s.cases[id] && s.cases[id].status === 'Underwriting Review');
+      : s.order.filter(id => s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1);
     return ids.map(id => get(gid(s, id))).filter(Boolean).sort((a, b) => rank(a) - rank(b));
   }
 

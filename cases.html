@@ -121,7 +121,9 @@
   const banksOf = c => [...new Set([].concat.apply([], (c.app.summary.serviceConfigs || []).map(sc => (sc.configs || []).map(x => x.bank))).filter(Boolean))];
 
   /* One row per case: a sales service case, a sales application case (business details / payout methods), or an application case from the Merchant module. */
-  const ROWS = U.asCases().map(c => ({
+  const ALL = U.asCases(), CNT = {};
+  ALL.forEach(c => { (CNT[c.app.id] = CNT[c.app.id] || { service: 0, application: 0 })[c.kind]++; });
+  const ROWS = ALL.map(c => ({ other: CNT[c.app.id][c.kind === 'service' ? 'application' : 'service'],
     id: c.no, href: c.href || 'case-details.html?app=' + encodeURIComponent(c.app.id), biz: c.app.biz, sub: c.service || c.mid || 'MID pending',
     status: NAME[c.status], type: c.kind === 'service' ? TYPES[0] : TYPES[1], banks: banksOf(c), actor: c.app.actor, assignee: c.assignee || '',
     since: c.since, day: String(c.since).slice(0, 10), open: c.status === 'submitted' || c.status === 'pending-configurations', raw: c }))
@@ -132,6 +134,7 @@
   const FIELDS = () => [
     { key: 'status', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the case.', options: STATUSES },
     { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'A service case reviews one service (method). Application details reviews one change to the merchant\'s business details or payout methods.', options: TYPES },
+    { key: 'biz', type: 'multi', icon: 'store', label: 'Merchant', hint: 'All the cases of one merchant: its services and its details changes.', options: [...new Set(ROWS.map(r => r.biz))].sort() },
     { key: 'bank', type: 'multi', icon: 'store', label: 'Financial institution', hint: 'The banks and vendors the case goes to.', options: [...new Set([].concat.apply([], ROWS.map(r => r.banks)))].sort() },
     { key: 'actor', type: 'multi', icon: 'user', label: 'Submitted by', hint: 'The salesperson who submitted it.', options: [...new Set(ROWS.map(r => r.actor))].sort() },
     ...(me.canReassign ? [{ key: 'assignee', type: 'multi', icon: 'user', label: 'Assignee', hint: 'The underwriting agent the case is assigned to.', options: [...new Set(ROWS.map(r => r.assignee).filter(Boolean))].sort() }] : []),
@@ -157,7 +160,7 @@
     }
     const page = list.slice((st.page - 1) * st.size, st.page * st.size);
     return `<div class="tscroll"><table class="dt"><thead><tr>${head}<th><span class="sr-only">Open</span></th></tr></thead><tbody>
-      ${page.map(r => `<tr tabindex="0" data-href="${esc(r.href)}" aria-label="Open ${esc(r.id)}"><td class="two"><span class="p">${esc(r.id)}</span><span class="s">${esc(r.type)}</span></td>
+      ${page.map(r => `<tr tabindex="0" data-href="${esc(r.href)}" aria-label="Open ${esc(r.id)}"><td class="two"><span class="p">${esc(r.id)}</span><span class="s">${esc(r.type)}${r.other ? ' · also ' + r.other + (r.type === 'Service case' ? ' details change' : ' service') + (r.other === 1 ? '' : 's') : ''}</span></td>
         <td><div class="mer"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="two"><span class="p">${esc(r.biz)}</span><span class="s">${esc(r.sub)}</span></span></div></td>
         <td><span class="sc ${CHIP[r.status]}">${esc(r.status)}</span></td>
         <td>${r.assignee ? esc(r.assignee) : '<span class="muted">Unassigned</span>'}</td><td class="num">${when(r)}</td>

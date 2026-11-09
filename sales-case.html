@@ -45,6 +45,11 @@
   .gh { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-block-start: 8px; } .gh h3 { margin: 0 !important; }
   .sgrp { display: flex; flex-direction: column; } .sgrp + .sgrp { margin-block-start: 8px; } .sgrp h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); margin: 8px 0 0; }
   .chips { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; }
+  .row.chg { flex-direction: column; gap: 12px; align-items: stretch; } .ch { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } @media (max-width: 640px) { .cmp { grid-template-columns: 1fr; } }
+  .cc { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; } .cc.new { border-color: var(--ocean-20); background: var(--primary-10); }
+  .cc .k { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); font-weight: 600; } .cc .none { color: var(--cadet-base); }
+  .cc dl { margin: 0; display: grid; grid-template-columns: minmax(110px, auto) 1fr; gap: 6px 12px; font-size: 14px; } .cc dt { color: var(--cadet-base); } .cc dd { margin: 0; overflow-wrap: anywhere; } .cc dd.chg { font-weight: 700; }
   .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
 </style>
 </head>
@@ -86,7 +91,28 @@
     if (x.state === 'ok' || x.state === 'flag') return `<span class="sc ${x.state === 'ok' ? 'ok' : 'bad'}">${x.state === 'ok' ? 'Approved' : 'Rejected'}</span>${open ? `<button class="linkb" type="button" ${d} data-clear="${esc(x.key)}">Undo</button>` : ''}`;
     return open ? `<button class="btn btn-outline-danger btn-sm" type="button" ${d} data-flag="${esc(x.key)}" data-lbl="${esc(x.label)}">Reject</button><button class="btn btn-primary btn-sm" type="button" ${d} data-ok="${esc(x.key)}">Approve</button>` : '';
   }
+  /* A payout method is written as "Bank account · bank · branch · holder · account" or "E-wallet · provider · mobile · holder" (optionally "name: " first). Shown in full, field by field. */
+  function parsePay(s) {
+    if (!s || s === 'None') return null;
+    let name = ''; const m = String(s).match(/^(.*?): (Bank account|E-wallet) · /);
+    if (m) { name = m[1]; s = s.slice(m[1].length + 2); }
+    const p = String(s).split(' · '), o = {};
+    if (name) o['Name'] = name;
+    if (p[0] === 'Bank account') { o['Type'] = 'Bank account'; o['Bank name'] = p[1]; o['Branch'] = p[2]; o['Account holder'] = p[3]; o['Account number'] = p[4]; }
+    else { o['Type'] = 'E-wallet'; o['Provider'] = p[1]; o['Mobile number'] = p[2]; o['Account holder'] = p[3]; }
+    return o;
+  }
+  const isPay = l => /^(Payout method|Primary payout)/.test(l);
+  /* Old and new side by side. Fields that changed are bold on the new side. */
+  function compare(x) {
+    const a = isPay(x.label) ? parsePay(x.from) : null, b = isPay(x.label) ? parsePay(x.to) : null;
+    const side = (cls, title, obj, raw, other) => `<div class="cc ${cls}"><span class="k">${title}</span>${isPay(x.label) ? (obj ? `<dl>${Object.keys(obj).map(k => `<dt>${esc(k)}</dt><dd class="${cls === 'new' && (!other || other[k] !== obj[k]) ? 'chg' : ''}">${esc(obj[k] == null ? '—' : obj[k])}</dd>`).join('')}</dl>` : '<span class="none">None</span>') : `<span class="${cls === 'new' ? '' : 'none'}" style="${cls === 'new' ? 'font-weight:700' : ''}">${esc(raw)}</span>`}</div>`;
+    return `<div class="cmp">${side('old', 'Current', a, x.from, null)}${side('new', 'Requested', b, x.to, a)}</div>`;
+  }
   function row(x, c) {
+    if (x.from != null) {
+      return `<div class="row chg"><div class="ch"><span class="n">${esc(x.label)}</span><div class="a">${decision(x, c)}</div></div>${compare(x)}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div>`;
+    }
     const detail = x.from != null ? `${esc(x.from)} &rarr; <b>${esc(x.to)}</b>` : x.key === 'pricing' ? rates(c) : x.files && x.files.length ? esc(x.files.join(' · ')) : '';
     const fl = (x.list || []).map(f => `<div class="fitem"><span class="fnm">${esc(f)}</span><button class="btn btn-outline btn-sm" type="button" data-view="${esc(f)}" data-l="${esc(x.label)}">${icon('eye', 'ic')}View</button><button class="btn btn-outline btn-sm" type="button" data-dl="${esc(f)}">${icon('download', 'ic')}Download</button></div>`).join('');
     return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${fl ? `<div class="files">${fl}</div>` : detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
@@ -124,6 +150,13 @@
       <p style="margin:0;color:var(--cadet-base)">${r.complete ? 'Everything the banks need for this service is in place.' : 'The case cannot be sent to the bank until every required field is complete. Missing: ' + esc(r.missing.join(', ')) + '.'}</p>
       ${r.groups.filter(g => g.key !== 'bank' || r.sent).map(block).join('')}</section>`;
   }
+  /* An application can have both kinds of case: a change to the merchant's details and requested services. They stay separate cases;
+     this only links to the other kind on the same application. */
+  function relatedCard(c) {
+    const list = U.related(c); if (!list.length) return '';
+    const app = c.type === 'application';
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>${app ? 'Services requested on this application' : 'Details changes on this application'}</h2><p>${app ? 'Each service is its own case.' : 'Changes to the business details or payout methods are their own cases.'}</p></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.type === 'application' ? r.changes.map(x => x.label).join(', ') : r.service)}</span><span class="f">${esc(r.caseId)} · ${r.type === 'application' ? 'Application details' : 'Service case'}</span></div><div class="a">${sc(r.status)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
+  }
   /* The two phases of a service case. Phase 1 is the review below; phase 2, the bank preparation, comes later. */
   function phases(c, p) {
     const done = p.list.filter(x => x.state !== 'todo').length;
@@ -157,6 +190,7 @@
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
+      ${relatedCard(c)}
       ${app ? '' : readinessCard(c)}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
