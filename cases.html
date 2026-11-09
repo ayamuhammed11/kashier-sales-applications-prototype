@@ -124,7 +124,7 @@
   const ALL = U.asCases(), CNT = {};
   ALL.forEach(c => { (CNT[c.app.id] = CNT[c.app.id] || { service: 0, application: 0 })[c.kind]++; });
   const ROWS = ALL.map(c => ({ isNew: c.isNew, kind: c.kind, other: CNT[c.app.id][c.kind === 'service' ? 'application' : 'service'],
-    id: c.no, href: c.href || 'case-details.html?app=' + encodeURIComponent(c.app.id), biz: c.app.biz, sub: c.service || c.mid || 'MID pending',
+    id: c.no, href: c.href || 'case-details.html?app=' + encodeURIComponent(c.app.id), biz: c.app.biz, mid: c.mid || '', service: c.service || '', sub: [c.mid, c.service].filter(Boolean).join(' \u00b7 ') || 'MID pending',
     status: NAME[c.status], type: c.kind === 'service' ? TYPES[0] : TYPES[1], banks: banksOf(c), actor: c.app.actor, assignee: c.assignee || '',
     since: c.since, day: String(c.since).slice(0, 10), open: c.status === 'submitted' || c.status === 'pending-configurations', raw: c }))
     // What needs a decision first (oldest waiting on top), then the rest, newest first.
@@ -193,7 +193,7 @@
         fields: FIELDS(), noun: ['case', 'cases'], today: TODAY, initial: st.filters,
         onExport: () => {
           const rows = base(), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-          const csv = [['Case ID', 'Type', 'Merchant', 'Service', 'Status', 'Submitted by', 'Assignee', 'Last activity']].concat(rows.map(r => [r.id, r.type, r.biz, r.sub, r.status, r.actor, r.assignee, r.day])).map(l => l.map(q).join(',')).join('\n');
+          const csv = [['Case ID', 'Type', 'Merchant', 'MID', 'Service', 'Status', 'Submitted by', 'Assignee', 'Last activity']].concat(rows.map(r => [r.id, r.type, r.biz, r.mid, r.service, r.status, r.actor, r.assignee, r.day])).map(l => l.map(q).join(',')).join('\n');
           const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'cases.csv'; a.click();
           SA.toast(rows.length + ' cases exported as CSV');
         },

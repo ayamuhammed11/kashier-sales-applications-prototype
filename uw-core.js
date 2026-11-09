@@ -37,7 +37,7 @@ window.UW = (function () {
   const PRICE = { Card: { local: rate(1.72, 1.96), 'intl-EGP': rate(2.45, 2.94) } };
   function demoApp(n, m) {
     const app = {
-      appId: 'APP-2408' + (1400 + n), merchant: { name: m.name, email: m.email, phone: m.phone }, entity: m.entity || 'Registered Business', industry: m.industry, owner: '',
+      appId: 'APP-2408' + (1400 + n), mid: m.mid || 'MID-' + (10200 + n * 37) + '-' + (100 + (n * 113) % 900), merchant: { name: m.name, email: m.email, phone: m.phone }, entity: m.entity || 'Registered Business', industry: m.industry, owner: '',
       submittedBy: m.by, submittedAt: m.at, svc: {}, order: [], cases: {}, docs: {}, websites: m.web ? [].concat(m.web) : [''], storeImage: m.store || '', reqContracts: {},
       payouts: [{ id: 1, type: 'bank', name: '', bank: m.bank || 'National Bank of Egypt', branch: 'Main Branch', holder: m.name, acct: '10' + (20000000000 + n * 3917) }], primary: 1, nextPayout: 2,
       kyc: [], log: [], nextCase: 1, _src: 'demo'
@@ -173,10 +173,12 @@ window.UW = (function () {
   }
   const canSee = c => !c.assignee || C.user().canReassign || c.assignee === C.user().name;
 
+  /* The MID of the business a case belongs to. The sales prototype's own application is Delta Pharma Group, MID-10200-100. */
+  const midOf = s => s.mid || (s._src === 'demo' ? 'MID pending' : 'MID-10200-100');
   function build(s, id) {
     const c = s.cases[id], svc = s.svc[id] || { lines: [] }, k = keyOf(s, id), l = local(k);
     const since = c.since ? Date.parse(c.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), sla = SLA[c.status];
-    return { type: 'service', key: k, id: gid(s, id), sid: id, caseId: c.caseId, status: c.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+    return { type: 'service', key: k, id: gid(s, id), sid: id, mid: midOf(s), caseId: c.caseId, status: c.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
       website: (s.websites || []).filter(Boolean).join(', '), websites: (s.websites || []).filter(Boolean), service: label(id), channel: chOf(id), model: svc.model || '', svc: svc, banks: [...new Set((svc.lines || []).map(x => x.bank).filter(Boolean))],
       submittedBy: s.submittedBy, submittedAt: s.submittedAt, terminals: s.terminals || '', submitComment: s.submitComment || '', since: new Date(since).toISOString(), hours: hours, sla: sla,
       late: !!sla && hours > sla, reject: c.reject || null, liveSince: c.liveSince || '', assignee: l.assignee, local: l };
@@ -185,7 +187,7 @@ window.UW = (function () {
      It is applied to the application only when Underwriting approves it. */
   function buildKyc(s, x) {
     const k = keyOf(s, x.key), l = local(k), since = x.since ? Date.parse(x.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), open = x.status === 'Underwriting Review';
-    return { type: 'application', key: k, id: gid(s, x.key), sid: x.key, caseId: x.caseId, status: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+    return { type: 'application', key: k, id: gid(s, x.key), sid: x.key, mid: midOf(s), caseId: x.caseId, status: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
       service: 'Application details', isNew: !!x.isNew, changes: x.changes || [], proposed: x.proposed, banks: [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt,
       since: new Date(since).toISOString(), hours: hours, sla: open ? SLA['Underwriting Review'] : 0, late: open && hours > SLA['Underwriting Review'],
       reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
@@ -375,7 +377,7 @@ window.UW = (function () {
   /* The Cases list shows these next to the application cases, in the same row shape. */
   const LIST_STATUS = { 'Underwriting Review': 'submitted', 'Bank Submission': 'pending-configurations', Rejected: 'rejected', Live: 'live', Approved: 'approved' };
   function asCases() {
-    return all().map(c => ({ svcId: c.id, sales: true, kind: c.type, isNew: c.isNew, status: LIST_STATUS[c.status], salesStatus: c.status, no: c.caseId, mid: '', assignee: c.assignee, since: c.since, resubmission: '',
+    return all().map(c => ({ svcId: c.id, sales: true, kind: c.type, isNew: c.isNew, status: LIST_STATUS[c.status], salesStatus: c.status, no: c.caseId, mid: c.mid, assignee: c.assignee, since: c.since, resubmission: '',
       app: { id: c.appId, biz: c.merchant.name, actor: c.submittedBy, summary: { email: c.merchant.email, serviceConfigs: c.type === 'service' ? [{ service: c.service, configs: c.banks.map(b => ({ bank: b })) }] : [] } },
       service: c.service, href: 'sales-case.html?id=' + encodeURIComponent(c.id) }));
   }
