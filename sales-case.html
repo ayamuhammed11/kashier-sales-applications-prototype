@@ -34,6 +34,16 @@
   .rg { border-top: 1px solid var(--border-subtle); padding-top: 16px; display: flex; flex-direction: column; gap: 8px; } .rg h3 { font-size: 16px; } .rg p { margin: 0; font-size: 13px; color: var(--cadet-base); }
   .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; } .fgrid .wide { grid-column: 1 / -1; } @media (max-width: 640px) { .fgrid { grid-template-columns: 1fr; } }
   .bv { min-height: 40px; display: flex; align-items: center; padding: 0 12px; background: var(--muted); border-radius: var(--radius); overflow-wrap: anywhere; } .inp.bad { border-color: var(--destructive); }
+  .phases { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; list-style: none; margin: 0; padding: 0; } @media (max-width: 640px) { .phases { grid-template-columns: 1fr; } }
+  .phases li { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); }
+  .phases .d { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex-shrink: 0; background: var(--muted); color: var(--cadet-base); border: 1px solid var(--border); }
+  .phases b { display: block; } .phases span.s { display: block; font-size: 13px; color: var(--cadet-base); } .phases em { display: block; font-style: normal; font-size: 13px; font-weight: 600; margin-block-start: 4px; }
+  .phases .now { border-color: var(--ocean-20); background: var(--primary-10); } .phases .now .d { background: var(--primary); color: var(--white); border-color: var(--primary); } .phases .now em { color: var(--link); }
+  .phases .done { border-color: var(--lemon-20); } .phases .done .d { background: var(--lemon-10); color: var(--lemon-80); border-color: var(--lemon-20); } .phases .done em { color: var(--lemon-80); }
+  .phases .bad { border-color: #FFD0D6; background: #fffafb; } .phases .bad .d { background: var(--error-10); color: var(--destructive); border-color: #FFD0D6; } .phases .bad em { color: var(--destructive); }
+  .phases .later { background: var(--muted); border-style: dashed; } .phases .later b, .phases .later span.s, .phases .later em { color: var(--cadet-base); }
+  .grp { display: flex; flex-direction: column; } .grp + .grp { margin-block-start: 8px; } .grp h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); margin: 8px 0 0; }
+  .chips { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; }
   .ptitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: 1; }
 </style>
 </head>
@@ -45,7 +55,10 @@
 <script src="cases-core.js"></script>
 <script src="uw-core.js"></script>
 <script>
-/* One case page for both kinds of case, kept simple: an overview, then one block per part.
+/* One case page for both kinds of case, kept simple: the case info, then one block per part. A service case has two phases (review,
+   then bank preparation); only the review is built, the bank preparation is postponed (UW.PHASE2).
+   A case is always one service (or one change request): it never merges in other cases of the application.
+   Phase 1 of a service case:
    A service case is the service's pricing, its own documents and its contract. An application details case is a change to the
    merchant's business details or payout methods. A page shows either, or both when the application has both in review. */
 (function () {
@@ -83,6 +96,7 @@
     const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type === 'application';
     const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
       : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the application.</div>`
+      : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved. The bank preparation is the next phase and is not available yet.</div>`
       : c.status === 'Live' ? `<div class="info ok"><b>Live${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> This service is now worked from the Merchant module.</div>` : '';
     if (nested) {
       const what = c.changes.map(x => x.label).join(', ');
@@ -90,15 +104,9 @@
     }
     const rd = U.readiness(c), block = open && !app && p.list.every(x => x.state === 'ok') && rd && !rd.complete ? `<div class="info bad"><b>Every item is approved.</b> Complete the required fields in Bank readiness below to send this case to the bank.</div>` : '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
-      <div style="display:flex;gap:8px;align-items:center">${nFiles(p) ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}">${icon('download', 'ic')}Download all (${nFiles(p)})</button>` : ''}${c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">${nFiles(p) ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}">${icon('download', 'ic')}Download all (${nFiles(p)})</button>` : ''}${U.PHASE2 && c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
       ${app ? '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>' : ''}
-      ${note}${block}<div>${p.list.map(x => row(x, c)).join('')}</div></section>`;
-  }
-  /* Every change to the merchant's business details or payout methods on this application, in one card, one block per request. */
-  function group(list) {
-    if (!list.length) return '';
-    const openN = list.filter(x => x.status === 'Underwriting Review').length;
-    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Application details</h2><p>${list.length} change request${list.length === 1 ? '' : 's'} to the business details or payout methods${openN ? ' · ' + openN + ' in review' : ''}. Nothing is applied until every item of a request is approved.</p></div></div>${list.map(x => part(x, true)).join('')}</section>`;
+      ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); return xs.length ? `<div class="grp"><h3>${h}</h3>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
   }
   /* The data the banks need, by who supplies it. A case cannot go to the bank until every required field is complete. */
   function readinessCard(c) {
@@ -115,9 +123,13 @@
       <p style="margin:0;color:var(--cadet-base)">${r.complete ? 'Everything the banks need for this service is in place.' : 'The case cannot be sent to the bank until every required field is complete. Missing: ' + esc(r.missing.join(', ')) + '.'}</p>
       ${r.groups.filter(g => g.key !== 'bank' || r.sent).map(block).join('')}</section>`;
   }
-  function relatedCard(list) {
-    if (!list.length) return '';
-    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Also in review on this application</h2></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.service)}</span><span class="f">${esc(r.caseId)} · ${r.type === 'application' ? 'Application details' : 'Service case'}</span></div><div class="a">${sc(r.status)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
+  /* The two phases of a service case. Phase 1 is the review below; phase 2, the bank preparation, comes later. */
+  function phases(c, p) {
+    const done = p.list.filter(x => x.state !== 'todo').length;
+    const one = c.status === 'Underwriting Review' ? ['now', done + ' of ' + p.total + ' items reviewed'] : c.status === 'Rejected' ? ['bad', 'Rejected and returned to Sales'] : ['done', 'Complete'];
+    const two = U.PHASE2 ? [c.status === 'Bank Submission' ? 'now' : c.status === 'Live' ? 'done' : 'later', c.status === 'Bank Submission' ? 'In progress' : c.status === 'Live' ? 'Complete' : 'Starts after the review'] : ['later', 'Coming later'];
+    return `<ol class="phases" aria-label="Case phases"><li class="${one[0]}"><span class="d">${one[0] === 'done' ? icon('check', 'ic-14') : '1'}</span><div><b>Case review</b><span class="s">Case info, the service with its documents and contract</span><em>${esc(one[1])}</em></div></li>
+      <li class="${two[0]}"><span class="d">2</span><div><b>Bank preparation</b><span class="s">The data and steps to send the case to the bank</span><em>${esc(two[1])}</em></div></li></ol>`;
   }
   function logsDrawer(c) {
     SA.drawer({ title: 'Activity logs', sub: esc(c.merchant.name) + ' · ' + esc(c.caseId), render(api) {
@@ -130,22 +142,21 @@
     const c = U.get(id), page = document.getElementById('page');
     if (!c) { page.innerHTML = `<div class="wrap"><div class="card empty"><h3>Case not found</h3><p class="hint">It may be assigned to another agent, or the sales application was reset.</p><a class="btn btn-outline" href="cases.html">Back to Cases</a></div></div>`; return; }
     document.title = 'Kashier | ' + c.caseId;
-    const rel = U.related(c), mgr = me.canReassign, app = c.type === 'application';
-    // A service case also carries the application's open changes to business details and payout methods, so one visit settles both.
-    const parts = [c], grp = app ? [] : rel, links = app ? rel : [];
-    const both = !app && grp.length > 0;
+    const mgr = me.canReassign, app = c.type === 'application';
+    // A case is one thing: one service (method) with its pricing, documents and contract, or one change request to the merchant's details.
+    // The application as a whole is not handled here; the case only points back to it.
+    const parts = [c];
     const notes = c.local.notes;
-    const info = [['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity], ['Submitted', c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
+    const info = [['Business', c.merchant.name], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity], ['Website', c.website], ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
       .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
     page.innerHTML = `<div class="wrap">
-      <header class="hdr"><div>${crumb(c.caseId)}<h1>${esc(c.merchant.name)}</h1>
-        <div class="meta">${both ? '<span class="tag">Service case</span><span class="tag">Application details</span>' : `<span class="tag">${app ? 'Application details' : 'Service case'}</span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
-      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Overview</h2></div></div>${dl(info)}
+      <header class="hdr"><div>${crumb(c.caseId)}<h1>${app ? esc(c.merchant.name) : esc(c.service)}</h1>
+        <div class="meta"><span class="tag">${app ? 'Application details' : 'Service case'}</span>${app ? '' : `<span>${esc(c.merchant.name)}</span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
+      ${app ? '' : phases(c, U.progress(c))}
+      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
-      ${group(grp)}
       ${app ? '' : readinessCard(c)}
-      ${relatedCard(links)}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
         ${notes.map(n => `<div class="note"><div class="k">${esc(n.by)} · ${esc(C.fmtDate(n.ts))}</div><div>${esc(n.text)}</div></div>`).join('')}</section></div>`;
@@ -169,7 +180,7 @@
     const r = U.settle(cid), c = U.get(cid), no = c ? c.caseId : 'Case', app = c && c.type === 'application';
     if (!r) return render();
     if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
-    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? ' approved. The changes are applied.' : ' approved and sent to the bank');
+    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? ' approved. The changes are applied.' : ' review complete. Moved to Bank Submission.');
     if (cid === id) go(msg); else { render(); SA.toast(msg); }
   }
   function bind(c) {

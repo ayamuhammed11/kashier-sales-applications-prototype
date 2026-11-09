@@ -11,6 +11,9 @@
    internal notes — lives in 'kashierUwCases'. */
 window.UW = (function () {
   const C = window.Cases, esc = C.esc;
+  /* A case has two phases. Phase 1 is the review: the case info, the service with its pricing, documents and contract.
+     Phase 2 is the bank preparation (bank readiness, batch, bank decision). It is postponed: the code stays, switched off here. */
+  const PHASE2 = false;
   const SA_KEY = 'sa-dir-final', DEMO_KEY = 'kashierUwDemoApps', STORE = 'kashierUwCases';
   const CLOCK = new Date('2026-10-21T12:00:00').getTime();        // the sales prototype's "now", so waiting times agree
   const SLA = { 'Underwriting Review': 72, 'Bank Submission': 120 };
@@ -159,7 +162,7 @@ window.UW = (function () {
     const c = s.cases[id], svc = s.svc[id] || { lines: [] }, k = keyOf(s, id), l = local(k);
     const since = c.since ? Date.parse(c.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), sla = SLA[c.status];
     return { type: 'service', key: k, id: gid(s, id), sid: id, caseId: c.caseId, status: c.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
-      service: label(id), channel: chOf(id), model: svc.model || '', svc: svc, banks: [...new Set((svc.lines || []).map(x => x.bank).filter(Boolean))],
+      website: (s.websites || []).filter(Boolean).join(', '), service: label(id), channel: chOf(id), model: svc.model || '', svc: svc, banks: [...new Set((svc.lines || []).map(x => x.bank).filter(Boolean))],
       submittedBy: s.submittedBy, submittedAt: s.submittedAt, since: new Date(since).toISOString(), hours: hours, sla: sla,
       late: !!sla && hours > sla, reject: c.reject || null, liveSince: c.liveSince || '', assignee: l.assignee, local: l };
   }
@@ -260,6 +263,15 @@ window.UW = (function () {
      A case cannot be sent to the bank until every required merchant, service and calculated field is complete. */
   const GOV = ['Alexandria', 'Aswan', 'Assiut', 'Beheira', 'Beni Suef', 'Cairo', 'Dakahlia', 'Damietta', 'Fayoum', 'Gharbia', 'Giza', 'Ismailia', 'Kafr El Sheikh', 'Luxor', 'Matrouh', 'Menofia', 'Minya', 'New Valley', 'North Sinai', 'Port Said', 'Qalyubia', 'Qena', 'Red Sea', 'Sharkia', 'Sohag', 'South Sinai', 'Suez'];
   const MCC = { 'Retail & E-commerce': '5399', Education: '8299', 'Food & Beverage': '5812', 'Healthcare / Pharmacy': '5912', 'Travel & Tourism': '4722', 'Real Estate': '6513', 'Entertainment & Media': '7999', Automotive: '5511', 'Professional Services': '8999', 'Technology / SaaS': '7372', 'Fashion & Beauty': '5651', 'Logistics & Delivery': '4215', Marketplace: '5399', 'Non-profit / NGO': '8398' };
+  /* ── Bank settings: fixed Kashier values and the sector mapping (edited on bank-settings.html) ── */
+  const SET_KEY = 'kashierUwSettings';
+  const FIXED_LABEL = { settleAcct: 'Settlement account number', settleCcy: 'Settlement account currency', settleName: 'Settlement account name', profile: 'Profile code', cid: 'CID', dba: 'DBA merchant name code', mtype: 'MType', structId: 'Structure ID', structPos: 'Structure position', parent: 'Parent merchant' };
+  const FIXED_HINT = { settleAcct: 'Kashier\'s account at the bank, not the merchant\'s. Demo value: replace it.', cid: 'Kashier\'s ID at the bank. Demo value: replace it.', settleCcy: 'ISO number, 818 = EGP', profile: 'Used by the Online and recurring forms', dba: 'POS forms', mtype: 'POS forms', structId: 'POS forms', structPos: 'POS forms', parent: 'POS forms', settleName: 'POS forms' };
+  const SET_DEF = { fixed: { settleAcct: '100-DEMO-000001', settleCcy: '818', settleName: 'KASHIER', profile: '930', cid: 'DEMO-CID-001', dba: 'K', mtype: '01GM', structId: '0084', structPos: 'BOTT', parent: 'Kashier' }, map: {} };
+  Object.keys(MCC).forEach(k => { SET_DEF.map[k] = { mcc: MCC[k], discount: 'DC-' + MCC[k], ag: 'AG-' + MCC[k] }; });
+  function settings() { const v = j(SET_KEY) || {}; return { fixed: Object.assign({}, SET_DEF.fixed, v.fixed || {}), map: Object.assign({}, SET_DEF.map, v.map || {}) }; }
+  function saveSettings(v) { put(SET_KEY, v); }
+  const fixed = () => settings().fixed, mapOf = ind => Object.assign({ mcc: '', discount: '', ag: '' }, settings().map[ind] || {});
   const ind = c => c.entity === 'Individual Seller', reg = c => c.entity === 'Registered Business', online = c => c.channel === 'Online', pos = c => c.channel === 'POS';
   const FIELDS = [
     { k: 'legalName', l: 'Legal name', g: 'merchant' }, { k: 'legalForm', l: 'Legal form', g: 'merchant', t: 'select', o: ['Sole proprietorship', 'LLC', 'Joint stock company', 'Partnership', 'Other'], req: c => !ind(c) },
@@ -275,8 +287,11 @@ window.UW = (function () {
     { k: 'signatory', l: 'Authorized signatory name', g: 'service', req: c => c.model === 'PF' },
     { k: 'outlet', l: 'Outlet name', g: 'service', req: pos }, { k: 'outletCity', l: 'Outlet city', g: 'service', req: pos }, { k: 'outletAddr', l: 'Outlet address', g: 'service', req: pos, wide: true },
     { k: 'delName', l: 'Delegate full name', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delIdNo', l: 'Delegate ID number', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delNat', l: 'Delegate nationality', g: 'service', req: c => pos(c) && reg(c) },
-    { k: 'mcc', l: 'MCC', g: 'auto', calc: (c, s) => MCC[c.industry] || '' }, { k: 'discount', l: 'Bank discount code', g: 'auto', calc: (c, s) => MCC[c.industry] ? 'DC-' + MCC[c.industry] : '' },
-    { k: 'descriptor', l: 'Bank descriptor', g: 'auto', calc: (c, s) => ('KASHIER*' + c.merchant.name).toUpperCase().slice(0, 25) }, { k: 'agCode', l: 'NBE AG code', g: 'auto', calc: (c, s) => MCC[c.industry] ? 'AG-' + MCC[c.industry] : '', req: pos },
+    { k: 'mcc', l: 'MCC', g: 'auto', calc: (c, s) => mapOf(c.industry).mcc }, { k: 'discount', l: 'Bank discount code', g: 'auto', calc: (c, s) => mapOf(c.industry).discount },
+    { k: 'descriptor', l: 'Bank descriptor', g: 'auto', calc: (c, s) => ('KASHIER*' + c.merchant.name).toUpperCase().slice(0, 25) }, { k: 'agCode', l: 'NBE AG code', g: 'auto', calc: (c, s) => mapOf(c.industry).ag, req: pos },
+    { k: 'settleAcct', l: 'Settlement account number', g: 'auto', calc: () => fixed().settleAcct, set: true }, { k: 'profile', l: 'Profile code', g: 'auto', calc: () => fixed().profile, req: online, set: true }, { k: 'cid', l: 'CID', g: 'auto', calc: () => fixed().cid, req: online, set: true },
+    { k: 'settleCcy', l: 'Settlement currency', g: 'auto', calc: () => fixed().settleCcy, req: pos, set: true }, { k: 'settleName', l: 'Settlement account name', g: 'auto', calc: () => fixed().settleName, req: pos, set: true }, { k: 'dba', l: 'DBA merchant name code', g: 'auto', calc: () => fixed().dba, req: pos, set: true },
+    { k: 'mtype', l: 'MType', g: 'auto', calc: () => fixed().mtype, req: pos, set: true }, { k: 'structId', l: 'Structure ID', g: 'auto', calc: () => fixed().structId, req: pos, set: true }, { k: 'structPos', l: 'Structure position', g: 'auto', calc: () => fixed().structPos, req: pos, set: true }, { k: 'parent', l: 'Parent merchant', g: 'auto', calc: () => fixed().parent, req: pos, set: true },
     { k: 'docsStatus', l: 'Documents sent to the bank', g: 'bank', t: 'select', o: ['Not sent', 'Sent', 'Sent, issues found'] }, { k: 'docsNote', l: 'Document issues', g: 'bank', opt: true, wide: true },
     { k: 'batch', l: 'Bank batch number', g: 'bank', opt: true }, { k: 'ref', l: 'Bank notes / HPS reference', g: 'bank', opt: true }, { k: 'cbe', l: 'CBE initiative', g: 'bank', opt: true }, { k: 'caseNo', l: 'Case #', g: 'bank', opt: true },
     { k: 'decision', l: 'Bank decision', g: 'bank', t: 'select', o: ['Pending', 'Approved', 'Rejected', 'Waiting merchant reply'] }, { k: 'bankComment', l: 'Bank comment', g: 'bank', opt: true, wide: true },
@@ -293,7 +308,7 @@ window.UW = (function () {
   }
   /* The fields that apply to this case, with their values, and which required ones are still empty. */
   function readiness(c) {
-    if (c.type !== 'service') return null;
+    if (!PHASE2 || c.type !== 'service') return null;
     const sent = c.status === 'Bank Submission' || c.status === 'Live';
     const applies = f => f.opt || !f.req || f.req(c);     // a conditional field shows only where it applies (POS, Online, companies...)
     const groups = ['merchant', 'service', 'auto', 'bank'].map(g => ({ key: g, title: GROUP[g][0], note: GROUP[g][1], fields: FIELDS.filter(f => f.g === g && applies(f)).map(f => {
@@ -332,6 +347,9 @@ window.UW = (function () {
     return ids.map(id => get(gid(s, id))).filter(Boolean).sort((a, b) => rank(a) - rank(b));
   }
 
+  /* The services on the same application, so the case info shows where this one sits. */
+  function siblings(c) { const s = stateFor(c.appId); return s ? s.order.filter(id => s.cases[id]).map(id => ({ id: gid(s, id), service: label(id), status: s.cases[id].status, caseId: s.cases[id].caseId, self: id === c.sid })) : []; }
+
   /* Activity on one case: the application's log, filtered to it. */
   function activity(c) { const s = stateFor(c.appId); return (s ? s.log : []).filter(e => e.id === c.sid); }
   const wait = h => h < 1 ? 'Under 1h' : h < 24 ? Math.floor(h) + 'h' : Math.floor(h / 24) + 'd ' + Math.floor(h % 24) + 'h';
@@ -347,5 +365,5 @@ window.UW = (function () {
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
     addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
-    resetDemo: resetDemo, readiness: readiness, setField: setField };
+    resetDemo: resetDemo, PHASE2: PHASE2, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();

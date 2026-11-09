@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kashier | Bank settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="sales-applications/shared/base.css">
+<link rel="stylesheet" href="sales-applications/shared/sa.css">
+<link rel="stylesheet" href="components/filter-bar.css">
+<style>
+  .wrap { max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+  .hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .hdr > div:first-child { flex: 1; min-width: 0; }
+  .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; } @media (max-width: 640px) { .fgrid { grid-template-columns: 1fr; } }
+  .map { width: 100%; border-collapse: collapse; } .map th { text-align: start; font-size: 12px; text-transform: uppercase; color: var(--cadet-base); padding: 8px; border-bottom: 1px solid var(--border); }
+  .map td { padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); } .map td:first-child { font-weight: 600; } .map input { width: 100%; }
+  .tscrollx { overflow-x: auto; }
+  .bar { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<script src="components/filter-bar.js"></script>
+<script src="sales-applications/shared/agent-icons.js"></script>
+<script src="sales-applications/shared/sa-core.js"></script>
+<script src="rate-decisions.js"></script>
+<script src="cases-core.js"></script>
+<script src="uw-core.js"></script>
+<script>
+/* Bank settings: the values the banks' forms need that are the same for every merchant (Kashier's own account and codes), and the
+   sector mapping that gives each industry its MCC, discount code and NBE AG code. Cases reads these; nothing is typed per case. */
+(function () {
+  const { icon, esc } = SA, C = Cases, U = UW, me = C.user();
+  const crumb = `<nav class="crumb" aria-label="Breadcrumb"><a href="cases.html">Cases</a><svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${AGENT_ICONS['chevron-right']}</svg><span aria-current="page">Bank settings</span></nav>`;
+  const profile = `<button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button>`;
+
+  function render() {
+    const st = U.settings();
+    document.getElementById('page').innerHTML = `<div class="wrap">
+      <header class="hdr"><div>${crumb}<h1>Bank settings</h1><p class="desc">Values that are the same for every merchant. Cases reads them, so nobody types them per case.${me.canReassign ? '' : ' Only an Underwriting Manager can change them.'}</p></div>${profile}</header>
+      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Fixed Kashier values</h2><p>Kashier's own account and codes at the bank.</p></div></div>
+        <div class="fgrid">${Object.keys(U.FIXED_LABEL).map(k => `<div class="fld"><label for="f-${k}">${esc(U.FIXED_LABEL[k])}</label><input class="inp" id="f-${k}" data-fixed="${k}" value="${esc(st.fixed[k])}" ${me.canReassign ? '' : 'disabled'}>${U.FIXED_HINT[k] ? `<span class="hint">${esc(U.FIXED_HINT[k])}</span>` : ''}</div>`).join('')}</div></section>
+      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Sector mapping</h2><p>Each industry's MCC, bank discount code and NBE AG code. The values shown are placeholders until the real mapping is confirmed.</p></div></div>
+        <div class="tscrollx"><table class="map"><thead><tr><th>Industry</th><th>MCC</th><th>Discount code</th><th>NBE AG code</th></tr></thead><tbody>
+          ${U.INDUSTRIES.map(i => { const m = st.map[i] || {}; return `<tr><td>${esc(i)}</td>${['mcc', 'discount', 'ag'].map(k => `<td><input class="inp" data-map="${esc(i)}" data-k="${k}" value="${esc(m[k] || '')}" aria-label="${esc(i)} ${k}" ${me.canReassign ? '' : 'disabled'}></td>`).join('')}</tr>`; }).join('')}
+        </tbody></table></div></section>
+      ${me.canReassign ? '<div class="bar"><button type="button" class="btn btn-outline" id="reset">Reset to defaults</button><button type="button" class="btn btn-primary" id="save">Save settings</button></div>' : ''}</div>`;
+    const save = document.getElementById('save');
+    if (save) save.onclick = () => {
+      const v = { fixed: {}, map: {} };
+      document.querySelectorAll('[data-fixed]').forEach(e => { v.fixed[e.dataset.fixed] = e.value.trim(); });
+      document.querySelectorAll('[data-map]').forEach(e => { const m = v.map[e.dataset.map] = v.map[e.dataset.map] || {}; m[e.dataset.k] = e.value.trim(); });
+      U.saveSettings(v); SA.toast('Bank settings saved. Cases use them now.');
+    };
+    const reset = document.getElementById('reset');
+    if (reset) reset.onclick = () => { U.saveSettings({}); render(); SA.toast('Bank settings reset to the defaults'); };
+  }
+  const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
+  SA.mount({ key: 'bank-settings', render,
+    protoControls: () => `<label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
+    bindProto() { document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; } });
+})();
+</script>
+</body>
+</html>
