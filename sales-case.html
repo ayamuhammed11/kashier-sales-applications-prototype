@@ -46,6 +46,10 @@
   .sgrp { display: flex; flex-direction: column; } .sgrp + .sgrp { margin-block-start: 8px; } .sgrp h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); margin: 8px 0 0; }
   .chips { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; }
   .row.chg { flex-direction: column; gap: 12px; align-items: stretch; } .ch { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .row.web { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 16px; } .row.web .wo { justify-self: end; } .row.web .a { justify-self: end; } .row.web .wu { display: flex; align-items: center; gap: 8px 12px; min-width: 0; } .row.web .fnm { font-size: 13px; color: var(--cadet-base); overflow-wrap: anywhere; } .row.web .wfull { grid-column: 1 / -1; }
+  .btn.lnk { padding-inline: 10px; gap: 4px; }
+  .row.chg .rscroll { max-width: 100%; }
+  .cmp.one { grid-template-columns: 1fr !important; }
   .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } @media (max-width: 640px) { .cmp { grid-template-columns: 1fr; } }
   .cc { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; } .cc.new { border-color: var(--ocean-20); background: var(--primary-10); }
   .cc .k { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--cadet-base); font-weight: 600; } .cc .none { color: var(--cadet-base); }
@@ -74,11 +78,32 @@
   const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
   const sc = s => `<span class="sc ${CHIP[s] || 'neu'}">${esc(U.STATUS[s] ? U.STATUS[s].label : s)}</span>`;
   const tierName = k => k === 'local' ? 'Local rates' : k.indexOf('intl-') === 0 ? 'International · ' + k.slice(5) : k.replace(/-/g, ' ');
-  const dl = rows => `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v == null || v === '' ? '—' : esc(v)}</dd>`).join('')}</dl>`;
+  const dl = rows => `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v && v.html ? v.html : v == null || v === '' ? '—' : esc(v)}</dd>`).join('')}</dl>`;
+  const links = list => list && list.length ? { html: list.map(u => `<a class="linkb" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>`).join(', ') } : '';
   const profile = `<button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button>`;
   const crumb = last => `<nav class="crumb" aria-label="Breadcrumb"><a href="cases.html">Cases</a><svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${AGENT_ICONS['chevron-right']}</svg><span aria-current="page">${esc(last)}</span></nav>`;
   const go = msg => { location.href = 'cases.html'; try { sessionStorage.setItem('cases-toast', msg); } catch (e) { /* storage unavailable */ } };
 
+  /* The service as the application records it, then every rate type: what was requested, what is published, and its approval. */
+  function mirror(c) { const S = SA.S; S.svc = S.svc || {}; S.svc[c.sid] = Object.assign({ ops: [], notes: '', currencies: ['EGP'] }, c.svc); S.entity = c.entity; S.industry = c.industry; S.activities = [c.industry]; S.owner = ''; }
+  function pricingDetail(c) {
+    mirror(c);
+    const sid = c.sid, svc = SA.S.svc[sid], nm = sid.slice(sid.indexOf(' ') + 1), banks = [...new Set((svc.lines || []).map(l => l.bank).filter(Boolean))];
+    const cur = svc.model === 'PF' ? ['EGP'] : (svc.currencies || ['EGP']);
+    const rows = [['Service', nm + (SA.SVC_HINT[nm] ? ' · ' + SA.SVC_HINT[nm] : '')], ['Channel', c.channel], ['Model', svc.model + ' - ' + c.channel]];
+    if (SA.needsBank(sid)) rows.push(['Financial institution', banks.length ? banks.join(', ') : 'Not chosen']);
+    if (c.channel === 'POS') rows.push(['POS terminals', c.terminals || 'Not set']);
+    if (SA.isCard(sid)) rows.push(['Currencies and operations', cur.join(', ') + ' · ' + (svc.ops.length ? svc.ops.join(', ') : 'No advanced operations')]);
+    if (svc.notes && svc.notes.trim()) rows.push(['Notes', svc.notes]);
+    if (c.submitComment) rows.push(['Submit comment', c.submitComment]);
+    const body = (svc.lines || []).map(l => SA.tiersFor(sid, l).map(t => {
+      const sel = l.rates[t.key] || {}, v = SA.verdict(sid, l, t), has = sel.rate !== undefined && sel.rate !== '';
+      const appr = !has ? '<span class="f">Not entered</span>' : v.tier === 'auto' ? '<span class="f">No approval needed</span>' : `<span class="sc ok">Approved</span> <span class="f">${v.tier === 'head' ? 'Head of Sales' : 'Sales Manager'}</span>`;
+      return `<tr><td>${l.bank ? `<div class="f">${esc(l.bank)}</div>` : ''}${esc(t.label)}</td><td class="num"><b>${has ? esc(SA.rateText(sel)) : '\u2014'}</b></td><td class="num">${esc(SA.pubText(v.p))}</td><td>${appr}</td></tr>`;
+    }).join('')).join('');
+    return `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+      <div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Rate type</th><th>Requested</th><th>Published</th><th>Approval</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
   function rates(c) {
     const lines = c.svc.lines || [];
     if (!lines.length) return '<span class="f">No rates were entered for this service.</span>';
@@ -104,18 +129,32 @@
   }
   const isPay = l => /^(Payout method|Primary payout)/.test(l);
   /* Old and new side by side. Fields that changed are bold on the new side. */
+  /* A new application has nothing earlier to compare with: just what was submitted, a payout method in full. */
+  function submitted(x) {
+    const o = isPay(x.label) ? parsePay(x.to) : null;
+    return `<div class="cmp one"><div class="cc new"><span class="k">Submitted</span>${o ? `<dl>${Object.keys(o).map(k => `<dt>${esc(k)}</dt><dd>${esc(o[k] == null ? '\u2014' : o[k])}</dd>`).join('')}</dl>` : `<span>${esc(x.to)}</span>`}</div></div>`;
+  }
   function compare(x) {
+    if (x.isNew) return submitted(x);
     const a = isPay(x.label) ? parsePay(x.from) : null, b = isPay(x.label) ? parsePay(x.to) : null;
     const side = (cls, title, obj, raw, other) => `<div class="cc ${cls}"><span class="k">${title}</span>${isPay(x.label) ? (obj ? `<dl>${Object.keys(obj).map(k => `<dt>${esc(k)}</dt><dd class="${cls === 'new' && (!other || other[k] !== obj[k]) ? 'chg' : ''}">${esc(obj[k] == null ? '—' : obj[k])}</dd>`).join('')}</dl>` : '<span class="none">None</span>') : `<span class="${cls === 'new' ? '' : 'none'}" style="${cls === 'new' ? 'font-weight:700' : ''}">${esc(raw)}</span>`}</div>`;
     return `<div class="cmp">${side('old', 'Current', a, x.from, null)}${side('new', 'Requested', b, x.to, a)}</div>`;
   }
+  const platform = u => { const h = String(u).toLowerCase(); return /facebook|fb\.com/.test(h) ? 'Facebook' : /instagram/.test(h) ? 'Instagram' : /(^|[./])x\.com|twitter/.test(h) ? 'X' : /linkedin/.test(h) ? 'LinkedIn' : /tiktok/.test(h) ? 'TikTok' : /youtube|youtu\.be/.test(h) ? 'YouTube' : 'Website'; };
   function row(x, c) {
-    if (x.from != null) {
+    if (x.key === 'pricing') {
+      return `<div class="row chg"><div class="ch"><span class="n">${esc(x.label)}</span><div class="a">${decision(x, c)}</div></div>${pricingDetail(c)}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div>`;
+    }
+    if (x.links && x.links.length) {
+      return `<div class="row web"><div class="wn"><span class="n">${esc(x.label)}</span></div><div class="a">${decision(x, c)}</div>${x.links.map(u => `<div class="wu"><span class="tag">${platform(u)}</span><span class="fnm">${esc(u)}</span></div><div class="wo"><a class="btn btn-outline btn-sm lnk" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(u)} in a new tab">Open${icon('ext', 'ic')}</a></div>`).join('')}${x.state === 'flag' ? `<span class="f bad wfull">${esc(x.reason)}</span>` : ''}</div>`;
+    }
+    if (x.from != null || x.isNew) {
       return `<div class="row chg"><div class="ch"><span class="n">${esc(x.label)}</span><div class="a">${decision(x, c)}</div></div>${compare(x)}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div>`;
     }
-    const detail = x.from != null ? `${esc(x.from)} &rarr; <b>${esc(x.to)}</b>` : x.key === 'pricing' ? rates(c) : x.files && x.files.length ? esc(x.files.join(' · ')) : '';
+    const detail = x.from != null ? `${esc(x.from)} &rarr; <b>${esc(x.to)}</b>` : x.key === 'pricing' ? pricingDetail(c) : x.files && x.files.length ? esc(x.files.join(' · ')) : '';
     const fl = (x.list || []).map(f => `<div class="fitem"><span class="fnm">${esc(f)}</span><button class="btn btn-outline btn-sm" type="button" data-view="${esc(f)}" data-l="${esc(x.label)}">${icon('eye', 'ic')}View</button><button class="btn btn-outline btn-sm" type="button" data-dl="${esc(f)}">${icon('download', 'ic')}Download</button></div>`).join('');
-    return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${fl ? `<div class="files">${fl}</div>` : detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
+    const ll = (x.links || []).map(u => `<div class="fitem"><span class="tag">${platform(u)}</span><span class="fnm">${esc(u)}</span><a class="btn btn-outline btn-sm" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(u)} in a new tab">${icon('ext', 'ic')}Open link</a></div>`).join('');
+    return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${fl || ll ? `<div class="files">${fl}${ll}</div>` : detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
   }
   const nFiles = p => p.list.reduce((n, x) => n + (x.list ? x.list.length : 0), 0);
   /* One block per case: the title, its status, and the items to decide. */
@@ -132,8 +171,8 @@
     const rd = U.readiness(c), block = open && !app && p.list.every(x => x.state === 'ok') && rd && !rd.complete ? `<div class="info bad"><b>Every item is approved.</b> Complete the required fields in Bank readiness below to send this case to the bank.</div>` : '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
       <div style="display:flex;gap:8px;align-items:center">${U.PHASE2 && c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
-      ${app ? '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>' : ''}
-      ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
+      ${app ? (c.isNew ? '<p style="margin:0;color:var(--cadet-base)">The application\'s business details and payout method, submitted for the first time. There are no earlier values to compare with.</p>' : '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>') : ''}
+      ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
   }
   /* The data the banks need, by who supplies it. A case cannot go to the bank until every required field is complete. */
   function readinessCard(c) {
@@ -181,11 +220,11 @@
     // The application as a whole is not handled here; the case only points back to it.
     const parts = [c];
     const notes = c.local.notes;
-    const info = [['Business', c.merchant.name], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity], ['Website', c.website], ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
+    const info = [['Business', c.merchant.name], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity],  ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
       .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
     page.innerHTML = `<div class="wrap">
       <header class="hdr"><div>${crumb(c.caseId)}<h1>${app ? esc(c.merchant.name) : esc(c.service)}</h1>
-        <div class="meta"><span class="tag">${app ? 'Application details' : 'Service case'}</span>${app ? '' : `<span>${esc(c.merchant.name)}</span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
+        <div class="meta"><span class="tag">${app ? (c.isNew ? 'Application details \u00b7 new' : 'Application details \u00b7 change') : 'Service case'}</span>${app ? '' : `<span>${esc(c.merchant.name)}</span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
       ${app ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
@@ -215,7 +254,7 @@
     const r = U.settle(cid), c = U.get(cid), no = c ? c.caseId : 'Case', app = c && c.type === 'application';
     if (!r) return render();
     if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
-    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? ' approved. The changes are applied.' : ' review complete. Moved to Bank Submission.');
+    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : ' review complete. Moved to Bank Submission.');
     if (cid === id) go(msg); else { render(); SA.toast(msg); }
   }
   function bind(c) {
