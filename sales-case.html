@@ -256,7 +256,7 @@
   }
   /* After each decision: once every item of a case is decided, that case settles itself. */
   function decided(cid) {
-    const r = U.settle(cid), c = U.get(cid), no = c ? c.caseId : 'Case', app = c && c.type === 'application';
+    const before = U.get(cid), r = U.settle(cid), c = U.get(cid) || before, no = c ? c.caseId : 'Case', app = c && c.type === 'application';
     if (!r) return render();
     if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
     const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : ' review complete. Moved to Bank Submission.');

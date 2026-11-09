@@ -112,9 +112,9 @@
 (function () {
   const { icon, esc } = SA, C = Cases, U = UW;
   const TODAY = '2026-10-21';
-  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
-  const NAME = { submitted: 'Underwriting Review', 'pending-configurations': 'Bank Submission', rejected: 'Rejected', live: 'Live', approved: 'Approved' };
-  const STATUSES = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live', 'Approved'];
+  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok', 'Completed Case': 'ok' };
+  const NAME = { submitted: 'Underwriting Review', 'pending-configurations': 'Bank Submission', rejected: 'Rejected', live: 'Completed Case', approved: 'Completed Case' };
+  const STATUSES = ['Underwriting Review', 'Completed Case'];
   const TYPES = ['Service case', 'Application details'];
   const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
   const me = C.user();
