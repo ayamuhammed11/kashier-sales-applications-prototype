@@ -33,13 +33,18 @@ window.UW = (function () {
   const iso = hoursAgo => new Date(CLOCK - hoursAgo * 36e5).toISOString();
 
   /* ── Demo applications ── */
+  /* MIDs follow the sales application's list: the merchant at position i has MID-(10200 + 37 i)-(100 + 113 i mod 900), so a merchant that is in
+     My Applications has the same MID here (Cairo Fresh Market MID-10200-100, Giza Learning Hub MID-10311-439 ...). Others continue the sequence. */
+  const SALES_BIZ = ['Cairo Fresh Market', 'Delta Pharma Group', 'Nile Bites Restaurants', 'Giza Learning Hub', 'Zamalek Boutique Hotel', 'Alex Auto Parts', 'Heliopolis Fitness Club', 'Maadi Home Decor', 'Sinai Dive Center', 'Nasr City Bookstore', 'Pyramids Logistics', '6th October Auto Care', 'Dokki Dental Clinic', 'Tanta Textiles', 'Mansoura Smart Tech', 'Aswan Spice Bazaar', 'Luxor Heritage Tours', 'Port Said Marine', 'Zayed Real Estate', 'Shorouk Insurance Brokers', 'Garden City Florist', 'Ismailia Kids Academy', 'Fayoum Organic Farms', 'Hurghada Surf School', 'New Cairo Pet Clinic', 'Bab El Louq Coffee', 'Siwa Crafts Co.', 'Matrouh Beach Resort', 'Obour Wholesale', 'Tahrir Legal Partners', 'Damietta Furniture House', 'Rehab Mall Kiosks'];
+  const midAt = i => 'MID-' + (10200 + i * 37) + '-' + (100 + (i * 113) % 900);
+  const midFor = (name, n) => { const i = SALES_BIZ.indexOf(name); return midAt(i < 0 ? SALES_BIZ.length + n : i); };
   const j = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
   const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } };
   const rate = (r, f) => ({ rate: String(r), fee: String(f) });
   const PRICE = { Card: { local: rate(1.72, 1.96), 'intl-EGP': rate(2.45, 2.94) } };
   function demoApp(n, m) {
     const app = {
-      appId: 'APP-2408' + (1400 + n), mid: m.mid || 'MID-' + (10200 + n * 37) + '-' + (100 + (n * 113) % 900), merchant: { name: m.name, email: m.email, phone: m.phone }, entity: m.entity || 'Registered Business', industry: m.industry, owner: '',
+      appId: 'APP-2408' + (1400 + n), mid: m.mid || midFor(m.name, n), merchant: { name: m.name, email: m.email, phone: m.phone }, entity: m.entity || 'Registered Business', industry: m.industry, owner: '',
       submittedBy: m.by, submittedAt: m.at, svc: {}, order: [], cases: {}, docs: {}, websites: m.web ? [].concat(m.web) : [''], storeImage: m.store || '', reqContracts: {},
       payouts: [{ id: 1, type: 'bank', name: '', bank: m.bank || 'National Bank of Egypt', branch: 'Main Branch', holder: m.name, acct: '10' + (20000000000 + n * 3917) }], primary: 1, nextPayout: 2,
       kyc: [], log: [], nextCase: 1, _src: 'demo'
@@ -133,9 +138,13 @@ window.UW = (function () {
     { name: 'Beni Suef Bakery', industry: 'Food & Beverage', email: 'sara@benisuefbakery.com', phone: '+20 122 505 6060', by: 'Nour Hamdy', at: '21 Oct 2026', web: 'facebook.com/benisuefbakery', docs: DOCS_ON.concat(DOCS_BM),
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 1 }], kyc: [{ st: 'Underwriting Review', h: 1, isNew: true }] },
   ];
+  /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
+     reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
+  const DEMO_VER = 9;
   function seedDemo(force) {
-    if (!force && j(DEMO_KEY)) return;
-    const out = {}; DEMO.forEach((m, i) => { const a = demoApp(i + 1, m); out[a.appId] = a; });
+    const cur = j(DEMO_KEY);
+    if (!force && cur && cur.__v === DEMO_VER) return;
+    const out = { __v: DEMO_VER }; DEMO.forEach((m, i) => { const a = demoApp(i + 1, m); out[a.appId] = a; });
     put(DEMO_KEY, out);
   }
   function resetDemo() { try { localStorage.removeItem(STORE); } catch (e) { /* storage unavailable */ } seedDemo(true); }
@@ -145,7 +154,7 @@ window.UW = (function () {
     const out = [], main = j(SA_KEY);
     if (main && main.appId && main.cases) out.push(main);
     const demo = j(DEMO_KEY) || {};
-    Object.keys(demo).forEach(k => { demo[k]._src = 'demo'; out.push(demo[k]); });
+    Object.keys(demo).filter(k => k.indexOf('__') !== 0).forEach(k => { demo[k]._src = 'demo'; out.push(demo[k]); });
     return out;
   }
   const stateFor = appId => states().filter(s => s.appId === appId)[0] || null;
@@ -176,7 +185,8 @@ window.UW = (function () {
   const canSee = c => !c.assignee || C.user().canReassign || c.assignee === C.user().name;
 
   /* The MID of the business a case belongs to. The sales prototype's own application is Delta Pharma Group, MID-10200-100. */
-  const midOf = s => s.mid || (s._src === 'demo' ? 'MID pending' : 'MID-10200-100');
+  // A demo application always has a MID (derived from its number if an older save lacks it); only a real one can be pending.
+  const midOf = s => s.mid || (s._src === 'demo' ? midFor(s.merchant.name, (parseInt(String(s.appId).slice(-4), 10) || 1400) - 1400) : 'MID-10200-100');
   function build(s, id) {
     const c = s.cases[id], svc = s.svc[id] || { lines: [] }, k = keyOf(s, id), l = local(k);
     const since = c.since ? Date.parse(c.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), sla = SLA[c.status];
