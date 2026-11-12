@@ -134,14 +134,13 @@
   const FIELDS = () => [
     { key: 'status', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the case.', options: STATUSES },
     { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'A service case reviews one service (method). Application details reviews one change to the merchant\'s business details or payout methods.', options: TYPES },
-    { key: 'biz', type: 'multi', icon: 'store', label: 'Merchant', hint: 'All the cases of one merchant: its services and its details changes.', options: [...new Set(ROWS.map(r => r.biz))].sort() },
     { key: 'bank', type: 'multi', icon: 'store', label: 'Financial institution', hint: 'The banks and vendors the case goes to.', options: [...new Set([].concat.apply([], ROWS.map(r => r.banks)))].sort() },
     { key: 'actor', type: 'multi', icon: 'user', label: 'Submitted by', hint: 'The salesperson who submitted it.', options: [...new Set(ROWS.map(r => r.actor))].sort() },
     ...(me.canReassign ? [{ key: 'assignee', type: 'multi', icon: 'user', label: 'Assignee', hint: 'The underwriting agent the case is assigned to.', options: [...new Set(ROWS.map(r => r.assignee).filter(Boolean))].sort() }] : []),
     { key: 'day', type: 'date', icon: 'calendar', label: 'Last activity', hint: 'When the case last changed stage.' }
   ];
   const getv = (r, k) => k === 'bank' ? r.banks : r[k];
-  const searchHit = r => !st.q || [r.id, r.biz, r.sub, r.actor].join(' ').toLowerCase().includes(st.q.toLowerCase());
+  const searchHit = r => !st.q || [r.id, r.biz, r.mid, r.service, r.actor].join(' ').toLowerCase().includes(st.q.toLowerCase());
   const base = vals => ROWS.filter(r => searchHit(r) && KFilter.matches(vals || st.filters, r, FIELDS(), getv));
   const init = n => n.replace(/^Dr\.\s*/, '').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
   const when = r => r.open ? esc(C.ageOf(r.since)) : '<span class="muted">None</span>';
@@ -188,7 +187,7 @@
       const showBm = () => { if (!window.BMExport || !BMExport.available() || document.getElementById('bmLink')) return; document.getElementById('fbHost').insertAdjacentHTML('beforebegin', '<a class="btn btn-outline" id="bmLink" href="bm-batch.html" style="align-self:flex-start;margin-block-end:12px">Bank Misr batch</a>'); };
       if (U.PHASE2) document.getElementById('fbHost').insertAdjacentHTML('beforebegin', '<a class="btn btn-outline" href="bank-settings.html" style="align-self:flex-start;margin-block-end:12px">Bank settings</a>');
       showBm(); window.addEventListener('bm-ready', showBm);
-      KFilter.search(document.getElementById('topSearch'), { placeholder: 'Find a case...', value: st.q, onSearch: q => { st.q = q; st.page = 1; refresh(); } });
+      KFilter.search(document.getElementById('topSearch'), { placeholder: 'Find a case, merchant or MID...', value: st.q, onSearch: q => { st.q = q; st.page = 1; refresh(); } });
       KFilter.mount(document.getElementById('fbHost'), {
         fields: FIELDS(), noun: ['case', 'cases'], today: TODAY, initial: st.filters,
         onExport: () => {
