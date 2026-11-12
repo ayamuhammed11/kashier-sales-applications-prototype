@@ -166,32 +166,38 @@
     const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type === 'application';
     const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
       : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the application.</div>`
-      : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved. The bank preparation is the next phase and is not available yet.</div>`
+      : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved. The case is now in bank preparation.</div>`
       : c.status === 'Live' ? `<div class="info ok"><b>Live${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> This service is now worked from the Merchant module.</div>` : '';
     if (nested) {
       const what = c.changes.map(x => x.label).join(', ');
       return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
-    const rd = U.readiness(c), block = open && !app && p.list.every(x => x.state === 'ok') && rd && !rd.complete ? `<div class="info bad"><b>Every item is approved.</b> Complete the required fields in Bank readiness below to send this case to the bank.</div>` : '';
+    const block = '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
-      <div style="display:flex;gap:8px;align-items:center">${U.PHASE2 && c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">${U.BANK_RESPONSE && c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
       ${app ? (c.isNew ? '<p style="margin:0;color:var(--cadet-base)">The application\'s business details and payout method, submitted for the first time. There are no earlier values to compare with.</p>' : '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>') : ''}
       ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
   }
-  /* The data the banks need, by who supplies it. A case cannot go to the bank until every required field is complete. */
+  /* Phase 2, bank preparation (National Bank of Egypt): the data the bank needs, by who supplies it. The case can be marked ready for the bank
+     only when every required field is complete. */
   function readinessCard(c) {
     const r = U.readiness(c); if (!r) return '';
+    if (r.unsupported) return `<section class="card sec"><div class="sec-h"><div class="ptitle"><h2>Bank preparation</h2><span class="sc neu">Not available yet</span></div></div><p style="margin:0;color:var(--cadet-base)">Preparing the data for ${esc(r.bank)} is not built yet. Only National Bank of Egypt is available for now.</p></section>`;
     const input = f => {
       const id = 'bf-' + f.k, cls = 'inp' + (f.required && !f.done ? ' bad' : '');
-      const ctl = !f.editable ? `<div class="bv">${f.value ? esc(f.value) : '<span style="color:var(--cadet-base)">' + (f.auto ? 'Not available' : 'Not set') + '</span>'}</div>`
+      const ctl = !f.editable ? `<div class="bv">${f.value ? esc(f.value) : '<span style="color:var(--cadet-base)">' + (f.auto ? 'Not set in Bank settings' : 'Not set') + '</span>'}</div>`
         : f.type === 'select' ? `<select class="sel" id="${id}" data-bf="${f.k}"><option value="">Select</option>${f.options.map(o => `<option ${o === f.value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
         : `<input class="${cls}" id="${id}" data-bf="${f.k}" value="${esc(f.value)}">`;
       return `<div class="fld${f.wide ? ' wide' : ''}"><label for="${id}">${esc(f.label)}${f.required ? '' : ' <span class="opt">(optional)</span>'}${f.auto ? ' <span class="tag">Auto</span>' : ''}</label>${ctl}</div>`;
     };
     const block = g => g.fields.length ? `<div class="rg"><h3>${esc(g.title)}</h3><p>${esc(g.note)}</p><div class="fgrid">${g.fields.map(input).join('')}</div></div>` : '';
-    return `<section class="card sec"><div class="sec-h"><div class="ptitle"><h2>Bank readiness</h2><span class="sc ${r.complete ? 'ok' : 'warn'}">${r.complete ? 'Complete' : r.done + ' of ' + r.total + ' required'}</span></div></div>
-      <p style="margin:0;color:var(--cadet-base)">${r.complete ? 'Everything the banks need for this service is in place.' : 'The case cannot be sent to the bank until every required field is complete. Missing: ' + esc(r.missing.join(', ')) + '.'}</p>
-      ${r.groups.filter(g => g.key !== 'bank' || r.sent).map(block).join('')}</section>`;
+    const state = r.prepared ? '<span class="sc ok">Ready for the bank</span>' : r.complete ? '<span class="sc info">Complete</span>' : `<span class="sc warn">${r.done} of ${r.total} required</span>`;
+    const action = r.prepared ? `<span style="font-size:13px;color:var(--cadet-base)">Marked ready by ${esc(r.prepared.by)} on ${esc(r.prepared.at)}</span><button class="btn btn-outline btn-sm" type="button" data-unready="${esc(c.id)}">Reopen</button>`
+      : `<button class="btn btn-primary" type="button" data-ready="${esc(c.id)}" ${r.complete ? '' : 'disabled'}>Mark ready for the bank</button>`;
+    return `<section class="card sec"><div class="sec-h"><div class="ptitle"><h2>Bank preparation · National Bank of Egypt</h2>${state}</div></div>
+      <p style="margin:0;color:var(--cadet-base)">${r.prepared ? 'Every required field is complete and the case is ready for the bank.' : r.complete ? 'Every required field is complete. Mark the case ready for the bank.' : 'Complete every required field before the case can be marked ready for the bank. Missing: ' + esc(r.missing.join(', ')) + '.'}</p>
+      ${r.groups.map(block).join('')}
+      <div class="bar">${action}</div></section>`;
   }
   /* An application can have both kinds of case: a change to the merchant's details and requested services. They stay separate cases;
      this only links to the other kind on the same application. */
@@ -229,12 +235,12 @@
     page.innerHTML = `<div class="wrap">
       <header class="hdr"><div>${crumb(c.caseId)}<h1>${app ? `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` : esc(c.service)}</h1>
         <div class="meta"><span class="tag">${app ? (c.isNew ? 'Application details \u00b7 new' : 'Application details \u00b7 change') : 'Service case'}</span>${app ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
-      ${app || !U.PHASE2 ? '' : phases(c, U.progress(c))}
+      ${app || !U.STEPPER ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
       ${relatedCard(c)}
-      ${app ? '' : readinessCard(c)}
+      ${!app && c.status === 'Bank Submission' ? readinessCard(c) : ''}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
         ${notes.map(n => `<div class="note"><div class="k">${esc(n.by)} · ${esc(C.fmtDate(n.ts))}</div><div>${esc(n.text)}</div></div>`).join('')}</section></div>`;
@@ -258,7 +264,7 @@
     const before = U.get(cid), r = U.settle(cid), c = U.get(cid) || before, no = c ? c.caseId : 'Case', app = c && c.type === 'application';
     if (!r) return render();
     if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
-    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : ' review complete. Moved to Bank Submission.');
+    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : ' review complete. It is now in bank preparation.');
     if (cid === id) go(msg); else { render(); SA.toast(msg); }
   }
   function bind(c) {
@@ -267,6 +273,8 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-ready]').forEach(b => b.onclick = () => { if (U.markReady(U.get(b.dataset.ready))) { render(); SA.toast('Marked ready for the bank'); } });
+    q('[data-unready]').forEach(b => b.onclick = () => { U.unmarkReady(U.get(b.dataset.unready)); render(); SA.toast('Bank preparation reopened'); });
     q('[data-bf]').forEach(e => e.onchange = () => { U.setField(c, e.dataset.bf, e.value); const r = U.settle(c.id); if (r === 'approved' || r === 'rejected') go(c.caseId + (r === 'approved' ? ' approved and sent to the bank' : ' rejected and returned to Sales')); else render(); });
     q('[data-view]').forEach(b => b.onclick = () => SA.drawer({ size: 'xl', title: esc(b.dataset.l), sub: esc(b.dataset.view), render(api) { api.body.innerHTML = `<div class="fprev fprev-lg">${icon('doc', 'ic-24')}<b>${esc(b.dataset.view)}</b><span class="hint">Preview of the uploaded file. The prototype does not store real files.</span></div>`; api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-dl-d="${esc(b.dataset.view)}">${icon('download', 'ic')}Download</button>`; api.foot.querySelector('[data-dl-d]').onclick = () => save(b.dataset.view); } }));
     q('[data-dl]').forEach(b => b.onclick = () => save(b.dataset.dl));
