@@ -379,7 +379,7 @@ window.UW = (function () {
   /* The Cases list shows these next to the application cases, in the same row shape. */
   const LIST_STATUS = { 'Underwriting Review': 'submitted', 'Bank Submission': 'pending-configurations', Rejected: 'rejected', Live: 'live', Approved: 'approved' };
   function asCases() {
-    return all().map(c => ({ svcId: c.id, sales: true, kind: c.type, isNew: c.isNew, status: LIST_STATUS[c.status], salesStatus: c.status, no: c.caseId, mid: c.mid, assignee: c.assignee, since: c.since, resubmission: '',
+    return all().map(c => ({ svcId: c.id, sales: true, kind: c.type, isNew: c.isNew, status: LIST_STATUS[c.status], salesStatus: c.status, no: c.caseId, mid: c.mid, industry: c.industry, assignee: c.assignee, since: c.since, resubmission: '',
       app: { id: c.appId, biz: c.merchant.name, actor: c.submittedBy, summary: { email: c.merchant.email, serviceConfigs: c.type === 'service' ? [{ service: c.service, configs: c.banks.map(b => ({ bank: b })) }] : [] } },
       service: c.service, href: 'sales-case.html?id=' + encodeURIComponent(c.id) }));
   }
