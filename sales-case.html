@@ -84,7 +84,7 @@
   const { icon, esc } = SA, C = Cases, U = UW;
   const id = new URLSearchParams(location.search).get('id');
   const me = C.user();
-  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
+  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'warn', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
   const sc = s => `<span class="sc ${CHIP[s] || 'neu'}">${esc(U.STATUS[s] ? U.STATUS[s].label : s)}</span>`;
   const tierName = k => k === 'local' ? 'Local rates' : k.indexOf('intl-') === 0 ? 'International · ' + k.slice(5) : k.replace(/-/g, ' ');
   const dl = rows => `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v && v.html ? v.html : v == null || v === '' ? '—' : esc(v)}</dd>`).join('')}</dl>`;
@@ -176,16 +176,18 @@
     const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
       : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the ${c.type === 'update' ? 'service' : 'application'}.</div>`
       : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved.${U.PHASE2 ? ' The case is now in bank preparation.' : ''}</div>`
-      : c.status === 'Live' ? `<div class="info ok"><b>Live${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> This service is now worked from the Merchant module.</div>` : '';
+      : c.status === 'Live' ? `<div class="info ok"><b>Completed${c.liveSince ? ' on ' + esc(c.liveSince) : ''}.</b> Underwriting approved this case.</div>` : '';
     if (nested) {
       const what = c.changes.map(x => x.label).join(', ');
       return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
+    const left = p.list.filter(x => x.state === 'todo').length, nOk = p.list.filter(x => x.state === 'ok').length, nBad = p.list.filter(x => x.state === 'flag').length;
+    const submitBar = open ? `<div class="bar"><span class="st">${nOk} approved \u00b7 ${nBad} rejected \u00b7 ${left} left to decide</span><button class="btn ${nBad ? 'btn-danger' : 'btn-primary'}" type="button" data-submit="${esc(c.id)}" ${left ? 'disabled' : ''}>Submit decision</button></div>` : '';
     const block = '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
       <div style="display:flex;gap:8px;align-items:center"></div></div>
       ${app ? `<p style="margin:0;color:var(--cadet-base)">${esc(c.type === 'update' ? 'Changes to a service that is already active. Nothing changes until every item is approved.' : c.kind === 'payout' ? (c.isNew ? 'The payout method, submitted for the first time. There are no earlier values to compare with. Check it against the bank account proof.' : 'A change to the payout method. Nothing is applied until every item is approved. Check the new account against the bank account proof.') : (c.isNew ? 'The business details, submitted for the first time. There are no earlier values to compare with. Check them against the documents.' : 'A change to the business details (KYB/KYC). Nothing is applied until every item is approved. Check it against the supporting documents.'))}</p>` : ''}
-      ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
+      ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div>${submitBar}</section>`;
   }
   /* Bank preparation for NBE, as three steps: fill in what is missing, mark the case ready, download the forms. Only the missing fields are shown
      first; what is already filled in is folded away. */
@@ -249,6 +251,14 @@
   }
   /* An application can have both kinds of case: a change to the merchant's details and requested services. They stay separate cases;
      this only links to the other kind on the same application. */
+  /* What to do now, in one line. */
+  function todoLine(c) {
+    if (c.status !== 'Underwriting Review') return '';
+    const p = U.progress(c), left = p.list.filter(x => x.state === 'todo').length, bad = p.list.filter(x => x.state === 'flag').length;
+    const msg = left ? `Decide ${left} item${left === 1 ? '' : 's'}, then press <b>Submit decision</b>. Nothing closes until you submit.`
+      : bad ? 'Every item is decided. Press <b>Submit decision</b> to return the case to Sales with your reasons.' : 'Every item is decided. Press <b>Submit decision</b> to approve the case.';
+    return `<div class="info" role="status"><b>What to do:</b> ${msg}</div>`;
+  }
   function relatedCard(c) {
     const list = U.related(c); if (!list.length) return '';
     return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Other cases on this application</h2><p>Each case is reviewed on its own.</p></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.type === 'application' ? r.changes.map(x => x.label).join(', ') : r.service)}</span><span class="f">${esc(r.caseId)} · ${esc(r.caseType)}</span></div><div class="a">${sc(r.status)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
@@ -282,6 +292,7 @@
     page.innerHTML = `<div class="wrap">
       <header class="hdr"><div>${crumb(c.caseId)}<h1>${titleIsBusiness ? `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` : esc(c.service)}</h1>
         <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
+      ${todoLine(c)}
       ${app || !U.STEPPER ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
@@ -307,13 +318,21 @@
         y.onclick = () => { U.setReview(U.get(cid), key, 'flag', t.value.trim()); api.close(); decided(cid); };
       } });
   }
-  /* After each decision: once every item of a case is decided, that case settles itself. */
-  function decided(cid) {
-    const before = U.get(cid), r = U.settle(cid), c = U.get(cid) || before, no = c ? c.caseId : 'Case', app = c && c.type !== 'service';
+  /* The flow: decide every item (Approve or Reject), then press "Submit decision". Nothing closes until you submit. */
+  const OUTCOME = c => c.type === 'update' ? 'The changes are applied to the service and the case is completed.' : c.type === 'application' ? (c.kind === 'payout' ? 'The payout method is updated and the case is completed.' : 'The details are updated and the case is completed.')
+    : (U.PHASE2 ? 'The case moves on to bank preparation.' : 'The service request is completed.');
+  function decided() { render(); }
+  function submitModal(cid) {
+    const c = U.get(cid), p = U.progress(c), ok = p.list.filter(x => x.state === 'ok'), bad = p.list.filter(x => x.state === 'flag');
+    SA.modal({ title: 'Submit your decision?', sub: esc(c.caseId) + ' \u00b7 ' + esc(c.caseType),
+      body: `<p style="margin:0"><b>${ok.length} approved, ${bad.length} rejected.</b></p>${bad.length ? `<ul style="margin:0;padding-inline-start:18px">${bad.map(x => `<li>${esc(x.label)}: ${esc(x.reason)}</li>`).join('')}</ul>` : ''}<p style="margin:0">${bad.length ? 'The case returns to Sales with these reasons.' : esc(OUTCOME(c))}</p>`,
+      foot: `<button type="button" class="btn btn-outline" data-n>Go back</button><button type="button" class="btn ${bad.length ? 'btn-danger' : 'btn-primary'}" data-y>Submit decision</button>`,
+      bind(api) { api.el.querySelector('[data-n]').onclick = api.close; api.el.querySelector('[data-y]').onclick = () => { api.close(); finish(cid); }; } });
+  }
+  function finish(cid) {
+    const before = U.get(cid), r = U.settle(cid), c = U.get(cid) || before, no = c ? c.caseId : 'Case';
     if (!r) return render();
-    if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
-    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : (U.PHASE2 ? ' review complete. It is now in bank preparation.' : ' review complete. Moved to Bank Submission.'));
-    if (cid === id) go(msg); else { render(); SA.toast(msg); }
+    go(r === 'rejected' ? no + ' rejected and returned to Sales' : no + ' approved. ' + OUTCOME(c));
   }
   function bind(c) {
     const q = s => document.querySelectorAll(s), one = s => document.querySelector(s);
@@ -321,6 +340,7 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-submit]').forEach(b => b.onclick = () => submitModal(b.dataset.submit));
     q('[data-bmbatch]').forEach(b => b.onclick = () => UWBM.open(() => render()));
     q('[data-sent]').forEach(b => b.onclick = () => { const v = i => (document.getElementById(i) || {}).value; if (U.markSent(U.get(b.dataset.sent), v('sentBatch'), v('sentRef'))) { render(); SA.toast('Marked as sent to the bank'); } });
     q('[data-answer]').forEach(b => b.onclick = () => {

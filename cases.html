@@ -112,9 +112,9 @@
 (function () {
   const { icon, esc } = SA, C = Cases, U = UW;
   const TODAY = '2026-10-21';
-  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok', 'Completed Case': 'ok' };
-  const NAME = { submitted: 'Underwriting Review', 'pending-configurations': 'Bank Submission', rejected: 'Rejected', live: 'Completed Case', approved: 'Completed Case' };
-  const STATUSES = ['Underwriting Review', 'Completed Case'];
+  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'warn', 'Pending Case': 'warn', 'Bank Submission': 'ok2', Rejected: 'bad', 'Rejected Case': 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok', 'Completed Case': 'ok' };
+  const NAME = { submitted: 'Pending Case', 'pending-configurations': 'Bank Submission', rejected: 'Rejected Case', live: 'Completed Case', approved: 'Completed Case' };
+  const STATUSES = ['Pending Case', 'Completed Case'];
   const TYPES = ['Service Activation Request', 'Service Update', 'Change KYB/KYC', 'Change Payout Method'];
   const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
   const me = C.user();

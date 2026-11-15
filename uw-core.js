@@ -22,9 +22,9 @@ window.UW = (function () {
   const CLOCK = new Date('2026-10-21T12:00:00').getTime();        // the sales prototype's "now", so waiting times agree
   const SLA = { 'Underwriting Review': 72, 'Bank Submission': 120 };
   const STATUS = {
-    'Underwriting Review': { tone: 'warning', label: 'Underwriting Review' },
+    'Underwriting Review': { tone: 'warning', label: 'Pending Case' },        // the words of the application's own statuses: Has Pending Cases, Has Rejected Cases, Cases Completed
     'Bank Submission': { tone: 'neutral', label: 'Bank Submission' },
-    Rejected: { tone: 'negative', label: 'Rejected' },
+    Rejected: { tone: 'negative', label: 'Rejected Case' },
     Live: { tone: 'positive', label: 'Completed Case' },
     Approved: { tone: 'positive', label: 'Completed Case' },
   };
@@ -353,7 +353,9 @@ window.UW = (function () {
     u.status = 'Rejected'; u.reject = { source: 'uw', by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() }; u.since = new Date(CLOCK).toISOString();
     addLog(s, u.key, 'rejected the service update', 'xcircle', comment); save(s); return true;
   }
-  const approve = c => c.type === 'update' ? approveUpdate(c) : c.type === 'application' ? approveKyc(c) : move(c, 'Bank Submission', {}, 'approved the ' + c.service + ' case and sent it to the bank', 'Underwriting review completed.');
+  const approve = c => c.type === 'update' ? approveUpdate(c) : c.type === 'application' ? approveKyc(c)
+    : PHASE2 ? move(c, 'Bank Submission', {}, 'approved the ' + c.service + ' case and sent it to the bank', 'Underwriting review completed.')
+    : move(c, 'Live', { liveSince: new Date(CLOCK).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }, 'approved the ' + c.service + ' activation request', 'Underwriting review completed. The case is completed.');
   function reject(c, comment) {
     if (c.type === 'update') return rejectUpdate(c, comment);
     if (c.type === 'application') return rejectKyc(c, comment);
