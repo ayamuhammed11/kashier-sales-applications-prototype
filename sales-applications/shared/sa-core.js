@@ -891,6 +891,11 @@
     const r = (S.cases[id] || {}).reject || {}, uw = r.source === 'uw';
     return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by ${uw ? 'the Underwriting team' : `${esc(r.by)} (${esc(r.role)})`}</b>${r.comment ? `<p>${esc(r.comment)}</p>` : ''}<p class="rj-h">${uw ? 'Fix what the Underwriting team asked for, then resubmit this case.' : 'Change the rejected rate, then resubmit this case.'}</p></div></div>`;
   }
+  /* The bank is waiting for the merchant (recorded by the Underwriting team): what it asked for. */
+  function waitBox(id) {
+    const w = (S.cases[id] || {}).waiting; if (!w) return '';
+    return `<div class="rj-box wt">${icon('clock', 'ic-16')}<div><b>Action needed: ${esc(w.bank)} is waiting for the merchant</b>${w.comment ? `<p>${esc(w.comment)}</p>` : ''}<p class="rj-h">Get this from the merchant and send it to the Underwriting team.</p></div></div>`;
+  }
   /* A row in the profile's case list: ID, service and status. Opening it shows the whole case. */
   function caseRow(id) {
     const st = caseStatus(id), c = S.cases[id] || {}, svc = S.svc[id];
@@ -903,7 +908,7 @@
       : cx ? `<button type="button" class="btn btn-outline btn-sm" data-act="reopen" data-id="${esc(id)}">Reopen Case</button>${view}`
       : view;
     return `<div class="crow ${draft ? 'draft' : ''} ${cx ? 'cx' : ''}" id="case-${id.replace(/\W/g, '')}"><div class="crow-m"><div class="crow-t">${c.caseId ? `<span class="cid">${esc(c.caseId)}</span>` : ''}<span class="tag info">${chOf(id)}</span><b>${esc(nmOf(id))}</b>${draft ? '<span class="sc neu">Not submitted</span>' : caseChip(id)}${waitPill(id)}</div>
-      ${note ? `<div class="crow-n">${note}</div>` : ''}${rej ? rejectBox(id) : ''}</div><div class="crow-a">${acts}</div></div>`;
+      ${note ? `<div class="crow-n">${note}</div>` : ''}${rej ? rejectBox(id) : ''}${st === 'Bank Submission' ? waitBox(id) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   /* The merchant identity card: a submitted application (sub) or a new one from the CRM lead. */
   const kycOpen = () => S.kyc.some(k => ['Underwriting Review', 'Rejected'].includes(k.status));
@@ -943,7 +948,7 @@
         : st === 'Rejected' ? 'Returned to the salesperson.' : `Submitted on ${esc(S.submittedAt)}. View only.`;
       const act = st === 'Live' ? '' : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-cd="reopen">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="cancel">Cancel Case</button>`;
       caseDr.api.setTitle(`${esc(label(id))}`, `${esc(c.caseId || '')} · ${esc(S.merchant.name)}`);
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}</div><p class="case-n">${note}</p>${st === 'Rejected' ? rejectBox(id) + '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>' : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}</div><p class="case-n">${note}</p>${st === 'Bank Submission' ? waitBox(id) : ''}${st === 'Rejected' ? rejectBox(id) + '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>' : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${caseDr.tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${caseDr.tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === id || !e.id).length}</span></button></div>
         ${caseDr.tab === 'log' ? `<section class="cd-s">${caseLogHTML(id)}</section>` : `${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>

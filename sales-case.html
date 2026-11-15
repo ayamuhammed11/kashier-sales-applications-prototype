@@ -31,6 +31,9 @@
   /* compact pop-ups */
   .modal { max-width: 420px; } .modal .mh { padding: 16px 20px 4px; } .modal h2 { font-size: 18px; } .modal .mb { padding: 4px 20px 8px; gap: 8px; } .modal .mf { padding: 8px 20px 16px; } .modal textarea.inp { min-height: 64px; } .modal .hint { font-size: 12px; }
   .files { display: flex; flex-direction: column; gap: 8px; margin-block-start: 6px; } .fitem { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; } .fitem .fnm { font-size: 13px; color: var(--cadet-base); overflow-wrap: anywhere; flex: 1; min-width: 140px; }
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; } .steps li { display: flex; gap: 12px; align-items: flex-start; } .steps .d { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; flex-shrink: 0; background: var(--muted); color: var(--cadet-base); border: 1px solid var(--border); } .steps b { display: block; } .steps .s { display: block; font-size: 13px; color: var(--cadet-base); }
+  .steps .now .d { background: var(--primary); color: var(--white); border-color: var(--primary); } .steps .done .d { background: var(--lemon-10); color: var(--lemon-80); border-color: var(--lemon-20); } .steps .later b, .steps .later .s { color: var(--cadet-base); }
+  details.rg summary { cursor: pointer; font-weight: 600; font-size: 15px; }
   .rg { border-top: 1px solid var(--border-subtle); padding-top: 16px; display: flex; flex-direction: column; gap: 8px; } .rg h3 { font-size: 16px; } .rg p { margin: 0; font-size: 13px; color: var(--cadet-base); }
   .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; } .fgrid .wide { grid-column: 1 / -1; } @media (max-width: 640px) { .fgrid { grid-template-columns: 1fr; } }
   .bv { min-height: 40px; display: flex; align-items: center; padding: 0 12px; background: var(--muted); border-radius: var(--radius); overflow-wrap: anywhere; } .inp.bad { border-color: var(--destructive); }
@@ -63,7 +66,13 @@
 <script src="sales-applications/shared/sa-core.js"></script>
 <script src="rate-decisions.js"></script>
 <script src="cases-core.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="void 0"></script>
+<script src="nbe-defaults.js" onerror="void 0"></script>
+<script src="nbe-export.js" onerror="void 0"></script>
+<script src="bm-defaults.js" onerror="void 0"></script>
+<script src="bm-export.js" onerror="void 0"></script>
 <script src="uw-core.js"></script>
+<script src="uw-bm.js"></script>
 <script>
 /* One case page for both kinds of case, kept simple: the case info, then one block per part. A service case has two phases (review,
    then bank preparation); only the review is built, the bank preparation is postponed (UW.PHASE2).
@@ -166,7 +175,7 @@
     const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type === 'application';
     const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
       : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the application.</div>`
-      : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved. The case is now in bank preparation.</div>`
+      : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved.${U.PHASE2 ? ' The case is now in bank preparation.' : ''}</div>`
       : c.status === 'Live' ? `<div class="info ok"><b>Live${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> This service is now worked from the Merchant module.</div>` : '';
     if (nested) {
       const what = c.changes.map(x => x.label).join(', ');
@@ -174,30 +183,69 @@
     }
     const block = '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
-      <div style="display:flex;gap:8px;align-items:center">${U.BANK_RESPONSE && c.status === 'Bank Submission' ? `<button class="btn btn-primary" type="button" data-live="${esc(c.id)}">Mark live</button>` : ''}</div></div>
+      <div style="display:flex;gap:8px;align-items:center"></div></div>
       ${app ? (c.isNew ? '<p style="margin:0;color:var(--cadet-base)">The application\'s business details and payout method, submitted for the first time. There are no earlier values to compare with.</p>' : '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>') : ''}
       ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
   }
-  /* Phase 2, bank preparation (National Bank of Egypt): the data the bank needs, by who supplies it. The case can be marked ready for the bank
-     only when every required field is complete. */
+  /* Bank preparation for NBE, as three steps: fill in what is missing, mark the case ready, download the forms. Only the missing fields are shown
+     first; what is already filled in is folded away. */
   function readinessCard(c) {
     const r = U.readiness(c); if (!r) return '';
-    if (r.unsupported) return `<section class="card sec"><div class="sec-h"><div class="ptitle"><h2>Bank preparation</h2><span class="sc neu">Not available yet</span></div></div><p style="margin:0;color:var(--cadet-base)">Preparing the data for ${esc(r.bank)} is not built yet. Only National Bank of Egypt is available for now.</p></section>`;
+    if (r.unsupported) return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Bank preparation</h2></div></div><p style="margin:0;color:var(--cadet-base)">Preparing the data for ${esc(r.bank)} is not built yet.</p></section>`;
+    const all = [].concat.apply([], r.groups.map(g => g.fields.map(f => Object.assign({ grp: g.key }, f))));
+    const typed = all.filter(f => !f.auto), auto = all.filter(f => f.auto);
+    const missing = typed.filter(f => f.required && !f.done), filled = typed.filter(f => !(f.required && !f.done)), autoMissing = auto.filter(f => f.required && !f.done);
+    const WHO = { merchant: 'Merchant', service: 'This service' };
     const input = f => {
       const id = 'bf-' + f.k, cls = 'inp' + (f.required && !f.done ? ' bad' : '');
-      const ctl = !f.editable ? `<div class="bv">${f.value ? esc(f.value) : '<span style="color:var(--cadet-base)">' + (f.auto ? 'Not set in Bank settings' : 'Not set') + '</span>'}</div>`
+      const ctl = !f.editable ? `<div class="bv">${f.value ? esc(f.value) : '<span style="color:var(--cadet-base)">Not set</span>'}</div>`
         : f.type === 'select' ? `<select class="sel" id="${id}" data-bf="${f.k}"><option value="">Select</option>${f.options.map(o => `<option ${o === f.value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
         : `<input class="${cls}" id="${id}" data-bf="${f.k}" value="${esc(f.value)}">`;
-      return `<div class="fld${f.wide ? ' wide' : ''}"><label for="${id}">${esc(f.label)}${f.required ? '' : ' <span class="opt">(optional)</span>'}${f.auto ? ' <span class="tag">Auto</span>' : ''}</label>${ctl}</div>`;
+      return `<div class="fld${f.wide ? ' wide' : ''}"><label for="${id}">${esc(f.label)}${f.required ? '' : ' <span class="opt">(optional)</span>'}${f.auto ? ' <span class="tag">Auto</span>' : f.grp ? ` <span class="tag">${WHO[f.grp] || ''}</span>` : ''}</label>${ctl}</div>`;
     };
-    const block = g => g.fields.length ? `<div class="rg"><h3>${esc(g.title)}</h3><p>${esc(g.note)}</p><div class="fgrid">${g.fields.map(input).join('')}</div></div>` : '';
-    const state = r.prepared ? '<span class="sc ok">Ready for the bank</span>' : r.complete ? '<span class="sc info">Complete</span>' : `<span class="sc warn">${r.done} of ${r.total} required</span>`;
-    const action = r.prepared ? `<span style="font-size:13px;color:var(--cadet-base)">Marked ready by ${esc(r.prepared.by)} on ${esc(r.prepared.at)}</span><button class="btn btn-outline btn-sm" type="button" data-unready="${esc(c.id)}">Reopen</button>`
+    const exp = !!U.exported(c), done1 = !missing.length && !autoMissing.length, done2 = !!r.prepared, done3 = !!r.sent, waitM = !!(r.answer && r.answer.decision === 'Waiting for the merchant');
+    const step = (n, title, state, hint) => `<li class="${state}"><span class="d">${state === 'done' ? icon('check', 'ic-14') : n}</span><div><b>${title}</b><span class="s">${hint}</span></div></li>`;
+    const left = missing.length + autoMissing.length;
+    const steps = `<ol class="steps">${step(1, 'Fill in what is missing', done1 ? 'done' : 'now', done1 ? 'Nothing is missing.' : left + ' field' + (left === 1 ? '' : 's') + ' to fill in below.')}
+      ${step(2, 'Mark the case ready for the bank', done2 ? 'done' : done1 ? 'now' : 'later', done2 ? 'Marked ready.' : done1 ? 'Press the button at the bottom.' : 'Available once nothing is missing.')}
+      ${step(3, r.bankKey === 'BM' ? 'Send it in the Bank Misr batch' : 'Download the NBE forms and send them to the bank', done3 ? 'done' : done2 ? 'now' : 'later', done3 ? 'Sent to the bank.' : done2 ? (r.bankKey === 'BM' ? 'Open the Bank Misr batch below and send it with the other ready cases.' : 'Download the forms below, send them to NBE, then press "Mark as sent".') : 'Available once the case is ready.')}
+      ${step(4, 'Record the bank\'s answer', done3 ? 'now' : 'later', waitM ? 'The bank is waiting for the merchant.' : done3 ? 'Choose what ' + r.bank + ' answered.' : 'Available once the case is sent.')}</ol>`;
+    const rest = filled.concat(auto.filter(f => !(f.required && !f.done)));
+    const action = r.prepared ? `<span style="font-size:13px;color:var(--cadet-base)">Marked ready by ${esc(r.prepared.by)} on ${esc(r.prepared.at)}</span>${r.sent ? '' : `<button class="btn btn-outline btn-sm" type="button" data-unready="${esc(c.id)}">Reopen</button>`}`
       : `<button class="btn btn-primary" type="button" data-ready="${esc(c.id)}" ${r.complete ? '' : 'disabled'}>Mark ready for the bank</button>`;
-    return `<section class="card sec"><div class="sec-h"><div class="ptitle"><h2>Bank preparation · National Bank of Egypt</h2>${state}</div></div>
-      <p style="margin:0;color:var(--cadet-base)">${r.prepared ? 'Every required field is complete and the case is ready for the bank.' : r.complete ? 'Every required field is complete. Mark the case ready for the bank.' : 'Complete every required field before the case can be marked ready for the bank. Missing: ' + esc(r.missing.join(', ')) + '.'}</p>
-      ${r.groups.map(block).join('')}
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Prepare this case for the bank (${esc(r.bank)})</h2><p>${esc(r.bank)} needs some details about the business. Follow the four steps.</p></div></div>${steps}
+      ${missing.length ? `<div class="rg"><h3>Fill in what is missing (${missing.length})</h3><p>These were not in the sales application. Type them here.</p><div class="fgrid">${missing.map(input).join('')}</div></div>` : ''}
+      ${autoMissing.length ? `<div class="info bad"><b>Not set in Bank settings:</b> ${esc(autoMissing.map(f => f.label).join(', '))}. <a class="linkb" href="bank-settings.html">Open Bank settings</a></div>` : ''}
+      ${rest.length ? `<details class="rg"><summary>Already filled in (${rest.length})</summary><div class="fgrid" style="margin-block-start:12px">${rest.map(input).join('')}</div></details>` : ''}
       <div class="bar">${action}</div></section>`;
+  }
+  /* The bank's own forms, filled from the case. Available once the case is ready for the bank; the forms themselves (and Kashier's fixed values)
+     are kept out of the public prototype, so there the export is hidden instead of failing. */
+  function formsCard(c) {
+    const r = U.readiness(c); if (!r || r.unsupported || !r.prepared || r.bankKey !== 'NBE') return '';
+    if (!window.NBEExport || !NBEExport.available()) return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>NBE forms</h2></div></div><p style="margin:0;color:var(--cadet-base)">The bank's forms are not available on this site. They are kept out of the public prototype.</p></section>`;
+    const inp = U.nbeInput(c), packs = inp ? NBEExport.review(inp.c, inp.saved) : [];
+    if (!packs.length) return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>NBE forms</h2></div></div><p style="margin:0;color:var(--cadet-base)">The NBE forms cover a Card service on PF. This service has none.</p></section>`;
+    const files = [].concat.apply([], packs.map(p => p.files.map(f => Object.assign({ pack: p }, f))));
+    const last = U.exported(c);
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>NBE forms</h2><p>The bank's own forms, filled from this case. Download them to send to the bank.</p></div><button class="btn btn-primary btn-sm" type="button" data-nbeall="${esc(c.id)}">${icon('download', 'ic')}Download all (${files.length})</button></div>
+      <div>${files.map(f => `<div class="row"><div class="i"><span class="n">${esc(f.name)}</span><span class="f">${esc(f.pack.title)} · ${f.filled} of ${f.rows.length} fields filled${f.missing.length ? '' : ''}</span>${f.missing.length ? `<span class="f bad">Missing: ${esc(f.missing.map(m => m.label).join(', '))}</span>` : ''}</div><div class="a"><button class="btn btn-outline btn-sm" type="button" data-nbe="${esc(f.id)}" data-case="${esc(c.id)}">${icon('download', 'ic')}Download</button></div></div>`).join('')}</div>
+      ${last ? `<p style="margin:0;font-size:13px;color:var(--cadet-base)">Last exported by ${esc(last.by)} on ${esc(last.at)}: ${esc(last.files.join(', '))}</p>` : ''}</section>`;
+  }
+  /* Steps 3 and 4: the case was sent to NBE, and NBE answers. Approved completes the case; rejected returns it to Sales with the bank's reason;
+     waiting for the merchant keeps it here with what the bank asked for. */
+  function answerCard(c) {
+    const r = U.readiness(c); if (!r || r.unsupported || !r.prepared || !U.BANK_RESPONSE) return '';
+    if (!r.sent && r.bankKey === 'BM') return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Bank Misr batch</h2><p>Bank Misr takes the day's ready cases together, in one set of its sheets. This case goes out in the next batch.</p></div><button class="btn btn-primary" type="button" data-bmbatch>Open the Bank Misr batch (${U.bmReady().length})</button></div></section>`;
+    if (!r.sent) return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Send to the bank</h2><p>Send the downloaded forms to ${esc(r.bank)}, then press "Mark as sent". The batch number and reference are optional.</p></div></div>
+      <div class="fgrid"><div class="fld"><label for="sentBatch">Bank batch number <span class="opt">(optional)</span></label><input class="inp" id="sentBatch"></div><div class="fld"><label for="sentRef">Bank reference <span class="opt">(optional)</span></label><input class="inp" id="sentRef"></div></div>
+      <div class="bar"><span></span><button class="btn btn-primary" type="button" data-sent="${esc(c.id)}">Mark as sent to the bank</button></div></section>`;
+    const a = r.answer;
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>The bank's answer</h2><p>Sent to ${esc(r.bank)} by ${esc(r.sent.by)} on ${esc(r.sent.at)}${r.sent.batch ? ' · batch ' + esc(r.sent.batch) : ''}${r.sent.ref ? ' · reference ' + esc(r.sent.ref) : ''}.</p></div></div>
+      ${a ? `<div class="info"><b>${esc(a.decision)}</b>${a.comment ? ': ' + esc(a.comment) : ''}<br><span style="font-size:13px;color:var(--cadet-base)">Recorded by ${esc(a.by)} on ${esc(a.at)}</span></div>${r.waiting && r.waiting.notified && r.waiting.notified.length ? `<div class="info" style="margin-block-start:8px"><b>Sales was notified by email</b> on ${esc(r.waiting.at)}: ${esc(r.waiting.notified.join(', '))}. <a class="linkb" href="emails.html">Read the email</a></div>` : ''}` : '<p style="margin:0;color:var(--cadet-base)">No answer yet. Record it here when NBE replies.</p>'}
+      <div class="fgrid"><div class="fld"><label for="ansSel">What did ${esc(r.bank)} answer?</label><select class="sel" id="ansSel"><option value="">Choose</option><option>Approved</option><option>Rejected</option><option>Waiting for the merchant</option></select></div>
+        <div class="fld wide"><label for="ansComment">Bank's comment <span class="opt" id="ansHint">(needed for Rejected and Waiting for the merchant)</span></label><textarea class="inp" id="ansComment" rows="2" placeholder="What did the bank say?"></textarea></div></div>
+      <div class="bar"><span style="font-size:13px;color:var(--cadet-base)">Approved completes the case. Rejected returns it to Sales.</span><button class="btn btn-primary" type="button" data-answer="${esc(c.id)}">Save the bank's answer</button></div></section>`;
   }
   /* An application can have both kinds of case: a change to the merchant's details and requested services. They stay separate cases;
      this only links to the other kind on the same application. */
@@ -240,7 +288,7 @@
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
       ${relatedCard(c)}
-      ${!app && c.status === 'Bank Submission' ? readinessCard(c) : ''}
+      ${!app && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
         ${notes.map(n => `<div class="note"><div class="k">${esc(n.by)} · ${esc(C.fmtDate(n.ts))}</div><div>${esc(n.text)}</div></div>`).join('')}</section></div>`;
@@ -264,7 +312,7 @@
     const before = U.get(cid), r = U.settle(cid), c = U.get(cid) || before, no = c ? c.caseId : 'Case', app = c && c.type === 'application';
     if (!r) return render();
     if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
-    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : ' review complete. It is now in bank preparation.');
+    const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : (U.PHASE2 ? ' review complete. It is now in bank preparation.' : ' review complete. Moved to Bank Submission.'));
     if (cid === id) go(msg); else { render(); SA.toast(msg); }
   }
   function bind(c) {
@@ -273,6 +321,32 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-bmbatch]').forEach(b => b.onclick = () => UWBM.open(() => render()));
+    q('[data-sent]').forEach(b => b.onclick = () => { const v = i => (document.getElementById(i) || {}).value; if (U.markSent(U.get(b.dataset.sent), v('sentBatch'), v('sentRef'))) { render(); SA.toast('Marked as sent to the bank'); } });
+    q('[data-answer]').forEach(b => b.onclick = () => {
+      const cc = U.get(b.dataset.answer), d = document.getElementById('ansSel').value, t = document.getElementById('ansComment').value.trim();
+      if (!d) { SA.toast('Choose what NBE answered'); return; }
+      if (d !== 'Approved' && !t) { SA.toast('Write the bank\'s comment first'); return; }
+      const r = U.recordAnswer(cc, d, t);
+      if (r === 'approved') go(cc.caseId + ' approved by ' + (U.readiness(cc) || {}).bank + '. It is now a completed case.');
+      else if (r === 'rejected') go(cc.caseId + ' rejected by ' + (U.readiness(cc) || {}).bank + ' and returned to Sales');
+      else if (r === 'waiting') { render(); SA.toast('Recorded: NBE is waiting for the merchant'); }
+    });
+    q('[data-nbe]').forEach(b => b.onclick = async () => {
+      const cc = U.get(b.dataset.case), inp = U.nbeInput(cc);
+      try {
+        const pack = NBEExport.packsFor(inp.c).find(p => p.files.some(f => f.id === b.dataset.nbe)), f = pack.files.find(x => x.id === b.dataset.nbe), name = NBEExport.fileName(inp.c, f, pack);
+        NBEExport.save(await NBEExport.build(inp.c, inp.saved, f.id), name); U.logExport(cc, [name]); SA.toast('Downloaded ' + f.name); render();
+      } catch (e) { SA.toast(e.message || 'The form could not be built'); }
+    });
+    q('[data-nbeall]').forEach(b => b.onclick = async () => {
+      const cc = U.get(b.dataset.nbeall), inp = U.nbeInput(cc), names = [];
+      try {
+        const zip = new JSZip();
+        for (const p of NBEExport.packsFor(inp.c)) for (const f of p.files) { const n = NBEExport.fileName(inp.c, f, p); names.push(n); zip.file(n, await NBEExport.build(inp.c, inp.saved, f.id)); }
+        NBEExport.save(await zip.generateAsync({ type: 'blob' }), 'NBE - ' + cc.merchant.name.replace(/[\\/:*?"<>|]+/g, ' ').trim() + ' - ' + cc.caseId + '.zip'); U.logExport(cc, names); SA.toast('Downloaded ' + names.length + ' forms'); render();
+      } catch (e) { SA.toast(e.message || 'The forms could not be built'); }
+    });
     q('[data-ready]').forEach(b => b.onclick = () => { if (U.markReady(U.get(b.dataset.ready))) { render(); SA.toast('Marked ready for the bank'); } });
     q('[data-unready]').forEach(b => b.onclick = () => { U.unmarkReady(U.get(b.dataset.unready)); render(); SA.toast('Bank preparation reopened'); });
     q('[data-bf]').forEach(e => e.onchange = () => { U.setField(c, e.dataset.bf, e.value); const r = U.settle(c.id); if (r === 'approved' || r === 'rejected') go(c.caseId + (r === 'approved' ? ' approved and sent to the bank' : ' rejected and returned to Sales')); else render(); });
@@ -284,6 +358,7 @@
     const n = one('[data-note]'); if (n) n.onclick = () => { const t = one('#noteTx').value.trim(); if (t) { U.addNote(c, t); render(); } };
   }
   const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
+  window.addEventListener('nbe-ready', () => { try { render(); } catch (e) { /* page not ready */ } });
   SA.mount({ key: 'case', render,
     protoControls: () => `<label class="lbl" for="role">View as</label><select id="role">${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
     bindProto() { document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; } });

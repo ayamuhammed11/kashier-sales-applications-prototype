@@ -9,13 +9,15 @@
    Besides that application, Cases is seeded with a set of demo applications in the same shape ('kashierUwDemoApps'), so the
    list has many cases of every kind on a first visit. Only what the sales app does not have — assignee, review checklist,
    internal notes — lives in 'kashierUwCases'. */
+/* nbe-export.js reads the payout through the Merchant module's currentPayout(app); for a case from here it is the case's own payout. */
+(function () { const K = window.KashierRates; if (!K || !K.currentPayout || K.__uwPatched) return; const orig = K.currentPayout; K.currentPayout = function (app) { return app && app.__uw ? app.payout : orig.apply(this, arguments); }; K.__uwPatched = true; })();
 window.UW = (function () {
   const C = window.Cases, esc = C.esc;
   /* A case has two phases. Phase 1 is the review: the case info, the service with its pricing, documents and contract.
      Phase 2 is the bank preparation (bank readiness, batch, bank decision). It is postponed: the code stays, switched off here. */
-  const PHASE2 = true;                 // phase 2: bank preparation (NBE first)
+  const PHASE2 = false;                // phase 2: bank preparation (NBE and Bank Misr), switched off for now
   const STEPPER = false;               // the two-phase tracker on the case page, hidden for now
-  const BANK_RESPONSE = false;         // the bank's answer and Mark live (a later slice)
+  const BANK_RESPONSE = true;          // the bank's answer: approved completes the case, rejected returns it to Sales
   const SA_KEY = 'sa-dir-final', DEMO_KEY = 'kashierUwDemoApps', STORE = 'kashierUwCases';
   const CLOCK = new Date('2026-10-21T12:00:00').getTime();        // the sales prototype's "now", so waiting times agree
   const SLA = { 'Underwriting Review': 72, 'Bank Submission': 120 };
@@ -28,7 +30,7 @@ window.UW = (function () {
   };
   /* The queue holds what is in Underwriting Review (case review), what is in Bank Submission (bank preparation, phase 2) and what is completed.
      A rejected case is returned to the salesperson, so it leaves the queue. */
-  const SHOWN = ['Underwriting Review', 'Bank Submission', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved'];
+  const SHOWN = PHASE2 ? ['Underwriting Review', 'Bank Submission', 'Live'] : ['Underwriting Review', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved'];
   const chip = st => { const m = STATUS[st] || { tone: 'neutral', label: st }; return '<span class="chip ' + m.tone + '">' + esc(m.label) + '</span>'; };
   const chOf = id => id.split(' ')[0], nmOf = id => id.slice(id.indexOf(' ') + 1), label = id => nmOf(id) + ' (' + chOf(id) + ')';
   const nowStr = () => new Date().toLocaleString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -66,6 +68,7 @@ window.UW = (function () {
       }
       if (chOf(id) === 'POS') app.terminals = app.terminals || '2';
       app.cases[id] = { status: sv.st, caseId: 'CASE-' + (++c), since: iso(sv.h || 20) };
+      if (sv.prep) app.cases[id].prepDemo = sv.prep;
       if (sv.st === 'Rejected') app.cases[id].reject = { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: sv.why, at: '10/19/2026, 02:30:00 PM' };
       if (sv.st === 'Live') app.cases[id].liveSince = '12 Oct 2026';
       if (sv.contract !== false && sv.model === 'PF') app.reqContracts[nm + ' - PF Contract'] = nm.toLowerCase().replace(/\s+/g, '-') + '-pf-contract-signed.pdf';
@@ -91,10 +94,19 @@ window.UW = (function () {
     if (!level) return;
     const n = parseInt(app.appId.slice(-2), 10), pad = (x, len) => String(x).padStart(len, '0');
     app.legal = { legalName: m.name + ' Co.', taxNo: '2' + pad(n * 7919, 8), ownerName: ['Youssef Adel', 'Omar Khalil', 'Salma Hany', 'Mona Adel', 'Laila Mansour', 'Yasmin Farouk'][n % 6] };
-    if (level === 'full') Object.assign(app.legal, { legalForm: 'LLC', crNo: '10' + pad(n * 104729, 7), ownerIdType: 'National ID', ownerIdNo: '290' + pad(n * 9973, 11), ownerNat: 'Egyptian', activity: m.industry + ' merchant, sells to retail customers', addr1: n + ' Main Street', gov: 'Cairo', city: 'Nasr City', country: 'Egypt' });
+    if (level === 'full') Object.assign(app.legal, { activityAr: '\u062a\u062c\u0627\u0631\u0629 \u0627\u0644\u062a\u062c\u0632\u0626\u0629 \u0648\u0627\u0644\u0645\u0633\u062a\u0644\u0632\u0645\u0627\u062a', legalForm: 'LLC', crNo: '10' + pad(n * 104729, 7), ownerIdType: 'National ID', ownerIdNo: '290' + pad(n * 9973, 11), ownerNat: 'Egyptian', activity: m.industry + ' merchant, sells to retail customers', addr1: n + ' Main Street', gov: 'Cairo', city: 'Nasr City', country: 'Egypt' });
     if (level !== 'full') return;
     app.order.forEach(id => {
-      const cs = app.cases[id], b = cs.bank = { avgTicket: '1500', intModel: 'Merchant website', intType: '3P', signatory: app.legal.ownerName, nbeBranch: 'Zamalek', outlet: m.name + ' main outlet', outletCity: 'Cairo', outletAddr: app.legal.addr1 + ', Cairo', delName: app.legal.ownerName, delIdNo: app.legal.ownerIdNo, delNat: 'Egyptian' };
+      const cs = app.cases[id], b = cs.bank = { avgTicket: '1500', intModel: 'Merchant website', intType: '3P', signatory: app.legal.ownerName, bmCity: 'CAIRO', bmDiscountCode: 'M17', posTid: 'KA00' + pad(n * 211, 4), ownerTitle: 'MR', nbeBranch: 'Zamalek', outlet: m.name + ' main outlet', outletCity: 'Cairo', outletAddr: app.legal.addr1 + ', Cairo', delName: app.legal.ownerName, delIdNo: app.legal.ownerIdNo, delNat: 'Egyptian' };
+      if (cs.prepDemo === 'ready') { cs.bankPrepared = { by: 'Rana Adel', at: '11/11/2026, 10:00:00 AM', bank: 'Bank Misr' }; }
+      if (cs.prepDemo && cs.prepDemo !== 'ready') {
+        const who = 'Rana Adel', at = '11/10/2026, 10:00:00 AM';
+        cs.bankPrepared = { by: who, at: at, bank: 'National Bank of Egypt' }; cs.bankExported = { by: who, at: at, files: ['NBE Online - ' + m.name + ' - E-Commerce application form.docx'] };
+        cs.bankSent = { by: who, at: '11/10/2026, 11:30:00 AM', batch: 'NBE-2026-11-' + pad(n, 2), ref: 'HPS-' + pad(n * 417, 6) };
+        if (cs.prepDemo === 'merchant') cs.waiting = { bank: 'National Bank of Egypt', comment: 'NBE asked for a recent utility bill for the business address.', by: who, at: '11/11/2026, 09:15:00 AM', notified: ['Aya Muhammed (Salesperson)', 'Nadia Salah (Sales Manager)'] };
+        if (cs.prepDemo === 'merchant') cs.bankAnswer = { decision: 'Waiting for the merchant', comment: 'NBE asked for a recent utility bill for the business address.', by: who, at: '11/11/2026, 09:15:00 AM' };
+        delete cs.prepDemo;
+      }
       if (cs.status === 'Bank Submission' || cs.status === 'Live') Object.assign(b, { docsStatus: 'Sent', batch: 'BM-2026-10-' + pad(n + 5, 2), ref: 'HPS-' + pad(n * 311, 6), decision: cs.status === 'Live' ? 'Approved' : 'Pending' });
     });
   }
@@ -108,19 +120,19 @@ window.UW = (function () {
     { name: 'Giza Learning Hub', industry: 'Education', email: 'omar@gizalearning.edu', phone: '+20 111 765 4321', by: 'Nour Hamdy', at: '30 Sept 2026', web: 'www.gizalearning.edu', docs: [],
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 12 }, { id: 'Online Valu', model: 'PF', st: 'Underwriting Review', h: 52, sell: 2.2 }] },
     { name: 'Heliopolis Fitness Club', industry: 'Entertainment & Media', email: 'salma@heliofit.com', phone: '+20 122 300 1100', by: 'Aya Muhammed', at: '02 Oct 2026', web: 'www.heliofit.com', store: 'heliofit-front.jpg', docs: DOCS_POS.concat(DOCS_ON),
-      svc: [{ id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 60 }, { id: 'POS Wallet', model: 'PF', st: 'Underwriting Review', h: 26, sell: 1.0 }] },
+      svc: [{ id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 60 }, { id: 'POS Wallet', model: 'PF', st: 'Underwriting Review', h: 26, sell: 1.0 }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 150, prep: 'sent' }] },
     { name: 'Nasr City Bookstore', industry: 'Education', email: 'mona@nasrbooks.com', phone: '+20 109 888 2200', by: 'Karim Zaki', at: '25 Sept 2026', web: 'www.nasrbooks.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Rejected', h: 70, why: 'Tax Identification Card is expired. Upload a valid copy.' }] },
     { name: 'Dokki Dental Clinic', industry: 'Healthcare / Pharmacy', email: 'laila@dokkidental.com', phone: '+20 100 450 7788', by: 'Aya Muhammed', at: '10 Sept 2026', web: 'www.dokkidental.com', docs: DOCS_ON.concat(DOCS_BM),
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Live', h: 300 }, { id: 'Online Bank Installments', model: 'PSP', bank: 'Bank Misr', st: 'Bank Submission', h: 80, rates: { selling: rate(1.4, 1.5) } }] },
     { name: 'Zayed Real Estate', industry: 'Real Estate', email: 'yasmin@zayedre.com', phone: '+20 111 909 3030', by: 'Mostafa Khaled', at: '15 Oct 2026', web: 'www.zayedre.com', docs: DOCS_ON,
-      svc: [{ id: 'Online Card', model: 'PSP', bank: 'CIB', st: 'Underwriting Review', h: 4 }],
+      svc: [{ id: 'Online Card', model: 'PSP', bank: 'CIB', st: 'Underwriting Review', h: 4 }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 40 }],
       kyc: [{ st: 'Underwriting Review', h: 15, changes: [bankChange('CIB', 'Smart Village', '1003998877665')] }] },
     { name: 'Garden City Florist', industry: 'Retail & E-commerce', email: 'heba@gcflorist.com', phone: '+20 100 612 9090', by: 'Nour Hamdy', at: '22 Sept 2026', web: 'www.gcflorist.com', docs: DOCS_ON,
-      svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }],
+      svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 200, prep: 'merchant' }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 90 }],
       kyc: [{ st: 'Underwriting Review', h: 10, changes: [walletAdd] }] },
     { name: 'Ismailia Kids Academy', industry: 'Education', email: 'rasha@ismailiakids.edu', phone: '+20 122 777 0101', by: 'Aya Muhammed', at: '05 Oct 2026', web: 'www.ismailiakids.edu', docs: DOCS_ON,
-      svc: [{ id: 'Online Card', model: 'PF', bank: 'QNB Alahli', st: 'Live', h: 180 }],
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'QNB Alahli', st: 'Live', h: 180 }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 70, prep: 'ready' }],
       kyc: [{ st: 'Approved', h: 50, changes: [{ label: 'Contact phone', from: '+20 122 777 0101', to: '+20 122 777 0202', set: P => { P.phone = '+20 122 777 0202'; } }] }] },
     { name: 'Matrouh Beach Resort', industry: 'Travel & Tourism', email: 'khaled@matrouhresort.com', phone: '+20 100 330 4455', by: 'Karim Zaki', at: '18 Sept 2026', web: 'www.matrouhresort.com', docs: DOCS_ON,
       svc: [{ id: 'Online Souhoola', model: 'PF', st: 'Underwriting Review', h: 20, sell: 3.2 }, { id: 'Online Valu', model: 'PF', st: 'Rejected', h: 110, sell: 2.0, why: 'Commercial Registration does not list the resort as the merchant.' }] },
@@ -142,7 +154,7 @@ window.UW = (function () {
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 10;
+  const DEMO_VER = 14;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -305,6 +317,9 @@ window.UW = (function () {
   function settings() { const v = j(SET_KEY) || {}; return { fixed: Object.assign({}, SET_DEF.fixed, v.fixed || {}), map: Object.assign({}, SET_DEF.map, v.map || {}) }; }
   function saveSettings(v) { put(SET_KEY, v); }
   const fixed = () => settings().fixed, mapOf = ind => Object.assign({ mcc: '', discount: '', ag: '' }, settings().map[ind] || {});
+  /* The cities in Bank Misr's dropdown; the bank maps each to a city code. */
+  const BM_CITIES = ['CAIRO', 'GIZA', 'ALEXANDRIA', 'PORT SAID', 'ISMAILIA', 'BANHA', 'LUXOR', 'ASWAN', 'ARISH', 'SHARM ELSHEKH', 'HURGHADA', 'MARSA MATROH', 'TABA', 'RAAS ELBAR', 'TANTA', 'MANSOURA',
+    'EL MAHALA', 'EL MENIA', 'BANI SWIEF', 'ASSUIT', 'SUHAG', 'SUEZ', 'EL FAYOUM', 'DOMYAT', 'SHEBEN EL KOUM', 'EL ZAGAZEG', 'KAFR ELSHEIKH', 'EL KHARGA', 'DAMANHOU'];
   const ind = c => c.entity === 'Individual Seller', reg = c => c.entity === 'Registered Business', online = c => c.channel === 'Online', pos = c => c.channel === 'POS';
   const FIELDS = [
     { k: 'legalName', l: 'Legal name', g: 'merchant' }, { k: 'legalForm', l: 'Legal form', g: 'merchant', t: 'select', o: ['Sole proprietorship', 'LLC', 'Joint stock company', 'Partnership', 'Other'], req: c => !ind(c) },
@@ -315,17 +330,23 @@ window.UW = (function () {
     { k: 'addr1', l: 'Business address line 1', g: 'merchant', wide: true }, { k: 'addr2', l: 'Business address line 2', g: 'merchant', opt: true, wide: true },
     { k: 'gov', l: 'Governorate', g: 'merchant', t: 'select', o: GOV }, { k: 'city', l: 'City', g: 'merchant' }, { k: 'country', l: 'Country', g: 'merchant', def: 'Egypt' },
     { k: 'postal', l: 'Postal code', g: 'merchant', opt: true }, { k: 'altPhone', l: 'Alternate phone', g: 'merchant', opt: true },
-    { k: 'avgTicket', l: 'Average ticket size (EGP)', g: 'service', req: online }, { k: 'intModel', l: 'Integration model', g: 'service', t: 'select', o: ['Payment link', 'Merchant website', 'Merchant app'], req: online },
-    { k: 'intType', l: 'Integration type', g: 'service', t: 'select', o: ['2P', '2.5P', '3P'], req: online },
+    { k: 'avgTicket', bk: 'NBE', l: 'Average ticket size (EGP)', g: 'service', req: online }, { k: 'intModel', bk: 'NBE', l: 'Integration model', g: 'service', t: 'select', o: ['Payment link', 'Merchant website', 'Merchant app'], req: online },
+    { k: 'intType', bk: 'NBE', l: 'Integration type', g: 'service', t: 'select', o: ['2P', '2.5P', '3P'], req: online },
     { k: 'signatory', l: 'Authorized signatory name', g: 'service', req: c => c.model === 'PF' },
     { k: 'outlet', l: 'Outlet name', g: 'service', req: pos }, { k: 'outletCity', l: 'Outlet city', g: 'service', req: pos }, { k: 'outletAddr', l: 'Outlet address', g: 'service', req: pos, wide: true },
-    { k: 'nbeBranch', l: 'Merchant NBE branch', g: 'service', req: c => c.banks.indexOf('National Bank of Egypt') > -1 },
-    { k: 'delName', l: 'Delegate full name', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delIdNo', l: 'Delegate ID number', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delNat', l: 'Delegate nationality', g: 'service', req: c => pos(c) && reg(c) },
-    { k: 'mcc', l: 'MCC', g: 'auto', calc: (c, s) => mapOf(c.industry).mcc }, { k: 'discount', l: 'Bank discount code', g: 'auto', calc: (c, s) => mapOf(c.industry).discount },
-    { k: 'descriptor', l: 'Bank descriptor', g: 'auto', calc: (c, s) => ('KASHIER*' + c.merchant.name).toUpperCase().slice(0, 25) }, { k: 'agCode', l: 'NBE AG code', g: 'auto', calc: (c, s) => mapOf(c.industry).ag, req: pos },
-    { k: 'settleAcct', l: 'Settlement account number', g: 'auto', calc: () => fixed().settleAcct, set: true }, { k: 'profile', l: 'Profile code', g: 'auto', calc: () => fixed().profile, req: online, set: true }, { k: 'cid', l: 'CID', g: 'auto', calc: () => fixed().cid, req: online, set: true },
-    { k: 'settleCcy', l: 'Settlement currency', g: 'auto', calc: () => fixed().settleCcy, req: pos, set: true }, { k: 'settleName', l: 'Settlement account name', g: 'auto', calc: () => fixed().settleName, req: pos, set: true }, { k: 'dba', l: 'DBA merchant name code', g: 'auto', calc: () => fixed().dba, req: pos, set: true },
-    { k: 'mtype', l: 'MType', g: 'auto', calc: () => fixed().mtype, req: pos, set: true }, { k: 'structId', l: 'Structure ID', g: 'auto', calc: () => fixed().structId, req: pos, set: true }, { k: 'structPos', l: 'Structure position', g: 'auto', calc: () => fixed().structPos, req: pos, set: true }, { k: 'parent', l: 'Parent merchant', g: 'auto', calc: () => fixed().parent, req: pos, set: true },
+    { k: 'ownerTitle', bk: 'NBE', l: 'Owner title', g: 'service', t: 'select', o: ['MR', 'MRS'], req: pos },
+    { k: 'nbeBranch', bk: 'NBE', l: 'Merchant NBE branch', g: 'service', req: c => c.banks.indexOf('National Bank of Egypt') > -1 },
+    { k: 'delName', bk: 'NBE', l: 'Delegate full name', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delIdNo', bk: 'NBE', l: 'Delegate ID number', g: 'service', req: c => pos(c) && reg(c) }, { k: 'delNat', bk: 'NBE', l: 'Delegate nationality', g: 'service', req: c => pos(c) && reg(c) },
+    { k: 'activityAr', l: 'Business activity (Arabic)', g: 'merchant', bk: 'BM', wide: true },
+    { k: 'bmCity', l: 'City (Bank Misr list)', g: 'service', bk: 'BM', t: 'select', o: BM_CITIES },
+    { k: 'bmDiscountCode', l: 'Bank Misr discount code', g: 'service', bk: 'BM' },
+    { k: 'posTid', l: 'POS terminal ID (TID)', g: 'service', bk: 'BM', req: pos },
+    { k: 'posName', l: 'POS name', g: 'service', bk: 'BM', opt: true }, { k: 'pinPadSerial', l: 'PIN pad serial', g: 'service', bk: 'BM', opt: true }, { k: 'bmHps', l: 'HPS merchant number', g: 'service', bk: 'BM', opt: true },
+    { k: 'mcc', l: 'MCC', g: 'auto', calc: (c, s) => mapOf(c.industry).mcc }, { k: 'discount', bk: 'NBE', l: 'Bank discount code', g: 'auto', calc: (c, s) => mapOf(c.industry).discount },
+    { k: 'descriptor', bk: 'NBE', l: 'Bank descriptor', g: 'auto', calc: (c, s) => ('KASHIER*' + c.merchant.name).toUpperCase().slice(0, 25) }, { k: 'agCode', bk: 'NBE', l: 'NBE AG code', g: 'auto', calc: (c, s) => mapOf(c.industry).ag, req: pos },
+    { k: 'settleAcct', bk: 'NBE', l: 'Settlement account number', g: 'auto', calc: () => fixed().settleAcct, set: true }, { k: 'profile', bk: 'NBE', l: 'Profile code', g: 'auto', calc: () => fixed().profile, req: online, set: true }, { k: 'cid', bk: 'NBE', l: 'CID', g: 'auto', calc: () => fixed().cid, req: online, set: true },
+    { k: 'settleCcy', bk: 'NBE', l: 'Settlement currency', g: 'auto', calc: () => fixed().settleCcy, req: pos, set: true }, { k: 'settleName', bk: 'NBE', l: 'Settlement account name', g: 'auto', calc: () => fixed().settleName, req: pos, set: true }, { k: 'dba', bk: 'NBE', l: 'DBA merchant name code', g: 'auto', calc: () => fixed().dba, req: pos, set: true },
+    { k: 'mtype', bk: 'NBE', l: 'MType', g: 'auto', calc: () => fixed().mtype, req: pos, set: true }, { k: 'structId', bk: 'NBE', l: 'Structure ID', g: 'auto', calc: () => fixed().structId, req: pos, set: true }, { k: 'structPos', bk: 'NBE', l: 'Structure position', g: 'auto', calc: () => fixed().structPos, req: pos, set: true }, { k: 'parent', bk: 'NBE', l: 'Parent merchant', g: 'auto', calc: () => fixed().parent, req: pos, set: true },
     { k: 'docsStatus', l: 'Documents sent to the bank', g: 'bank', t: 'select', o: ['Not sent', 'Sent', 'Sent, issues found'] }, { k: 'docsNote', l: 'Document issues', g: 'bank', opt: true, wide: true },
     { k: 'batch', l: 'Bank batch number', g: 'bank', opt: true }, { k: 'ref', l: 'Bank notes / HPS reference', g: 'bank', opt: true }, { k: 'cbe', l: 'CBE initiative', g: 'bank', opt: true }, { k: 'caseNo', l: 'Case #', g: 'bank', opt: true },
     { k: 'decision', l: 'Bank decision', g: 'bank', t: 'select', o: ['Pending', 'Approved', 'Rejected', 'Waiting merchant reply'] }, { k: 'bankComment', l: 'Bank comment', g: 'bank', opt: true, wide: true },
@@ -337,32 +358,122 @@ window.UW = (function () {
     const store = f.g === 'merchant' ? (s.legal || {}) : ((s.cases[c.sid] || {}).bank || {});
     const v = store[f.k];
     if (v != null && v !== '') return v;
+    if (f.k === 'bmCity') { const ct = String((s.legal || {}).city || '').toUpperCase().trim(); if (BM_CITIES.indexOf(ct) > -1) return ct; }
     if (f.k === 'bankAcct') return '';
     return f.def || '';
   }
   /* The fields that apply to this case, with their values, and which required ones are still empty. */
-  const NBE = 'National Bank of Egypt';
+  const NBE = 'National Bank of Egypt', BM = 'Bank Misr';
+  const BANK_NAME = { NBE: NBE, BM: BM };
+  /* NBE takes the case on its own; Bank Misr takes a Card service on PF, and sends the day's cases together as a batch. Anything else is not built. */
+  function bankOf(c) {
+    if (c.type !== 'service') return null;
+    if (c.banks.indexOf(NBE) > -1) return 'NBE';
+    if (c.banks.indexOf(BM) > -1 && /Card$/.test(c.sid) && c.model === 'PF') return 'BM';
+    return null;
+  }
+  const bn = c => BANK_NAME[bankOf(c)] || NBE;
   function readiness(c) {
     if (!PHASE2 || c.type !== 'service') return null;
-    const st = stateFor(c.appId), cs = st && st.cases[c.sid], prepared = (cs && cs.bankPrepared) || null;
-    // Only National Bank of Egypt is built so far; other banks and services without a bank show a notice.
-    if (c.banks.indexOf(NBE) < 0) return { unsupported: true, bank: c.banks.join(', ') || 'No financial institution', groups: [], total: 0, done: 0, missing: [], complete: false, prepared: null };
-    const applies = f => f.opt || !f.req || f.req(c);     // a conditional field shows only where it applies (POS, Online, companies...)
+    const st = stateFor(c.appId), cs = st && st.cases[c.sid], prepared = (cs && cs.bankPrepared) || null, sentInfo = (cs && cs.bankSent) || null, answer = (cs && cs.bankAnswer) || null;
+    const bk = bankOf(c);   // NBE and Bank Misr are built; other banks and services without a bank show a notice
+    if (!bk) return { unsupported: true, bank: c.banks.join(', ') || 'No financial institution', groups: [], total: 0, done: 0, missing: [], complete: false, prepared: null };
+    const applies = f => (!f.bk || f.bk === bk) && (f.opt || !f.req || f.req(c));     // a conditional field shows only where it applies (POS, Online, companies...)
     const groups = ['merchant', 'service', 'auto'].map(g => ({ key: g, title: GROUP[g][0], note: GROUP[g][1], fields: FIELDS.filter(f => f.g === g && applies(f)).map(f => {
       const required = !f.opt, v = valueOf(c, f);
-      return { k: f.k, label: f.l, type: f.t || 'text', options: f.o || null, wide: !!f.wide, value: v, required: required, auto: !!f.calc, editable: !f.calc, done: !required || String(v).trim() !== '' };
+      return { k: f.k, label: f.l, type: f.t || 'text', options: f.o || null, wide: !!f.wide, value: v, required: required, auto: !!f.calc, editable: !f.calc && !sentInfo, done: !required || String(v).trim() !== '' };
     }) }));
     const req = [].concat.apply([], groups.map(g => g.fields)).filter(f => f.required);
-    return { groups: groups, total: req.length, done: req.filter(f => f.done).length, missing: req.filter(f => !f.done).map(f => f.label), complete: req.every(f => f.done), prepared: prepared, bank: NBE };
+    return { groups: groups, total: req.length, done: req.filter(f => f.done).length, missing: req.filter(f => !f.done).map(f => f.label), complete: req.every(f => f.done), prepared: prepared, sent: sentInfo, answer: answer, waiting: (cs && cs.waiting) || null, bank: BANK_NAME[bk], bankKey: bk };
   }
+  /* Slice 4: the forms go to the bank, and the bank answers. Sending is recorded with an optional batch number and reference; the answer is
+     Approved (the case is completed), Rejected (it returns to the salesperson with the bank's reason) or Waiting for the merchant (the bank asked
+     the merchant for something; the case stays here). */
+  function markSent(c, batch, ref) {
+    const st = stateFor(c.appId), cs = st && st.cases[c.sid]; if (!cs || !cs.bankPrepared || cs.bankSent || bankOf(c) === 'BM') return false;
+    cs.bankSent = { by: C.user().name, at: nowStr(), batch: String(batch || '').trim(), ref: String(ref || '').trim() };
+    addLog(st, c.sid, 'marked the ' + c.service + ' case sent to ' + bn(c), 'send', [cs.bankSent.batch && 'Batch ' + cs.bankSent.batch, cs.bankSent.ref && 'Reference ' + cs.bankSent.ref].filter(Boolean).join(' \u00b7 ')); save(st); return true;
+  }
+  /* Sales is told by email (the portal's notifications are emails; they can be read on emails.html): the salesperson and their manager get an
+     "action required" email with what the bank asked for. Returns who was emailed. */
+  function notifySales(c, comment) {
+    const K = window.KashierRates; if (!K || !K.sendMail) return [];
+    const to = ['sales', 'manager'];
+    K.sendMail({ to: to, kind: 'action', by: C.user().name, byRole: 'Underwriting', biz: c.merchant.name, appId: c.appId,
+      subject: 'Action needed: ' + bn(c) + ' is waiting for ' + c.merchant.name + ' (' + c.caseId + ')',
+      lines: ['The ' + c.service + ' case of ' + c.merchant.name + ' (' + c.mid + ') is with ' + bn(c) + ', and the bank is waiting for the merchant.',
+        bn(c) + ' asked for: ' + comment, 'Please get this from the merchant and send it to the Underwriting team.', 'Submitted by ' + c.submittedBy + ' \u00b7 ' + c.caseId + ' \u00b7 ' + c.appId] });
+    return to.map(r => K.ROLES[r].name + ' (' + K.ROLES[r].label + ')');
+  }
+  function recordAnswer(c, decision, comment) {
+    const st = stateFor(c.appId), cs = st && st.cases[c.sid]; if (!cs || !cs.bankSent) return null;
+    comment = String(comment || '').trim();
+    if (decision !== 'Approved' && !comment) return null;                      // a rejection and a request to the merchant both need the bank's words
+    cs.bankAnswer = { decision: decision, comment: comment, by: C.user().name, at: nowStr() };
+    // Waiting for the merchant: Sales is told and sees what the bank asked for; any other answer closes the request.
+    if (decision === 'Waiting for the merchant') { cs.waiting = { bank: bn(c), comment: comment, by: C.user().name, at: nowStr(), notified: notifySales(c, comment) }; } else { delete cs.waiting; }
+    if (decision === 'Waiting for the merchant') { addLog(st, c.sid, bn(c) + ' is waiting for the merchant', 'clock', comment); save(st); return 'waiting'; }
+    addLog(st, c.sid, bn(c) + ' ' + (decision === 'Approved' ? 'approved' : 'rejected') + ' the ' + c.service + ' case', decision === 'Approved' ? 'check' : 'xcircle', comment); save(st);
+    if (decision === 'Approved') { move(c, 'Live', { liveSince: new Date(CLOCK).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }, 'completed the ' + c.service + ' case', bn(c) + ' approved it.'); return 'approved'; }
+    move(c, 'Rejected', { reject: { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: 'Rejected by ' + bn(c) + ': ' + comment, at: nowStr() } }, 'returned the ' + c.service + ' case to the salesperson', 'Rejected by ' + bn(c) + ': ' + comment);
+    return 'rejected';
+  }
+
+  /* Bank Misr: the cases that are ready go out together, in one set of sheets (bm-export.js). The case in that exporter's shapes, and the batch. */
+  function bmInput(c) {
+    const s = stateFor(c.appId); if (!s || c.type !== 'service' || bankOf(c) !== 'BM') return null;
+    const val = k => { const f = FIELDS.filter(x => x.k === k)[0]; const v = f ? valueOf(c, f) : ''; return v == null ? '' : String(v); };
+    const FORM = { LLC: 'Limited liability company (LLC)', 'Joint stock company': 'Joint stock company (JSC)', Partnership: 'General partnership', 'Sole proprietorship': 'Sole proprietorship', Other: 'Other' };
+    const saved = { legalName: val('legalName'), legalForm: FORM[val('legalForm')] || val('legalForm'), taxNumber: val('taxNo'), crNumber: val('crNo'), ownerName: val('ownerName'), ownerIdType: val('ownerIdType'),
+      ownerId: val('ownerIdNo'), bmLegalId: val('taxNo') || val('crNo') || val('ownerIdNo'), activityAr: val('activityAr'), activity: val('activity'), address1: val('addr1'), address2: val('addr2'), city: val('bmCity'), bmCity: val('bmCity'),
+      mcc: val('mcc'), bmDiscountCode: val('bmDiscountCode'), outletName: val('outlet'), outletAddress: val('outletAddr'), outletCity: val('outletCity'), posTid: val('posTid'), posName: val('posName'), pinPadSerial: val('pinPadSerial'), bmHps: val('bmHps') };
+    const app = { id: c.appId, biz: s.merchant.name, summary: { email: s.merchant.email, phone: s.merchant.phone, entity: s.entity, serviceConfigs: [{ service: c.sid, configs: [{ bank: BM, module: c.model }] }] } };
+    return { c: { app: app, mid: c.mid }, saved: saved };
+  }
+  const bmReady = () => all().filter(c => bankOf(c) === 'BM' && c.status === 'Bank Submission' && (readiness(c) || {}).prepared && !(readiness(c) || {}).sent);
+  function logBatchExport(cases, names) {
+    cases.forEach(c => { const st = stateFor(c.appId); if (!st || !st.cases[c.sid]) return; st.cases[c.sid].bankExported = { by: C.user().name, at: nowStr(), files: names }; addLog(st, c.sid, 'exported the Bank Misr batch', 'download', names.join(', ')); save(st); });
+    return cases.length;
+  }
+  function sendBatch(cases, batchNo) {
+    let n = 0; const no = String(batchNo || '').trim();
+    cases.forEach(c => { const st = stateFor(c.appId), cs = st && st.cases[c.sid]; if (!cs || !cs.bankPrepared || cs.bankSent) return;
+      cs.bankSent = { by: C.user().name, at: nowStr(), batch: no, ref: '' }; addLog(st, c.sid, 'sent the ' + c.service + ' case to Bank Misr', 'send', no ? 'Batch ' + no : ''); save(st); n++; });
+    return n;
+  }
+
+  /* The case in the shapes nbe-export.js fills the bank's own forms from: an application with the one service on NBE, and the data
+     Underwriting prepared, under that exporter's field names. */
+  function nbeInput(c) {
+    const s = stateFor(c.appId); if (!s || c.type !== 'service') return null;
+    const val = k => { const f = FIELDS.filter(x => x.k === k)[0]; const v = f ? valueOf(c, f) : ''; return v == null ? '' : String(v); };
+    const FORM = { LLC: 'Limited liability company (LLC)', 'Joint stock company': 'Joint stock company (JSC)', Partnership: 'General partnership', 'Sole proprietorship': 'Sole proprietorship', Other: 'Other' };
+    const del = val('delName').trim().split(/\s+/).filter(Boolean), pay = (s.payouts || []).filter(p => p.type === 'bank')[0];
+    const saved = { legalName: val('legalName'), legalForm: FORM[val('legalForm')] || val('legalForm'), taxNumber: val('taxNo'), crNumber: val('crNo'), ownerName: val('ownerName'), ownerIdType: val('ownerIdType'),
+      ownerId: val('ownerIdNo'), ownerNationality: val('ownerNat'), activity: val('activity'), address1: val('addr1'), address2: val('addr2'), governorate: val('gov'), city: val('city'), country: val('country'),
+      postalCode: val('postal'), altPhone: val('altPhone'), avgTicket: val('avgTicket'), integrationModel: val('intModel'), integrationType: val('intType'), signatory: val('signatory'), outletName: val('outlet'),
+      outletAddress: val('outletAddr'), outletCity: val('outletCity'), delegateFirst: del[0] || '', delegateSurname: del.slice(1).join(' '), delegateIdType: val('delIdNo') ? 'National ID' : '', delegateId: val('delIdNo'),
+      delegateNationality: val('delNat'), nbeBranch: val('nbeBranch'), ownerTitle: val('ownerTitle'), mcc: val('mcc'), discountCode: val('discount'), nbeAgCode: val('agCode'), bankAccount: pay ? pay.acct : '' };
+    const app = { __uw: true, biz: s.merchant.name, websites: (s.websites || []).filter(Boolean), payout: pay ? { method: 'bank', account: pay.acct } : null,
+      summary: { email: s.merchant.email, phone: s.merchant.phone, entity: s.entity, industry: s.industry, serviceConfigs: [{ service: c.sid, configs: [{ bank: NBE, module: c.model }] }] } };
+    return { c: { app: app, mid: c.mid }, saved: saved };
+  }
+  /* What was sent to the bank: kept on the case and in the application's log. */
+  function logExport(c, names) {
+    const st = stateFor(c.appId); if (!st || !st.cases[c.sid]) return false;
+    st.cases[c.sid].bankExported = { by: C.user().name, at: nowStr(), files: names };
+    addLog(st, c.sid, 'exported the NBE forms', 'download', names.join(', ')); save(st); return true;
+  }
+  function exported(c) { const st = stateFor(c.appId); return (st && st.cases[c.sid] && st.cases[c.sid].bankExported) || null; }
+
   /* "Ready for the bank": allowed only when every required field is complete. Changing a field afterwards reopens it. */
   function markReady(c) {
     const st = stateFor(c.appId), r = readiness(c); if (!st || !r || !r.complete || !st.cases[c.sid]) return false;
-    st.cases[c.sid].bankPrepared = { by: C.user().name, at: nowStr(), bank: NBE };
-    addLog(st, c.sid, 'marked the ' + c.service + ' case ready for the bank', 'check', 'National Bank of Egypt: every required field is complete'); save(st); return true;
+    st.cases[c.sid].bankPrepared = { by: C.user().name, at: nowStr(), bank: bn(c) };
+    addLog(st, c.sid, 'marked the ' + c.service + ' case ready for the bank', 'check', bn(c) + ': every required field is complete'); save(st); return true;
   }
   function unmarkReady(c) {
-    const st = stateFor(c.appId); if (!st || !st.cases[c.sid] || !st.cases[c.sid].bankPrepared) return false;
+    const st = stateFor(c.appId); if (!st || !st.cases[c.sid] || !st.cases[c.sid].bankPrepared || st.cases[c.sid].bankSent) return false;
     delete st.cases[c.sid].bankPrepared; addLog(st, c.sid, 'reopened the bank preparation', 'pencil', ''); save(st); return true;
   }
   function setField(c, k, v) {
@@ -406,13 +517,15 @@ window.UW = (function () {
   const LIST_STATUS = { 'Underwriting Review': 'submitted', 'Bank Submission': 'pending-configurations', Rejected: 'rejected', Live: 'live', Approved: 'approved' };
   function asCases() {
     return all().map(c => ({ svcId: c.id, sales: true, kind: c.type, isNew: c.isNew, stage: c.status === 'Bank Submission' ? 'bank' : 'review',
-      prep: c.type === 'service' && c.status === 'Bank Submission' ? (r => r ? { unsupported: !!r.unsupported, bank: r.bank, done: r.done, total: r.total, complete: r.complete, prepared: !!r.prepared } : null)(readiness(c)) : null,
+      prep: c.type === 'service' && c.status === 'Bank Submission' ? (r => r ? { unsupported: !!r.unsupported, bank: r.bank, done: r.done, total: r.total, complete: r.complete, prepared: !!r.prepared, exported: !!exported(c), bank: r.bank, bankKey: r.bankKey, sent: !!r.sent, waitingMerchant: !!(r.answer && r.answer.decision === 'Waiting for the merchant') } : null)(readiness(c)) : null,
       status: LIST_STATUS[c.status], salesStatus: c.status, no: c.caseId, mid: c.mid, industry: c.industry, assignee: c.assignee, since: c.since, resubmission: '',
       app: { id: c.appId, biz: c.merchant.name, actor: c.submittedBy, summary: { email: c.merchant.email, serviceConfigs: c.type === 'service' ? [{ service: c.service, configs: c.banks.map(b => ({ bank: b })) }] : [] } },
-      service: c.service, href: 'sales-case.html?id=' + encodeURIComponent(c.id) }));
+      service: c.service, href: 'sales-case.html?id=' + encodeURIComponent(c.id) }))
+      // Bank preparation lists only the cases it can prepare (NBE for now); a case for another bank is not listed until its bank is built.
+      .filter(r => !(r.stage === 'bank' && r.prep && r.prep.unsupported));
   }
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
     addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
-    resetDemo: resetDemo, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
+    resetDemo: resetDemo, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();

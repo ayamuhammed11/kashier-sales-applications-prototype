@@ -121,7 +121,7 @@
   const banksOf = c => [...new Set([].concat.apply([], (c.app.summary.serviceConfigs || []).map(sc => (sc.configs || []).map(x => x.bank))).filter(Boolean))];
 
   /* One row per case: a sales service case, a sales application case (business details / payout methods), or an application case from the Merchant module. */
-  const prepKey = p => !p ? '' : p.unsupported ? 'Not available yet' : p.prepared ? 'Ready for the bank' : p.complete ? 'Complete' : 'Incomplete';
+  const prepKey = p => !p ? '' : p.waitingMerchant ? 'Waiting for the merchant' : p.sent ? 'Waiting for the bank' : p.prepared ? (p.bankKey === 'BM' ? 'In the next batch' : 'Send to the bank') : p.complete ? 'Mark as ready' : 'Missing information';
   const ALL = U.asCases(), CNT = {};
   ALL.forEach(c => { (CNT[c.app.id] = CNT[c.app.id] || { service: 0, application: 0 })[c.kind]++; });
   const ROWS = ALL.map(c => ({ stage: c.stage, prep: c.prep, prepKey: prepKey(c.prep), isNew: c.isNew, kind: c.kind, other: CNT[c.app.id][c.kind === 'service' ? 'application' : 'service'],
@@ -133,7 +133,7 @@
 
   const st = { tab: 'review', q: '', page: 1, size: 10, data: 'loaded', filters: {} };
   const FIELDS = () => [
-    st.tab === 'bank' ? { key: 'prepKey', type: 'multi', icon: 'clock', label: 'Bank readiness', hint: 'How far the data for the bank is prepared.', options: ['Incomplete', 'Complete', 'Ready for the bank', 'Not available yet'] }
+    st.tab === 'bank' ? { key: 'prepKey', type: 'multi', icon: 'clock', label: 'Bank preparation', hint: 'What is left to do before the case goes to the bank.', options: ['Missing information', 'Mark as ready', 'Send to the bank', 'In the next batch', 'Waiting for the bank', 'Waiting for the merchant'] }
       : { key: 'status', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the case.', options: STATUSES },
     { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'A service case reviews one service (method). Application details reviews one change to the merchant\'s business details or payout methods.', options: TYPES },
     { key: 'bank', type: 'multi', icon: 'store', label: 'Financial institution', hint: 'The banks and vendors the case goes to.', options: [...new Set([].concat.apply([], ROWS.map(r => r.banks)))].sort() },
@@ -154,11 +154,11 @@
       <button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
   }
   /* Bank preparation: how far the data for the bank is prepared. */
-  const prepChip = r => { const p = r.prep; if (!p) return '<span class="sc neu">\u2014</span>'; if (p.unsupported) return `<span class="sc neu" title="Bank preparation for ${esc(p.bank)} is not available yet">Not available yet</span>`; if (p.prepared) return '<span class="sc ok">Ready for the bank</span>'; if (p.complete) return '<span class="sc info">Complete</span>'; return `<span class="sc warn">${p.done} of ${p.total} required</span>`; };
+  const prepChip = r => { const p = r.prep; if (!p) return '<span class="sc neu">\u2014</span>'; if (p.waitingMerchant) return '<span class="sc warn">Waiting for the merchant</span>'; if (p.sent) return '<span class="sc neu">Waiting for the bank</span>'; if (p.prepared) return p.bankKey === 'BM' ? '<span class="sc info">In the next batch</span>' : '<span class="sc info">Send to the bank</span>'; if (p.complete) return '<span class="sc info">Mark as ready</span>'; const n = p.total - p.done; return `<span class="sc warn">${n} field${n === 1 ? '' : 's'} missing</span>`; };
   const tabs = () => `<div class="stabs" role="tablist" aria-label="Case stage">${[['review', 'Case review'], ['bank', 'Bank preparation']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${st.tab === k}" data-tab="${k}">${l}<span class="c">${ROWS.filter(r => r.stage === k).length}</span></button>`).join('')}</div>`;
   function table(list) {
     const bank = st.tab === 'bank';
-    const head = '<th>Case</th><th>Merchant</th><th>' + (bank ? 'Bank readiness' : 'Status') + '</th><th>Assignee</th><th>Waiting</th><th>Last activity</th>';
+    const head = '<th>Case</th><th>Merchant</th><th>' + (bank ? 'To do' : 'Status') + '</th><th>Assignee</th><th>Waiting</th><th>Last activity</th>';
     if (!list.length) {
       const filtered = st.q || Object.keys(st.filters || {}).length;
       return `<div class="empty"><span class="ei">${icon('search', 'ic-24')}</span><h3>${filtered ? 'No cases match' : 'No cases yet'}</h3><p>${filtered ? 'Try different filters or another search.' : bank ? 'A case moves to bank preparation once every item of its review is approved.' : 'A case opens here once a salesperson submits a service and every rate is approved.'}</p>${!filtered && !U.state() ? `<a class="btn btn-primary" href="${U.DEMO_URL}">Load demo application</a>` : ''}</div>`;
@@ -188,9 +188,9 @@
     bindProto() { document.getElementById('resetDemo').onclick = () => { U.resetDemo(); location.reload(); }; document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; },
     render() {
       const list = base();
-      document.getElementById('page').innerHTML = `<div class="wrap"><div class="ph">${header()}</div><div data-live="body">${tabs()}<div class="owned"><div id="fbHost"></div><div class="lcard" data-live="tbl">${table(list)}${pager(list)}</div></div></div></div>`;
+      document.getElementById('page').innerHTML = `<div class="wrap"><div class="ph">${header()}</div><div data-live="body">${U.PHASE2 ? tabs() : ''}<div class="owned"><div id="fbHost"></div><div class="lcard" data-live="tbl">${table(list)}${pager(list)}</div></div></div></div>`;
       // Bank Misr takes its cases as one batch a day; the link shows only where the bank's sheets are available.
-      const showBm = () => { if (!window.BMExport || !BMExport.available() || document.getElementById('bmLink')) return; document.getElementById('fbHost').insertAdjacentHTML('beforebegin', '<a class="btn btn-outline" id="bmLink" href="bm-batch.html" style="align-self:flex-start;margin-block-end:12px">Bank Misr batch</a>'); };
+      const showBm = () => { if (st.tab !== 'bank' || !window.BMExport || !BMExport.available() || document.getElementById('bmLink')) return; document.getElementById('fbHost').insertAdjacentHTML('beforebegin', `<button type="button" class="btn btn-outline" id="bmLink" data-bmopen style="align-self:flex-start;margin-block-end:12px">Bank Misr batch (${U.bmReady().length})</button>`); };
       if (U.PHASE2) document.getElementById('fbHost').insertAdjacentHTML('beforebegin', '<a class="btn btn-outline" href="bank-settings.html" style="align-self:flex-start;margin-block-end:12px">Bank settings</a>');
       showBm(); window.addEventListener('bm-ready', showBm);
       KFilter.search(document.getElementById('topSearch'), { placeholder: 'Find a case, merchant or MID...', value: st.q, onSearch: q => { st.q = q; st.page = 1; refresh(); } });
@@ -209,7 +209,7 @@
     chg: { size: el => { st.size = +el.value; st.page = 1; } },
     act: { prev: () => { st.page--; refresh(); return false; }, next: () => { st.page++; refresh(); return false; } }
   };
-  document.addEventListener('click', e => { const tb = e.target.closest('[data-tab]'); if (tb) { st.tab = tb.dataset.tab; st.filters = {}; st.page = 1; SA.rerender(); return; } const tr = e.target.closest('tr[data-href]'); if (tr) location.href = tr.dataset.href; });
+  document.addEventListener('click', e => { if (e.target.closest('[data-bmopen]')) { UWBM.open(() => SA.rerender()); return; } const tb = e.target.closest('[data-tab]'); if (tb) { st.tab = tb.dataset.tab; st.filters = {}; st.page = 1; SA.rerender(); return; } const tr = e.target.closest('tr[data-href]'); if (tr) location.href = tr.dataset.href; });
   document.addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[data-href]'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); location.href = tr.dataset.href; } });
   SA.mount(V);
   try { const m = sessionStorage.getItem('cases-toast'); if (m) { sessionStorage.removeItem('cases-toast'); SA.toast(m); } } catch (e) { /* storage unavailable */ }

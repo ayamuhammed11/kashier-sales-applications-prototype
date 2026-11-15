@@ -33,6 +33,7 @@
    sector mapping that gives each industry its MCC, discount code and NBE AG code. Cases reads these; nothing is typed per case. */
 (function () {
   const { icon, esc } = SA, C = Cases, U = UW, me = C.user();
+  if (!U.PHASE2) { location.replace('cases.html'); return; }       // bank settings belong to the bank preparation, which is switched off
   const crumb = `<nav class="crumb" aria-label="Breadcrumb"><a href="cases.html">Cases</a><svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${AGENT_ICONS['chevron-right']}</svg><span aria-current="page">Bank settings</span></nav>`;
   const profile = `<button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button>`;
 
