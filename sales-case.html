@@ -94,10 +94,10 @@
   const go = msg => { location.href = 'cases.html'; try { sessionStorage.setItem('cases-toast', msg); } catch (e) { /* storage unavailable */ } };
 
   /* The service as the application records it, then every rate type: what was requested, what is published, and its approval. */
-  function mirror(c) { const S = SA.S; S.svc = S.svc || {}; S.svc[c.sid] = Object.assign({ ops: [], notes: '', currencies: ['EGP'] }, c.svc); S.entity = c.entity; S.industry = c.industry; S.activities = [c.industry]; S.owner = ''; }
+  function mirror(c) { const S = SA.S; S.svc = S.svc || {}; S.svc[c.serviceId || c.sid] = Object.assign({ ops: [], notes: '', currencies: ['EGP'] }, c.svc); S.entity = c.entity; S.industry = c.industry; S.activities = [c.industry]; S.owner = ''; }
   function pricingDetail(c) {
     mirror(c);
-    const sid = c.sid, svc = SA.S.svc[sid], nm = sid.slice(sid.indexOf(' ') + 1), banks = [...new Set((svc.lines || []).map(l => l.bank).filter(Boolean))];
+    const sid = c.serviceId || c.sid, svc = SA.S.svc[sid], nm = sid.slice(sid.indexOf(' ') + 1), banks = [...new Set((svc.lines || []).map(l => l.bank).filter(Boolean))];
     const cur = svc.model === 'PF' ? ['EGP'] : (svc.currencies || ['EGP']);
     const rows = [['Service', nm + (SA.SVC_HINT[nm] ? ' · ' + SA.SVC_HINT[nm] : '')], ['Channel', c.channel], ['Model', svc.model + ' - ' + c.channel]];
     if (SA.needsBank(sid)) rows.push(['Financial institution', banks.length ? banks.join(', ') : 'Not chosen']);
@@ -172,9 +172,9 @@
   const nFiles = p => p.list.reduce((n, x) => n + (x.list ? x.list.length : 0), 0);
   /* One block per case: the title, its status, and the items to decide. */
   function part(c, nested) {
-    const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type === 'application';
+    const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type !== 'service';
     const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
-      : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the application.</div>`
+      : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the ${c.type === 'update' ? 'service' : 'application'}.</div>`
       : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved.${U.PHASE2 ? ' The case is now in bank preparation.' : ''}</div>`
       : c.status === 'Live' ? `<div class="info ok"><b>Live${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> This service is now worked from the Merchant module.</div>` : '';
     if (nested) {
@@ -182,9 +182,9 @@
       return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
     const block = '';
-    return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? 'Application details' : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
+    return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
       <div style="display:flex;gap:8px;align-items:center"></div></div>
-      ${app ? (c.isNew ? '<p style="margin:0;color:var(--cadet-base)">The application\'s business details and payout method, submitted for the first time. There are no earlier values to compare with.</p>' : '<p style="margin:0;color:var(--cadet-base)">Changes to the business details or payout methods. Nothing is applied until every change is approved.</p>') : ''}
+      ${app ? `<p style="margin:0;color:var(--cadet-base)">${esc(c.type === 'update' ? 'Changes to a service that is already active. Nothing changes until every item is approved.' : c.kind === 'payout' ? (c.isNew ? 'The payout method, submitted for the first time. There are no earlier values to compare with. Check it against the bank account proof.' : 'A change to the payout method. Nothing is applied until every item is approved. Check the new account against the bank account proof.') : (c.isNew ? 'The business details, submitted for the first time. There are no earlier values to compare with. Check them against the documents.' : 'A change to the business details (KYB/KYC). Nothing is applied until every item is approved. Check it against the supporting documents.'))}</p>` : ''}
       ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div></section>`;
   }
   /* Bank preparation for NBE, as three steps: fill in what is missing, mark the case ready, download the forms. Only the missing fields are shown
@@ -251,8 +251,7 @@
      this only links to the other kind on the same application. */
   function relatedCard(c) {
     const list = U.related(c); if (!list.length) return '';
-    const app = c.type === 'application';
-    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>${app ? 'Services requested on this application' : 'Details changes on this application'}</h2><p>${app ? 'Each service is its own case.' : 'Changes to the business details or payout methods are their own cases.'}</p></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.type === 'application' ? r.changes.map(x => x.label).join(', ') : r.service)}</span><span class="f">${esc(r.caseId)} · ${r.type === 'application' ? 'Application details' : 'Service case'}</span></div><div class="a">${sc(r.status)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Other cases on this application</h2><p>Each case is reviewed on its own.</p></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.type === 'application' ? r.changes.map(x => x.label).join(', ') : r.service)}</span><span class="f">${esc(r.caseId)} · ${esc(r.caseType)}</span></div><div class="a">${sc(r.status)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
   }
   /* The two phases of a service case. Phase 1 is the review below; phase 2, the bank preparation, comes later. */
   function phases(c, p) {
@@ -273,7 +272,7 @@
     const c = U.get(id), page = document.getElementById('page');
     if (!c) { page.innerHTML = `<div class="wrap"><div class="card empty"><h3>Case not found</h3><p class="hint">It may be assigned to another agent, or the sales application was reset.</p><a class="btn btn-outline" href="cases.html">Back to Cases</a></div></div>`; return; }
     document.title = 'Kashier | ' + c.caseId;
-    const mgr = me.canReassign, app = c.type === 'application';
+    const mgr = me.canReassign, app = c.type !== 'service', titleIsBusiness = c.type === 'application';
     // A case is one thing: one service (method) with its pricing, documents and contract, or one change request to the merchant's details.
     // The application as a whole is not handled here; the case only points back to it.
     const parts = [c];
@@ -281,14 +280,15 @@
     const info = [['Business', { html: `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` }], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity],  ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
       .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
     page.innerHTML = `<div class="wrap">
-      <header class="hdr"><div>${crumb(c.caseId)}<h1>${app ? `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` : esc(c.service)}</h1>
-        <div class="meta"><span class="tag">${app ? (c.isNew ? 'Application details \u00b7 new' : 'Application details \u00b7 change') : 'Service case'}</span>${app ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
+      <header class="hdr"><div>${crumb(c.caseId)}<h1>${titleIsBusiness ? `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` : esc(c.service)}</h1>
+        <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
       ${app || !U.STEPPER ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
+      ${c.type === 'update' ? `<section class="card sec"><div class="sec-h"><div class="tt"><h2>The service as it is now</h2><p>For reference. This is what the changes above are applied to.</p></div></div>${pricingDetail(c)}</section>` : ''}
       ${relatedCard(c)}
-      ${!app && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}
+      ${c.type === 'service' && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
         ${notes.map(n => `<div class="note"><div class="k">${esc(n.by)} · ${esc(C.fmtDate(n.ts))}</div><div>${esc(n.text)}</div></div>`).join('')}</section></div>`;
@@ -309,7 +309,7 @@
   }
   /* After each decision: once every item of a case is decided, that case settles itself. */
   function decided(cid) {
-    const before = U.get(cid), r = U.settle(cid), c = U.get(cid) || before, no = c ? c.caseId : 'Case', app = c && c.type === 'application';
+    const before = U.get(cid), r = U.settle(cid), c = U.get(cid) || before, no = c ? c.caseId : 'Case', app = c && c.type !== 'service';
     if (!r) return render();
     if (r === 'blocked') { render(); SA.toast('Approved. Complete the bank readiness fields to send it to the bank.'); return; }
     const msg = r === 'rejected' ? no + ' rejected and returned to Sales' : no + (app ? (c && c.isNew ? ' approved. The submitted details are confirmed.' : ' approved. The changes are applied.') : (U.PHASE2 ? ' review complete. It is now in bank preparation.' : ' review complete. Moved to Bank Submission.'));

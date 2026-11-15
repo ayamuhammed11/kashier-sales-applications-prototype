@@ -31,6 +31,17 @@ window.UW = (function () {
   /* The queue holds what is in Underwriting Review (case review), what is in Bank Submission (bank preparation, phase 2) and what is completed.
      A rejected case is returned to the salesperson, so it leaves the queue. */
   const SHOWN = PHASE2 ? ['Underwriting Review', 'Bank Submission', 'Live'] : ['Underwriting Review', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved'];
+  /* The four case types. Service Activation Request: a newly requested service (pricing, website, documents, contract). Service Update: a change to
+     a service that is already active. Change KYB/KYC: the business details (name, industry, contact...), with their supporting documents. Change Payout
+     Method: the payout account, with the bank account proof. A first submission of the business details or payout method is the same type, shown
+     without old values. */
+  const TYPE = { activation: 'Service Activation Request', update: 'Service Update', kyb: 'Change KYB/KYC', payout: 'Change Payout Method' };
+  const isPayLabel = l => /^(Payout method|Primary payout)/.test(l);
+  const kycKind = x => (x.changes || []).length && x.changes.every(ch => isPayLabel(ch.label)) ? 'payout' : 'kyb';
+  const docsForKyb = c => { const set = [], add = d => { if (set.indexOf(d) < 0) set.push(d); };
+    if (c.isNew) { add('Commercial Registration (CR)'); add('National ID'); }
+    (c.changes || []).forEach(x => { if (/^(Business name|Industry|Merchant type)/.test(x.label)) add('Commercial Registration (CR)'); if (/^Owner nationality/.test(x.label)) add('National ID'); });
+    return set; };
   const chip = st => { const m = STATUS[st] || { tone: 'neutral', label: st }; return '<span class="chip ' + m.tone + '">' + esc(m.label) + '</span>'; };
   const chOf = id => id.split(' ')[0], nmOf = id => id.slice(id.indexOf(' ') + 1), label = id => nmOf(id) + ' (' + chOf(id) + ')';
   const nowStr = () => new Date().toLocaleString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -51,10 +62,11 @@ window.UW = (function () {
       appId: 'APP-2408' + (1400 + n), mid: m.mid || midFor(m.name, n), merchant: { name: m.name, email: m.email, phone: m.phone }, entity: m.entity || 'Registered Business', industry: m.industry, owner: '',
       submittedBy: m.by, submittedAt: m.at, svc: {}, order: [], cases: {}, docs: {}, websites: m.web ? [].concat(m.web) : [''], storeImage: m.store || '', reqContracts: {},
       payouts: [{ id: 1, type: 'bank', name: '', bank: m.bank || 'National Bank of Egypt', branch: 'Main Branch', holder: m.name, acct: '10' + (20000000000 + n * 3917) }], primary: 1, nextPayout: 2,
-      kyc: [], log: [], nextCase: 1, _src: 'demo'
+      kyc: [], updates: [], log: [], nextCase: 1, _src: 'demo'
     };
     app.docs['National ID'] = { 'Front side': 'national-id-front.jpg', 'Back side': 'national-id-back.jpg' };
     app.docs['Commercial Registration (CR)'] = { File: 'cr-' + n + '.pdf' };
+    if (m.name !== 'Zayed Real Estate') app.docs['Bank Account Letter / IBAN proof'] = { File: 'iban-proof-' + n + '.pdf' };
     (m.docs || []).forEach(d => { app.docs[d] = { File: d.toLowerCase().replace(/[^a-z]+/g, '-') + '-' + n + '.pdf' }; });
     let c = 100 + n * 10;
     (m.svc || []).forEach(sv => {
@@ -75,9 +87,21 @@ window.UW = (function () {
       app.log.unshift({ t: '10/0' + (1 + (n % 8)) + '/2026, 10:00:00 AM', who: 'System', text: 'moved the ' + label(id) + ' case to Underwriting Review', ic: 'check', id: id });
       app.log.unshift({ t: '09/3' + (n % 2) + '/2026, 05:20:01 PM', who: m.by, text: 'submitted the ' + label(id) + ' case', ic: 'send', detail: app.cases[id].caseId + ' · Underwriting Review', id: id });
     });
+    // Service updates: changes to a service that is already active, each as patches that are applied when approved.
+    const tierName = k => k === 'local' ? 'Local rates' : k.indexOf('intl-') === 0 ? 'International rate (' + k.slice(5) + ')' : k === 'selling' ? 'Selling rate' : k;
+    const txt = r => r ? r.rate + '% + ' + r.fee + ' EGP' : 'Not set';
+    (m.upd || []).forEach((u, i) => {
+      const sv = app.svc[u.svc], key = 'upd:' + (i + 1);
+      const changes = u.ch.map(p => p.type === 'rate' ? { label: tierName(p.key), from: txt(sv.lines[p.li || 0].rates[p.key]), to: p.rate + '% + ' + p.fee + ' EGP' }
+        : p.type === 'ops' ? { label: 'Advanced operations', from: (sv.ops || []).length ? sv.ops.join(', ') : 'None', to: p.ops.length ? p.ops.join(', ') : 'None' }
+        : p.type === 'notes' ? { label: 'Notes', from: sv.notes || 'None', to: p.notes } : { label: 'Currencies', from: (sv.currencies || []).join(', '), to: p.list.join(', ') });
+      app.updates.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: u.st, service: u.svc, patches: u.ch, changes: changes, by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(u.h || 20),
+        reject: u.st === 'Rejected' ? { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: u.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: u.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
+      app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'requested an update of the ' + label(u.svc) + ' service', ic: 'send', detail: changes.map(x => x.label).join(', '), id: key });
+    });
     (m.kyc || []).forEach((k, i) => {
       const P = { name: m.name, email: m.email, phone: m.phone, industry: m.industry, owner: '', websites: m.web ? [].concat(m.web) : [], storeImage: m.store || '', payouts: app.payouts.map(p => Object.assign({}, p)), primary: 1, nextPayout: 2 };
-      const changes = k.isNew ? [{ label: 'Business name', to: m.name }, { label: 'Merchant type', to: app.entity }, { label: 'Industry', to: m.industry }, { label: 'Contact', to: m.email + ' \u00b7 ' + m.phone }, { label: 'Payout method', to: pay(app.payouts[0]) }] : k.changes.map(x => { if (x.set) x.set(P); return { label: x.label, from: typeof x.from === 'function' ? x.from(app) : x.from, to: typeof x.to === 'function' ? x.to(app) : x.to }; });
+      const changes = k.isNew ? (k.part === 'payout' ? [{ label: 'Payout method', to: pay(app.payouts[0]) }] : [{ label: 'Business name', to: m.name }, { label: 'Merchant type', to: app.entity }, { label: 'Industry', to: m.industry }, { label: 'Contact', to: m.email + ' \u00b7 ' + m.phone }]) : k.changes.map(x => { if (x.set) x.set(P); return { label: x.label, from: typeof x.from === 'function' ? x.from(app) : x.from, to: typeof x.to === 'function' ? x.to(app) : x.to }; });
       const key = 'kyc:' + (i + 1);
       app.kyc.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: k.st, isNew: !!k.isNew, changes: changes, proposed: P, by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(k.h || 20),
         reject: k.st === 'Rejected' ? { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: k.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: k.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
@@ -124,6 +148,7 @@ window.UW = (function () {
     { name: 'Nasr City Bookstore', industry: 'Education', email: 'mona@nasrbooks.com', phone: '+20 109 888 2200', by: 'Karim Zaki', at: '25 Sept 2026', web: 'www.nasrbooks.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Rejected', h: 70, why: 'Tax Identification Card is expired. Upload a valid copy.' }] },
     { name: 'Dokki Dental Clinic', industry: 'Healthcare / Pharmacy', email: 'laila@dokkidental.com', phone: '+20 100 450 7788', by: 'Aya Muhammed', at: '10 Sept 2026', web: 'www.dokkidental.com', docs: DOCS_ON.concat(DOCS_BM),
+      upd: [{ svc: 'Online Card', st: 'Underwriting Review', h: 22, ch: [{ type: 'rate', li: 0, key: 'local', rate: '1.65', fee: '1.90' }, { type: 'ops', ops: ['Recurring'] }] }, { svc: 'Online Card', st: 'Approved', h: 120, ch: [{ type: 'notes', notes: 'Lower rates agreed for the pharmacy chain.' }] }],
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Live', h: 300 }, { id: 'Online Bank Installments', model: 'PSP', bank: 'Bank Misr', st: 'Bank Submission', h: 80, rates: { selling: rate(1.4, 1.5) } }] },
     { name: 'Zayed Real Estate', industry: 'Real Estate', email: 'yasmin@zayedre.com', phone: '+20 111 909 3030', by: 'Mostafa Khaled', at: '15 Oct 2026', web: 'www.zayedre.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'CIB', st: 'Underwriting Review', h: 4 }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 40 }],
@@ -132,6 +157,7 @@ window.UW = (function () {
       svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 200, prep: 'merchant' }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 90 }],
       kyc: [{ st: 'Underwriting Review', h: 10, changes: [walletAdd] }] },
     { name: 'Ismailia Kids Academy', industry: 'Education', email: 'rasha@ismailiakids.edu', phone: '+20 122 777 0101', by: 'Aya Muhammed', at: '05 Oct 2026', web: 'www.ismailiakids.edu', docs: DOCS_ON,
+      upd: [{ svc: 'Online Card', st: 'Underwriting Review', h: 70, ch: [{ type: 'rate', li: 0, key: 'intl-EGP', rate: '2.30', fee: '2.80' }, { type: 'notes', notes: 'Seasonal campaign for school fees in September.' }] }],
       svc: [{ id: 'Online Card', model: 'PF', bank: 'QNB Alahli', st: 'Live', h: 180 }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 70, prep: 'ready' }],
       kyc: [{ st: 'Approved', h: 50, changes: [{ label: 'Contact phone', from: '+20 122 777 0101', to: '+20 122 777 0202', set: P => { P.phone = '+20 122 777 0202'; } }] }] },
     { name: 'Matrouh Beach Resort', industry: 'Travel & Tourism', email: 'khaled@matrouhresort.com', phone: '+20 100 330 4455', by: 'Karim Zaki', at: '18 Sept 2026', web: 'www.matrouhresort.com', docs: DOCS_ON,
@@ -141,20 +167,21 @@ window.UW = (function () {
       kyc: [{ st: 'Underwriting Review', h: 6, changes: [{ label: 'Contact email', from: 'nadia@aswanspice.com', to: 'accounts@aswanspice.com', set: P => { P.email = 'accounts@aswanspice.com'; } }, { label: 'Contact phone', from: '+20 111 556 6677', to: '+20 111 556 0000', set: P => { P.phone = '+20 111 556 0000'; } }] },
         { st: 'Rejected', h: 70, why: 'Business name does not match the Commercial Registration.', changes: [{ label: 'Business name', from: 'Aswan Spice Bazaar', to: 'Aswan Spices LLC', set: P => { P.name = 'Aswan Spices LLC'; } }] }] },
     { name: 'Luxor Heritage Tours', industry: 'Travel & Tourism', email: 'mostafa@luxortours.com', phone: '+20 100 220 1212', by: 'Nour Hamdy', at: '08 Oct 2026', docs: DOCS_ON,
-      svc: [{ id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 75 }, { id: 'Online Basata', model: 'PF', st: 'Live', h: 150, sell: 2.5 }] },
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 75 }, { id: 'Online Basata', model: 'PF', st: 'Live', h: 150, sell: 2.5 }],
+      upd: [{ svc: 'Online Basata', st: 'Underwriting Review', h: 35, ch: [{ type: 'rate', li: 0, key: 'selling', rate: '2.30', fee: '1.50' }] }] },
     { name: 'Maadi Home Decor', industry: 'Retail & E-commerce', email: 'rania@maadidecor.com', phone: '+20 122 404 5050', by: 'Aya Muhammed', at: '20 Oct 2026', web: 'www.maadidecor.com', store: 'maadi-store.jpg', docs: DOCS_ON.concat(DOCS_POS),
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 2 }, { id: 'POS Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 20 }],
       kyc: [{ st: 'Underwriting Review', h: 1, changes: [{ label: 'Industry', from: 'Retail & E-commerce', to: 'Fashion & Beauty', set: P => { P.industry = 'Fashion & Beauty'; } }] }] },
     { name: 'Nile Delta Pharmacy', industry: 'Healthcare / Pharmacy', email: 'ahmed@niledeltapharmacy.com', phone: '+20 100 818 2020', by: 'Aya Muhammed', at: '20 Oct 2026', web: ['www.niledeltapharmacy.com', 'instagram.com/niledeltapharmacy'], docs: DOCS_ON,
-      svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 3 }], kyc: [{ st: 'Underwriting Review', h: 3, isNew: true }] },
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 3 }], kyc: [{ st: 'Underwriting Review', h: 3, isNew: true, part: 'kyb' }, { st: 'Underwriting Review', h: 3, isNew: true, part: 'payout' }] },
     { name: 'Tanta Sports Club', industry: 'Entertainment & Media', email: 'karim@tantasports.com', phone: '+20 111 303 4040', by: 'Mostafa Khaled', at: '20 Oct 2026', web: 'www.tantasports.com', store: 'tanta-club.jpg', docs: DOCS_POS.concat(DOCS_ON),
-      svc: [{ id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 2 }, { id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 2, sell: 1.0 }], kyc: [{ st: 'Underwriting Review', h: 2, isNew: true }] },
+      svc: [{ id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 2 }, { id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 2, sell: 1.0 }], kyc: [{ st: 'Underwriting Review', h: 2, isNew: true, part: 'kyb' }, { st: 'Underwriting Review', h: 2, isNew: true, part: 'payout' }] },
     { name: 'Beni Suef Bakery', industry: 'Food & Beverage', email: 'sara@benisuefbakery.com', phone: '+20 122 505 6060', by: 'Nour Hamdy', at: '21 Oct 2026', web: 'facebook.com/benisuefbakery', docs: DOCS_ON.concat(DOCS_BM),
-      svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 1 }], kyc: [{ st: 'Underwriting Review', h: 1, isNew: true }] },
+      svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 1 }], kyc: [{ st: 'Underwriting Review', h: 1, isNew: true, part: 'kyb' }, { st: 'Underwriting Review', h: 1, isNew: true, part: 'payout' }] },
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 14;
+  const DEMO_VER = 15;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -193,7 +220,7 @@ window.UW = (function () {
   function autoAssign() {
     const all = readLocal(); let n = all.__rr || 0, changed = false;
     const give = (s, id, status) => { const k = keyOf(s, id); if (status !== 'Underwriting Review' || (all[k] && all[k].assignee)) return; all[k] = Object.assign(blank(), all[k] || {}, { assignee: C.TEAM[n++ % C.TEAM.length] }); changed = true; };
-    states().forEach(s => { s.order.forEach(id => s.cases[id] && give(s, id, s.cases[id].status)); (s.kyc || []).forEach(x => give(s, x.key, x.status)); });
+    states().forEach(s => { s.order.forEach(id => s.cases[id] && give(s, id, s.cases[id].status)); (s.kyc || []).forEach(x => give(s, x.key, x.status)); (s.updates || []).forEach(x => give(s, x.key, x.status)); });
     if (changed) { all.__rr = n; writeLocal(all); }
   }
   const canSee = c => !c.assignee || C.user().canReassign || c.assignee === C.user().name;
@@ -204,7 +231,7 @@ window.UW = (function () {
   function build(s, id) {
     const c = s.cases[id], svc = s.svc[id] || { lines: [] }, k = keyOf(s, id), l = local(k);
     const since = c.since ? Date.parse(c.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), sla = SLA[c.status];
-    return { type: 'service', key: k, id: gid(s, id), sid: id, mid: midOf(s), caseId: c.caseId, status: c.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+    return { type: 'service', kind: 'activation', caseType: TYPE.activation, key: k, id: gid(s, id), sid: id, mid: midOf(s), caseId: c.caseId, status: c.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
       website: (s.websites || []).filter(Boolean).join(', '), websites: (s.websites || []).filter(Boolean), service: label(id), channel: chOf(id), model: svc.model || '', svc: svc, banks: [...new Set((svc.lines || []).map(x => x.bank).filter(Boolean))],
       submittedBy: s.submittedBy, submittedAt: s.submittedAt, terminals: s.terminals || '', submitComment: s.submitComment || '', since: new Date(since).toISOString(), hours: hours, sla: sla,
       late: !!sla && hours > sla, reject: c.reject || null, liveSince: c.liveSince || '', assignee: l.assignee, local: l };
@@ -213,21 +240,32 @@ window.UW = (function () {
      It is applied to the application only when Underwriting approves it. */
   function buildKyc(s, x) {
     const k = keyOf(s, x.key), l = local(k), since = x.since ? Date.parse(x.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), open = x.status === 'Underwriting Review';
-    return { type: 'application', key: k, id: gid(s, x.key), sid: x.key, mid: midOf(s), caseId: x.caseId, status: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
-      service: 'Application details', isNew: !!x.isNew, changes: x.changes || [], proposed: x.proposed, banks: [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt,
+    const kind = kycKind(x);
+    return { type: 'application', kind: kind, caseType: TYPE[kind], key: k, id: gid(s, x.key), sid: x.key, mid: midOf(s), caseId: x.caseId, status: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+      service: TYPE[kind], isNew: !!x.isNew, changes: x.changes || [], proposed: x.proposed, banks: [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt,
       since: new Date(since).toISOString(), hours: hours, sla: open ? SLA['Underwriting Review'] : 0, late: open && hours > SLA['Underwriting Review'],
       reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
+  }
+  /* A service update: a change to a service that is already active. Approving applies its changes to the service. */
+  function buildUpdate(s, x) {
+    const sid = x.service, svc = s.svc[sid] || { lines: [] }, k = keyOf(s, x.key), l = local(k), since = x.since ? Date.parse(x.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), open = x.status === 'Underwriting Review';
+    return { type: 'update', kind: 'update', caseType: TYPE.update, key: k, id: gid(s, x.key), sid: x.key, serviceId: sid, mid: midOf(s), caseId: x.caseId, status: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+      website: (s.websites || []).filter(Boolean).join(', '), websites: (s.websites || []).filter(Boolean), service: label(sid), channel: chOf(sid), model: svc.model || '', svc: svc, banks: [...new Set((svc.lines || []).map(y => y.bank).filter(Boolean))],
+      changes: x.changes || [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt, terminals: s.terminals || '', submitComment: '', since: new Date(since).toISOString(), hours: hours,
+      sla: open ? SLA['Underwriting Review'] : 0, late: open && hours > SLA['Underwriting Review'], reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
   }
   function all() {
     seedDemo(); autoAssign();
     return [].concat.apply([], states().map(s => s.order.filter(id => s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1).map(id => build(s, id))
-      .concat((s.kyc || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildKyc(s, x))))).filter(canSee);
+      .concat((s.kyc || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildKyc(s, x)))
+      .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x))))).filter(canSee);
   }
   function get(cid) {
     seedDemo(); autoAssign();
     const p = split(cid), s = p[0] ? stateFor(p[0]) : states()[0]; if (!s) return null;
     const id = p[1]; let c = null;
-    if (String(id).indexOf('kyc:') === 0) { const x = (s.kyc || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildKyc(s, x) : null; }
+    if (String(id).indexOf('upd:') === 0) { const x = (s.updates || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildUpdate(s, x) : null; }
+    else if (String(id).indexOf('kyc:') === 0) { const x = (s.kyc || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildKyc(s, x) : null; }
     else c = s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1 ? build(s, id) : null;
     return c && canSee(c) ? c : null;
   }
@@ -240,19 +278,25 @@ window.UW = (function () {
   function checks(c) {
     const s = stateFor(c.appId), r = c.local.review, out = [];
     const add = (key, lbl, tab, extra) => out.push(Object.assign({ key: key, label: lbl, tab: tab, state: (r[key] || {}).state || 'todo', reason: (r[key] || {}).reason || '' }, extra || {}));
-    if (c.type === 'application') {
-      // The website / social media link belongs to a requested Online service, not to a change of the application data.
-      c.changes.forEach((x, i) => { if (!/^Website/.test(x.label)) add('chg:' + i, x.label, 'changes', { from: c.isNew ? undefined : x.from, to: x.to, isNew: !!c.isNew }); });
+    const names = d => Object.keys(s.docs[d] || {}).map(f => s.docs[d][f]).filter(Boolean), files = d => names(d).join(', ');
+    // A required document that was never uploaded blocks approval: the case has to go back to Sales.
+    const flagMissing = () => out.forEach(x => { if (x.files) { x.files = x.files.filter(Boolean); if (!x.files.length) { x.state = 'flag'; x.missing = true; x.reason = x.key === 'web' ? 'No website or social media link was provided' : 'Required item was not uploaded'; } } });
+    if (c.type === 'update') {                       // Service Update: every change to the service, current beside requested
+      c.changes.forEach((x, i) => add('chg:' + i, x.label, 'changes', { from: x.from, to: x.to }));
       return out;
     }
-    const names = d => Object.keys(s.docs[d] || {}).map(f => s.docs[d][f]).filter(Boolean), files = d => names(d).join(', ');
+    if (c.type === 'application') {                  // Change KYB/KYC or Change Payout Method: each change, then the documents that support it
+      c.changes.forEach((x, i) => { if (!/^Website/.test(x.label)) add('chg:' + i, x.label, 'changes', { from: c.isNew ? undefined : x.from, to: x.to, isNew: !!c.isNew }); });
+      (c.kind === 'payout' ? ['Bank Account Letter / IBAN proof'] : docsForKyb(c)).forEach(d => add('doc:' + d, d, 'documents', { files: [files(d)], list: names(d) }));
+      flagMissing();
+      return out;
+    }
     add('pricing', 'Services & pricing', 'pricing');
     if (c.channel === 'Online') { add('web', 'Website or social media link', 'website', { files: [(s.websites || []).filter(Boolean).join(', ')], links: (s.websites || []).filter(Boolean) }); add('doc:Brand Authorization Letter', 'Brand Authorization Letter', 'documents', { files: [files('Brand Authorization Letter')], list: names('Brand Authorization Letter') }); }
     if (c.channel === 'POS') { add('doc:Store Lease / Location Proof', 'Store Lease / Location Proof', 'documents', { files: [files('Store Lease / Location Proof')], list: names('Store Lease / Location Proof') }); add('store', 'Store image', 'documents', { files: [s.storeImage], list: [s.storeImage].filter(Boolean) }); }
     if (c.svc.model === 'PSP' && (c.svc.lines || []).some(l => l.bank === 'Bank Misr')) add('doc:BM PSP Agreement Annex', 'BM PSP Agreement Annex', 'documents', { files: [files('BM PSP Agreement Annex')], list: names('BM PSP Agreement Annex') });
     if (c.svc.model === 'PF') { const n = nmOf(c.sid) + ' - PF Contract'; add('con:' + n, n, 'contracts', { files: [(s.reqContracts || {})[n]], list: [(s.reqContracts || {})[n]].filter(Boolean) }); }
-    // A required document or contract that was never uploaded blocks approval: the case has to go back to Sales.
-    out.forEach(x => { if (x.files) { x.files = x.files.filter(Boolean); if (!x.files.length) { x.state = 'flag'; x.missing = true; x.reason = x.key === 'web' ? 'No website or social media link was provided' : 'Required item was not uploaded'; } } });
+    flagMissing();
     return out;
   }
   function progress(c) {
@@ -290,8 +334,28 @@ window.UW = (function () {
     k.status = 'Rejected'; k.reject = { source: 'uw', by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() }; k.since = new Date(CLOCK).toISOString();
     addLog(s, k.key, 'rejected the KYC update', 'xcircle', comment); save(s); return true;
   }
-  const approve = c => c.type === 'application' ? approveKyc(c) : move(c, 'Bank Submission', {}, 'approved the ' + c.service + ' case and sent it to the bank', 'Underwriting review completed.');
+  const updOf = (s, c) => (s.updates || []).filter(x => x.key === c.sid)[0];
+  function applyPatch(s, sid, p) {
+    const sv = s.svc[sid]; if (!sv) return;
+    if (p.type === 'rate') { const ln = sv.lines[p.li || 0]; if (ln) { ln.rates = ln.rates || {}; ln.rates[p.key] = { rate: String(p.rate), fee: String(p.fee) }; } }
+    else if (p.type === 'ops') sv.ops = p.ops.slice();
+    else if (p.type === 'notes') sv.notes = p.notes;
+    else if (p.type === 'currencies') sv.currencies = p.list.slice();
+  }
+  function approveUpdate(c) {
+    const s = stateFor(c.appId), u = s && updOf(s, c); if (!u) return false;
+    (u.patches || []).forEach(p => applyPatch(s, u.service, p));
+    u.status = 'Approved'; u.decision = { by: C.user().name, at: nowStr() }; u.since = new Date(CLOCK).toISOString();
+    addLog(s, u.key, 'approved the service update', 'check', 'The changes are now on the ' + label(u.service) + ' service'); save(s); return true;
+  }
+  function rejectUpdate(c, comment) {
+    const s = stateFor(c.appId), u = s && updOf(s, c); if (!u) return false;
+    u.status = 'Rejected'; u.reject = { source: 'uw', by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() }; u.since = new Date(CLOCK).toISOString();
+    addLog(s, u.key, 'rejected the service update', 'xcircle', comment); save(s); return true;
+  }
+  const approve = c => c.type === 'update' ? approveUpdate(c) : c.type === 'application' ? approveKyc(c) : move(c, 'Bank Submission', {}, 'approved the ' + c.service + ' case and sent it to the bank', 'Underwriting review completed.');
   function reject(c, comment) {
+    if (c.type === 'update') return rejectUpdate(c, comment);
     if (c.type === 'application') return rejectKyc(c, comment);
     return move(c, 'Rejected', { reject: { source: 'uw', by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() } },
       'rejected the ' + c.service + ' case and returned it to the salesperson', comment);
@@ -495,14 +559,13 @@ window.UW = (function () {
     approve(c); return 'approved';
   }
 
-  /* The other type of case on the same application: a service case is shown with the application's changes to
-     business details / payout methods, and an application case with the application's services still in review. */
+  /* The other cases on the same application, whatever their type (only a link; a case is never reviewed together with another). */
   function related(c) {
     const s = stateFor(c.appId); if (!s) return [];
     const rank = x => x.status === 'Underwriting Review' ? 0 : 1;
-    const ids = c.type === 'service' ? (s.kyc || []).filter(k => KYC_SHOWN.indexOf(k.status) > -1).map(k => k.key)
-      : s.order.filter(id => s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1);
-    return ids.map(id => get(gid(s, id))).filter(Boolean).sort((a, b) => rank(a) - rank(b));
+    const ids = s.order.filter(id => s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1)
+      .concat((s.kyc || []).filter(k => KYC_SHOWN.indexOf(k.status) > -1).map(k => k.key)).concat((s.updates || []).filter(k => KYC_SHOWN.indexOf(k.status) > -1).map(k => k.key));
+    return ids.map(id => get(gid(s, id))).filter(x => x && x.id !== c.id).sort((a, b) => rank(a) - rank(b));
   }
 
   /* The services on the same application, so the case info shows where this one sits. */
@@ -516,10 +579,10 @@ window.UW = (function () {
   /* The Cases list shows these next to the application cases, in the same row shape. */
   const LIST_STATUS = { 'Underwriting Review': 'submitted', 'Bank Submission': 'pending-configurations', Rejected: 'rejected', Live: 'live', Approved: 'approved' };
   function asCases() {
-    return all().map(c => ({ svcId: c.id, sales: true, kind: c.type, isNew: c.isNew, stage: c.status === 'Bank Submission' ? 'bank' : 'review',
+    return all().map(c => ({ svcId: c.id, sales: true, kind: c.kind, caseType: c.caseType, summary: (c.type === 'service' ? '' : (c.changes || []).map(x => x.label).join(', ')), isNew: c.isNew, stage: c.status === 'Bank Submission' ? 'bank' : 'review',
       prep: c.type === 'service' && c.status === 'Bank Submission' ? (r => r ? { unsupported: !!r.unsupported, bank: r.bank, done: r.done, total: r.total, complete: r.complete, prepared: !!r.prepared, exported: !!exported(c), bank: r.bank, bankKey: r.bankKey, sent: !!r.sent, waitingMerchant: !!(r.answer && r.answer.decision === 'Waiting for the merchant') } : null)(readiness(c)) : null,
       status: LIST_STATUS[c.status], salesStatus: c.status, no: c.caseId, mid: c.mid, industry: c.industry, assignee: c.assignee, since: c.since, resubmission: '',
-      app: { id: c.appId, biz: c.merchant.name, actor: c.submittedBy, summary: { email: c.merchant.email, serviceConfigs: c.type === 'service' ? [{ service: c.service, configs: c.banks.map(b => ({ bank: b })) }] : [] } },
+      app: { id: c.appId, biz: c.merchant.name, actor: c.submittedBy, summary: { email: c.merchant.email, serviceConfigs: c.type === 'application' ? [] : [{ service: c.service, configs: c.banks.map(b => ({ bank: b })) }] } },
       service: c.service, href: 'sales-case.html?id=' + encodeURIComponent(c.id) }))
       // Bank preparation lists only the cases it can prepare (NBE for now); a case for another bank is not listed until its bank is built.
       .filter(r => !(r.stage === 'bank' && r.prep && r.prep.unsupported));
@@ -527,5 +590,5 @@ window.UW = (function () {
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
     addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
-    resetDemo: resetDemo, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
+    resetDemo: resetDemo, TYPE: TYPE, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();
