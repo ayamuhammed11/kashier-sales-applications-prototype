@@ -287,7 +287,8 @@ window.UW = (function () {
     }
     if (c.type === 'application') {                  // Change KYB/KYC or Change Payout Method: each change, then the documents that support it
       c.changes.forEach((x, i) => { if (!/^Website/.test(x.label)) add('chg:' + i, x.label, 'changes', { from: c.isNew ? undefined : x.from, to: x.to, isNew: !!c.isNew }); });
-      (c.kind === 'payout' ? ['Bank Account Letter / IBAN proof'] : docsForKyb(c)).forEach(d => add('doc:' + d, d, 'documents', { files: [files(d)], list: names(d) }));
+      // A payout method change is not linked to documents; a KYB/KYC change is checked against the documents that support it.
+      (c.kind === 'payout' ? [] : docsForKyb(c)).forEach(d => add('doc:' + d, d, 'documents', { files: [files(d)], list: names(d) }));
       flagMissing();
       return out;
     }
