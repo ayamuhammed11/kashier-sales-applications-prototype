@@ -13,7 +13,8 @@
 <style>
   .wrap { max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
   .sec-h { flex-wrap: wrap; }
-  .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; margin-inline-start: auto; }
+  .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; flex: 1 0 100%; order: -1; }
+  .acts:empty { display: none; }
   .hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .hdr > div:first-child { flex: 1; min-width: 0; }
   .meta { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; color: var(--cadet-base); font-size: 14px; margin-block-start: 8px; }
