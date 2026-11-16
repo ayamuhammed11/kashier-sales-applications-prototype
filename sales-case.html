@@ -13,7 +13,7 @@
 <style>
   .wrap { max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
   .sec-h { flex-wrap: wrap; }
-  .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; flex: 1 0 100%; order: -1; }
+  .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; padding-block-start: 16px; border-block-start: 1px solid var(--border, #e5e7eb); }
   .acts:empty { display: none; }
   .hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .hdr > div:first-child { flex: 1; min-width: 0; }
@@ -201,10 +201,10 @@
       return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.ustatus)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
     const left = p.list.filter(x => x.state === 'todo').length, nOk = p.list.filter(x => x.state === 'ok').length, nBad = p.list.filter(x => x.state === 'flag').length;
-    const submitBar = '';
     const block = stageBar(c);
+    const submitBar = block ? `<div class="acts">${block}</div>` : '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2>${sc(c.ustatus)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}</span></div>
-      <div class="acts">${block}</div></div>
+      </div>
       ${app ? `<p style="margin:0;color:var(--cadet-base)">${esc(c.type === 'update' ? 'Changes to a service that is already active. Nothing changes until every item is approved.' : c.kind === 'payout' ? (c.isNew ? 'The payout method, submitted for the first time. There are no earlier values to compare with.' : 'A change to the payout method, with the current and the requested account side by side. Nothing is applied until every item is approved.') : (c.isNew ? 'The business details, submitted for the first time. There are no earlier values to compare with. Check them against the documents.' : 'A change to the business details (KYB/KYC). Nothing is applied until every item is approved. Check it against the supporting documents.'))}</p>` : ''}
       ${note}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div>${submitBar}</section>`;
   }
