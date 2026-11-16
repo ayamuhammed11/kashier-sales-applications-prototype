@@ -41,7 +41,7 @@ window.UW = (function () {
   /* The status a case shows, from the sales application's status and the little Underwriting adds (stage, and who rejected it). */
   const ustatus = (raw, x) => raw === 'Underwriting Review' ? 'Underwriting Review' : raw === 'Live' ? 'Active' : raw === 'Approved' ? 'UW Approved'
     : raw === 'Rejected' ? (x.reject && x.reject.from === 'bank' ? (x.reject.final ? 'Rejected by Bank' : 'Missing Bank Requirements') : 'Pending Sales Action')
-    : raw === 'Bank Submission' ? ({ bankOk: 'Approved by Bank', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
+    : raw === 'Bank Submission' ? ({ uwOk: 'UW Approved', bankOk: 'Approved by Bank', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
   const SHOWN = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved', 'Rejected'];
   /* The four case types. Service Activation Request: a newly requested service (pricing, website, documents, contract). Service Update: a change to
      a service that is already active. Change KYB/KYC: the business details (name, industry, contact...), with their supporting documents. Change Payout
@@ -369,7 +369,8 @@ window.UW = (function () {
     addLog(s, u.key, 'rejected the service update', 'xcircle', comment); save(s); return true;
   }
   const approve = c => c.type === 'update' ? approveUpdate(c) : c.type === 'application' ? approveKyc(c)
-    : move(c, 'Bank Submission', {}, 'approved the ' + c.service + ' case and sent it to the bank', 'Underwriting review completed. The case is sent to the bank.');
+    : move(c, 'Bank Submission', { stage: 'uwOk' }, 'approved the ' + c.service + ' case', 'Underwriting review completed.');
+  const toBank = c => c.ustatus === 'UW Approved' && c.type === 'service' && move(c, 'Bank Submission', {}, 'sent the ' + c.service + ' case to the bank', 'The case is waiting for the bank answer.');
   function reject(c, comment) {
     if (c.type === 'update') return rejectUpdate(c, comment);
     if (c.type === 'application') return rejectKyc(c, comment);
@@ -616,6 +617,6 @@ window.UW = (function () {
   }
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
-    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
+    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
     resetDemo: resetDemo, TYPE: TYPE, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();
