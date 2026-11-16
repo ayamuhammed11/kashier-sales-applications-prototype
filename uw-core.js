@@ -21,16 +21,28 @@ window.UW = (function () {
   const SA_KEY = 'sa-dir-final', DEMO_KEY = 'kashierUwDemoApps', STORE = 'kashierUwCases';
   const CLOCK = new Date('2026-10-21T12:00:00').getTime();        // the sales prototype's "now", so waiting times agree
   const SLA = { 'Underwriting Review': 72, 'Bank Submission': 120 };
+  /* The case statuses, moved by hand by Underwriting:
+       Underwriting Review -> UW Approved (a service case goes on: Sent to Bank) | UW rejected: Pending Sales Action (returned to Sales)
+       Sent to Bank -> Approved by Bank | Rejected by Bank (merchant not qualified) | Missing Bank Requirements (returned to Sales)
+       Approved by Bank -> Pending Onboarding Configurations -> Active
+     They sit on top of the sales application's own status (Underwriting Review, Bank Submission, Rejected, Live), which the salesperson still sees. */
   const STATUS = {
-    'Underwriting Review': { tone: 'warning', label: 'Pending Case' },        // the words of the application's own statuses: Has Pending Cases, Has Rejected Cases, Cases Completed
-    'Bank Submission': { tone: 'neutral', label: 'Bank Submission' },
-    Rejected: { tone: 'negative', label: 'Rejected Case' },
-    Live: { tone: 'positive', label: 'Completed Case' },
-    Approved: { tone: 'positive', label: 'Completed Case' },
+    'Underwriting Review': { tone: 'warning', sc: 'warn', label: 'Underwriting Review' },
+    'UW Approved': { tone: 'positive', sc: 'ok', label: 'UW Approved' },
+    'Pending Sales Action': { tone: 'warning', sc: 'warn', label: 'Pending Sales Action' },
+    'Sent to Bank': { tone: 'neutral', sc: 'info', label: 'Sent to Bank' },
+    'Approved by Bank': { tone: 'positive', sc: 'ok2', label: 'Approved by Bank' },
+    'Rejected by Bank': { tone: 'negative', sc: 'bad', label: 'Rejected by Bank' },
+    'Missing Bank Requirements': { tone: 'warning', sc: 'warn', label: 'Missing Bank Requirements' },
+    'Pending Onboarding Configurations': { tone: 'neutral', sc: 'info', label: 'Pending Onboarding Configurations' },
+    Active: { tone: 'positive', sc: 'ok', label: 'Active' },
   };
-  /* The queue holds what is in Underwriting Review (case review), what is in Bank Submission (bank preparation, phase 2) and what is completed.
-     A rejected case is returned to the salesperson, so it leaves the queue. */
-  const SHOWN = PHASE2 ? ['Underwriting Review', 'Bank Submission', 'Live'] : ['Underwriting Review', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved'];
+  const ORDER = Object.keys(STATUS);
+  /* The status a case shows, from the sales application's status and the little Underwriting adds (stage, and who rejected it). */
+  const ustatus = (raw, x) => raw === 'Underwriting Review' ? 'Underwriting Review' : raw === 'Live' ? 'Active' : raw === 'Approved' ? 'UW Approved'
+    : raw === 'Rejected' ? (x.reject && x.reject.from === 'bank' ? (x.reject.final ? 'Rejected by Bank' : 'Missing Bank Requirements') : 'Pending Sales Action')
+    : raw === 'Bank Submission' ? ({ bankOk: 'Approved by Bank', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
+  const SHOWN = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved', 'Rejected'];
   /* The four case types. Service Activation Request: a newly requested service (pricing, website, documents, contract). Service Update: a change to
      a service that is already active. Change KYB/KYC: the business details (name, industry, contact...), with their supporting documents. Change Payout
      Method: the payout account, with the bank account proof. A first submission of the business details or payout method is the same type, shown
@@ -81,7 +93,8 @@ window.UW = (function () {
       if (chOf(id) === 'POS') app.terminals = app.terminals || '2';
       app.cases[id] = { status: sv.st, caseId: 'CASE-' + (++c), since: iso(sv.h || 20) };
       if (sv.prep) app.cases[id].prepDemo = sv.prep;
-      if (sv.st === 'Rejected') app.cases[id].reject = { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: sv.why, at: '10/19/2026, 02:30:00 PM' };
+      if (sv.st === 'Rejected') app.cases[id].reject = { source: 'uw', from: sv.from, final: !!sv.final, by: sv.from === 'bank' ? (sv.bank || 'The bank') : 'Underwriting team', role: sv.from === 'bank' ? 'Bank' : 'Underwriting', comment: sv.why, at: '10/19/2026, 02:30:00 PM' };
+      if (sv.stage) app.cases[id].stage = sv.stage;
       if (sv.st === 'Live') app.cases[id].liveSince = '12 Oct 2026';
       if (sv.contract !== false && sv.model === 'PF') app.reqContracts[nm + ' - PF Contract'] = nm.toLowerCase().replace(/\s+/g, '-') + '-pf-contract-signed.pdf';
       app.log.unshift({ t: '10/0' + (1 + (n % 8)) + '/2026, 10:00:00 AM', who: 'System', text: 'moved the ' + label(id) + ' case to Underwriting Review', ic: 'check', id: id });
@@ -144,17 +157,17 @@ window.UW = (function () {
     { name: 'Giza Learning Hub', industry: 'Education', email: 'omar@gizalearning.edu', phone: '+20 111 765 4321', by: 'Nour Hamdy', at: '30 Sept 2026', web: 'www.gizalearning.edu', docs: [],
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 12 }, { id: 'Online Valu', model: 'PF', st: 'Underwriting Review', h: 52, sell: 2.2 }] },
     { name: 'Heliopolis Fitness Club', industry: 'Entertainment & Media', email: 'salma@heliofit.com', phone: '+20 122 300 1100', by: 'Aya Muhammed', at: '02 Oct 2026', web: 'www.heliofit.com', store: 'heliofit-front.jpg', docs: DOCS_POS.concat(DOCS_ON),
-      svc: [{ id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 60 }, { id: 'POS Wallet', model: 'PF', st: 'Underwriting Review', h: 26, sell: 1.0 }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 150, prep: 'sent' }] },
+      svc: [{ id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 60 }, { id: 'POS Wallet', model: 'PF', st: 'Underwriting Review', h: 26, sell: 1.0 }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 150, stage: 'bankOk' }] },
     { name: 'Nasr City Bookstore', industry: 'Education', email: 'mona@nasrbooks.com', phone: '+20 109 888 2200', by: 'Karim Zaki', at: '25 Sept 2026', web: 'www.nasrbooks.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Rejected', h: 70, why: 'Tax Identification Card is expired. Upload a valid copy.' }] },
     { name: 'Dokki Dental Clinic', industry: 'Healthcare / Pharmacy', email: 'laila@dokkidental.com', phone: '+20 100 450 7788', by: 'Aya Muhammed', at: '10 Sept 2026', web: 'www.dokkidental.com', docs: DOCS_ON.concat(DOCS_BM),
       upd: [{ svc: 'Online Card', st: 'Underwriting Review', h: 22, ch: [{ type: 'rate', li: 0, key: 'local', rate: '1.65', fee: '1.90' }, { type: 'ops', ops: ['Recurring'] }] }, { svc: 'Online Card', st: 'Approved', h: 120, ch: [{ type: 'notes', notes: 'Lower rates agreed for the pharmacy chain.' }] }],
-      svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Live', h: 300 }, { id: 'Online Bank Installments', model: 'PSP', bank: 'Bank Misr', st: 'Bank Submission', h: 80, rates: { selling: rate(1.4, 1.5) } }] },
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Live', h: 300 }, { id: 'Online Bank Installments', model: 'PSP', bank: 'Bank Misr', st: 'Bank Submission', h: 80, stage: 'config', rates: { selling: rate(1.4, 1.5) } }] },
     { name: 'Zayed Real Estate', industry: 'Real Estate', email: 'yasmin@zayedre.com', phone: '+20 111 909 3030', by: 'Mostafa Khaled', at: '15 Oct 2026', web: 'www.zayedre.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'CIB', st: 'Underwriting Review', h: 4 }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 40 }],
       kyc: [{ st: 'Underwriting Review', h: 15, changes: [bankChange('CIB', 'Smart Village', '1003998877665')] }] },
     { name: 'Garden City Florist', industry: 'Retail & E-commerce', email: 'heba@gcflorist.com', phone: '+20 100 612 9090', by: 'Nour Hamdy', at: '22 Sept 2026', web: 'www.gcflorist.com', docs: DOCS_ON,
-      svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 200, prep: 'merchant' }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 90 }],
+      svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Rejected', from: 'bank', h: 200, why: 'NBE asked for a recent utility bill for the business address.' }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 90 }],
       kyc: [{ st: 'Underwriting Review', h: 10, changes: [walletAdd] }] },
     { name: 'Ismailia Kids Academy', industry: 'Education', email: 'rasha@ismailiakids.edu', phone: '+20 122 777 0101', by: 'Aya Muhammed', at: '05 Oct 2026', web: 'www.ismailiakids.edu', docs: DOCS_ON,
       upd: [{ svc: 'Online Card', st: 'Underwriting Review', h: 70, ch: [{ type: 'rate', li: 0, key: 'intl-EGP', rate: '2.30', fee: '2.80' }, { type: 'notes', notes: 'Seasonal campaign for school fees in September.' }] }],
@@ -163,7 +176,7 @@ window.UW = (function () {
     { name: 'Matrouh Beach Resort', industry: 'Travel & Tourism', email: 'khaled@matrouhresort.com', phone: '+20 100 330 4455', by: 'Karim Zaki', at: '18 Sept 2026', web: 'www.matrouhresort.com', docs: DOCS_ON,
       svc: [{ id: 'Online Souhoola', model: 'PF', st: 'Underwriting Review', h: 20, sell: 3.2 }, { id: 'Online Valu', model: 'PF', st: 'Rejected', h: 110, sell: 2.0, why: 'Commercial Registration does not list the resort as the merchant.' }] },
     { name: 'Aswan Spice Bazaar', industry: 'Food & Beverage', email: 'nadia@aswanspice.com', phone: '+20 111 556 6677', by: 'Mostafa Khaled', at: '12 Oct 2026', web: 'www.aswanspice.com', store: 'aswan-shop.jpg', docs: DOCS_POS,
-      svc: [{ id: 'POS Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Bank Submission', h: 60 }],
+      svc: [{ id: 'POS Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Rejected', from: 'bank', final: true, h: 60, why: 'The business activity is outside the bank policy.' }],
       kyc: [{ st: 'Underwriting Review', h: 6, changes: [{ label: 'Contact email', from: 'nadia@aswanspice.com', to: 'accounts@aswanspice.com', set: P => { P.email = 'accounts@aswanspice.com'; } }, { label: 'Contact phone', from: '+20 111 556 6677', to: '+20 111 556 0000', set: P => { P.phone = '+20 111 556 0000'; } }] },
         { st: 'Rejected', h: 70, why: 'Business name does not match the Commercial Registration.', changes: [{ label: 'Business name', from: 'Aswan Spice Bazaar', to: 'Aswan Spices LLC', set: P => { P.name = 'Aswan Spices LLC'; } }] }] },
     { name: 'Luxor Heritage Tours', industry: 'Travel & Tourism', email: 'mostafa@luxortours.com', phone: '+20 100 220 1212', by: 'Nour Hamdy', at: '08 Oct 2026', docs: DOCS_ON,
@@ -181,7 +194,7 @@ window.UW = (function () {
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 15;
+  const DEMO_VER = 16;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -231,7 +244,7 @@ window.UW = (function () {
   function build(s, id) {
     const c = s.cases[id], svc = s.svc[id] || { lines: [] }, k = keyOf(s, id), l = local(k);
     const since = c.since ? Date.parse(c.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), sla = SLA[c.status];
-    return { type: 'service', kind: 'activation', caseType: TYPE.activation, key: k, id: gid(s, id), sid: id, mid: midOf(s), caseId: c.caseId, status: c.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+    return { type: 'service', kind: 'activation', caseType: TYPE.activation, key: k, id: gid(s, id), sid: id, mid: midOf(s), caseId: c.caseId, status: c.status, ustatus: ustatus(c.status, c), stage: c.stage || '', appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
       website: (s.websites || []).filter(Boolean).join(', '), websites: (s.websites || []).filter(Boolean), service: label(id), channel: chOf(id), model: svc.model || '', svc: svc, banks: [...new Set((svc.lines || []).map(x => x.bank).filter(Boolean))],
       submittedBy: s.submittedBy, submittedAt: s.submittedAt, terminals: s.terminals || '', submitComment: s.submitComment || '', since: new Date(since).toISOString(), hours: hours, sla: sla,
       late: !!sla && hours > sla, reject: c.reject || null, liveSince: c.liveSince || '', assignee: l.assignee, local: l };
@@ -241,7 +254,7 @@ window.UW = (function () {
   function buildKyc(s, x) {
     const k = keyOf(s, x.key), l = local(k), since = x.since ? Date.parse(x.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), open = x.status === 'Underwriting Review';
     const kind = kycKind(x);
-    return { type: 'application', kind: kind, caseType: TYPE[kind], key: k, id: gid(s, x.key), sid: x.key, mid: midOf(s), caseId: x.caseId, status: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+    return { type: 'application', kind: kind, caseType: TYPE[kind], key: k, id: gid(s, x.key), sid: x.key, mid: midOf(s), caseId: x.caseId, status: x.status, ustatus: ustatus(x.status, x), appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
       service: TYPE[kind], isNew: !!x.isNew, changes: x.changes || [], proposed: x.proposed, banks: [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt,
       since: new Date(since).toISOString(), hours: hours, sla: open ? SLA['Underwriting Review'] : 0, late: open && hours > SLA['Underwriting Review'],
       reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
@@ -249,7 +262,7 @@ window.UW = (function () {
   /* A service update: a change to a service that is already active. Approving applies its changes to the service. */
   function buildUpdate(s, x) {
     const sid = x.service, svc = s.svc[sid] || { lines: [] }, k = keyOf(s, x.key), l = local(k), since = x.since ? Date.parse(x.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), open = x.status === 'Underwriting Review';
-    return { type: 'update', kind: 'update', caseType: TYPE.update, key: k, id: gid(s, x.key), sid: x.key, serviceId: sid, mid: midOf(s), caseId: x.caseId, status: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+    return { type: 'update', kind: 'update', caseType: TYPE.update, key: k, id: gid(s, x.key), sid: x.key, serviceId: sid, mid: midOf(s), caseId: x.caseId, status: x.status, ustatus: ustatus(x.status, x), appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
       website: (s.websites || []).filter(Boolean).join(', '), websites: (s.websites || []).filter(Boolean), service: label(sid), channel: chOf(sid), model: svc.model || '', svc: svc, banks: [...new Set((svc.lines || []).map(y => y.bank).filter(Boolean))],
       changes: x.changes || [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt, terminals: s.terminals || '', submitComment: '', since: new Date(since).toISOString(), hours: hours,
       sla: open ? SLA['Underwriting Review'] : 0, late: open && hours > SLA['Underwriting Review'], reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
@@ -316,6 +329,7 @@ window.UW = (function () {
   /* ── Decisions: written back to the application's saved state ── */
   function move(c, status, extra, text, detail) {
     const s = stateFor(c.appId); if (!s || !s.cases[c.sid]) return false;
+    delete s.cases[c.sid].stage;
     Object.assign(s.cases[c.sid], extra || {}, { status: status, since: new Date(CLOCK).toISOString() });
     addLog(s, c.sid, text, status === 'Rejected' ? 'xcircle' : 'check', detail);
     save(s); return true;
@@ -355,15 +369,25 @@ window.UW = (function () {
     addLog(s, u.key, 'rejected the service update', 'xcircle', comment); save(s); return true;
   }
   const approve = c => c.type === 'update' ? approveUpdate(c) : c.type === 'application' ? approveKyc(c)
-    : PHASE2 ? move(c, 'Bank Submission', {}, 'approved the ' + c.service + ' case and sent it to the bank', 'Underwriting review completed.')
-    : move(c, 'Live', { liveSince: new Date(CLOCK).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }, 'approved the ' + c.service + ' activation request', 'Underwriting review completed. The case is completed.');
+    : move(c, 'Bank Submission', {}, 'approved the ' + c.service + ' case and sent it to the bank', 'Underwriting review completed. The case is sent to the bank.');
   function reject(c, comment) {
     if (c.type === 'update') return rejectUpdate(c, comment);
     if (c.type === 'application') return rejectKyc(c, comment);
     return move(c, 'Rejected', { reject: { source: 'uw', by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() } },
       'rejected the ' + c.service + ' case and returned it to the salesperson', comment);
   }
-  const goLive = c => move(c, 'Live', { liveSince: new Date(CLOCK).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }, 'marked the ' + c.service + ' case live', 'The bank approved and the credentials arrived.');
+  const goLive = c => move(c, 'Live', { liveSince: new Date(CLOCK).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }, 'marked the ' + c.service + ' case Active', 'The onboarding configurations are done. The service is active.');
+  /* The bank answer and what follows, each a manual step: Approved by Bank | Rejected by Bank | Missing Bank Requirements, then Pending Onboarding Configurations, then Active. */
+  function bankReply(c, outcome, comment) {
+    if (c.ustatus !== 'Sent to Bank') return false;
+    const bank = (c.banks || [])[0] || 'The bank', why = String(comment || '').trim();
+    const rej = final => ({ reject: { source: 'uw', from: 'bank', final: final, by: bank, role: 'Bank', comment: why, at: nowStr() } });
+    if (outcome === 'approved') return move(c, 'Bank Submission', { stage: 'bankOk' }, 'recorded that ' + bank + ' approved the ' + c.service + ' case', why || 'Approved by the bank.');
+    if (outcome === 'rejected') return move(c, 'Rejected', rej(true), 'recorded that ' + bank + ' rejected the ' + c.service + ' case', 'Merchant not qualified' + (why ? ': ' + why : '') + '.');
+    return move(c, 'Rejected', rej(false), 'returned the ' + c.service + ' case to Sales: missing bank requirements', why);
+  }
+  const toConfig = c => c.ustatus === 'Approved by Bank' && move(c, 'Bank Submission', { stage: 'config' }, 'moved the ' + c.service + ' case to Pending Onboarding Configurations', 'The bank approved. The merchant configurations are being set up.');
+  const activate = c => c.ustatus === 'Pending Onboarding Configurations' && goLive(c);
 
 
   /* ── Bank readiness ──
@@ -582,8 +606,8 @@ window.UW = (function () {
   /* The Cases list shows these next to the application cases, in the same row shape. */
   const LIST_STATUS = { 'Underwriting Review': 'submitted', 'Bank Submission': 'pending-configurations', Rejected: 'rejected', Live: 'live', Approved: 'approved' };
   function asCases() {
-    return all().map(c => ({ svcId: c.id, sales: true, kind: c.kind, caseType: c.caseType, summary: (c.type === 'service' ? '' : (c.changes || []).map(x => x.label).join(', ')), isNew: c.isNew, stage: c.status === 'Bank Submission' ? 'bank' : 'review',
-      prep: c.type === 'service' && c.status === 'Bank Submission' ? (r => r ? { unsupported: !!r.unsupported, bank: r.bank, done: r.done, total: r.total, complete: r.complete, prepared: !!r.prepared, exported: !!exported(c), bank: r.bank, bankKey: r.bankKey, sent: !!r.sent, waitingMerchant: !!(r.answer && r.answer.decision === 'Waiting for the merchant') } : null)(readiness(c)) : null,
+    return all().map(c => ({ svcId: c.id, sales: true, kind: c.kind, caseType: c.caseType, summary: (c.type === 'service' ? '' : (c.changes || []).map(x => x.label).join(', ')), isNew: c.isNew, channel: c.channel || '', ustatus: c.ustatus, stage: PHASE2 && c.status === 'Bank Submission' ? 'bank' : 'review',
+      prep: PHASE2 && c.type === 'service' && c.status === 'Bank Submission' ? (r => r ? { unsupported: !!r.unsupported, bank: r.bank, done: r.done, total: r.total, complete: r.complete, prepared: !!r.prepared, exported: !!exported(c), bank: r.bank, bankKey: r.bankKey, sent: !!r.sent, waitingMerchant: !!(r.answer && r.answer.decision === 'Waiting for the merchant') } : null)(readiness(c)) : null,
       status: LIST_STATUS[c.status], salesStatus: c.status, no: c.caseId, mid: c.mid, industry: c.industry, assignee: c.assignee, since: c.since, resubmission: '',
       app: { id: c.appId, biz: c.merchant.name, actor: c.submittedBy, summary: { email: c.merchant.email, serviceConfigs: c.type === 'application' ? [] : [{ service: c.service, configs: c.banks.map(b => ({ bank: b })) }] } },
       service: c.service, href: 'sales-case.html?id=' + encodeURIComponent(c.id) }))
@@ -592,6 +616,6 @@ window.UW = (function () {
   }
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
-    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
+    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
     resetDemo: resetDemo, TYPE: TYPE, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();

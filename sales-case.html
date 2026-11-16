@@ -84,8 +84,7 @@
   const { icon, esc } = SA, C = Cases, U = UW;
   const id = new URLSearchParams(location.search).get('id');
   const me = C.user();
-  const CHIP = { 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'warn', 'Bank Submission': 'ok2', Rejected: 'bad', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
-  const sc = s => `<span class="sc ${CHIP[s] || 'neu'}">${esc(U.STATUS[s] ? U.STATUS[s].label : s)}</span>`;
+  const sc = st => { const m = U.STATUS[st]; return `<span class="sc ${m ? m.sc : 'neu'}">${esc(m ? m.label : st)}</span>`; };
   const tierName = k => k === 'local' ? 'Local rates' : k.indexOf('intl-') === 0 ? 'International · ' + k.slice(5) : k.replace(/-/g, ' ');
   const dl = rows => `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v && v.html ? v.html : v == null || v === '' ? '—' : esc(v)}</dd>`).join('')}</dl>`;
   const links = list => list && list.length ? { html: list.map(u => `<a class="linkb" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>`).join(', ') } : '';
@@ -170,21 +169,35 @@
     return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${fl || ll ? `<div class="files">${fl}${ll}</div>` : detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
   }
   const nFiles = p => p.list.reduce((n, x) => n + (x.list ? x.list.length : 0), 0);
+  /* The manual steps after the review. Each button moves the case one step; the salesperson sees the result on the application. */
+  function stageBar(c) {
+    const d = `data-case="${esc(c.id)}"`;
+    if (c.type !== 'service') return '';
+    if (c.ustatus === 'Sent to Bank') return `<div class="bar" style="flex-wrap:wrap"><span class="st">Record the bank answer</span><button class="btn btn-outline-danger" type="button" ${d} data-bank="missing">Missing bank requirements</button><button class="btn btn-outline-danger" type="button" ${d} data-bank="rejected">Rejected by bank</button><button class="btn btn-primary" type="button" ${d} data-bank="approved">Approved by bank</button></div>`;
+    if (c.ustatus === 'Approved by Bank') return `<div class="bar"><span class="st">Next step</span><button class="btn btn-primary" type="button" ${d} data-stage="config">Move to Pending Onboarding Configurations</button></div>`;
+    if (c.ustatus === 'Pending Onboarding Configurations') return `<div class="bar"><span class="st">Next step</span><button class="btn btn-primary" type="button" ${d} data-stage="active">Mark Active</button></div>`;
+    return '';
+  }
   /* One block per case: the title, its status, and the items to decide. */
   function part(c, nested) {
     const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type !== 'service';
-    const note = c.status === 'Rejected' && c.reject ? `<div class="info bad"><b>Rejected${c.reject.by ? ' by ' + esc(c.reject.by) : ''}.</b> ${esc(c.reject.comment || '')} The salesperson fixes it on the application and resubmits.</div>`
-      : c.status === 'Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the ${c.type === 'update' ? 'service' : 'application'}.</div>`
-      : c.status === 'Bank Submission' && !app ? `<div class="info ok"><b>Case review complete.</b> Every item was approved.${U.PHASE2 ? ' The case is now in bank preparation.' : ''}</div>`
-      : c.status === 'Live' ? `<div class="info ok"><b>Completed${c.liveSince ? ' on ' + esc(c.liveSince) : ''}.</b> Underwriting approved this case.</div>` : '';
+    const by = c.reject && c.reject.by ? esc(c.reject.by) : '', why = c.reject ? esc(c.reject.comment || '') : '', us = c.ustatus;
+    const note = us === 'Pending Sales Action' ? `<div class="info bad"><b>Rejected${by ? ' by ' + by : ''}.</b> ${why} The case is returned to Sales, who fix it on the application and resubmit.</div>`
+      : us === 'Missing Bank Requirements' ? `<div class="info bad"><b>${by || 'The bank'} needs more from the merchant.</b> ${why} The case is returned to Sales, who fix it on the application and resubmit.</div>`
+      : us === 'Rejected by Bank' ? `<div class="info bad"><b>Rejected by ${by || 'the bank'}: merchant not qualified.</b> ${why}</div>`
+      : us === 'UW Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the ${c.type === 'update' ? 'service' : 'application'}.</div>`
+      : us === 'Sent to Bank' ? '<div class="info ok"><b>Approved by Underwriting and sent to the bank.</b> Record the bank answer below.</div>'
+      : us === 'Approved by Bank' ? '<div class="info ok"><b>The bank approved this case.</b> Next, move it to Pending Onboarding Configurations.</div>'
+      : us === 'Pending Onboarding Configurations' ? '<div class="info ok"><b>The merchant is being configured.</b> Mark the case Active when the configurations are done.</div>'
+      : us === 'Active' ? `<div class="info ok"><b>Active${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> The service is live for the merchant.</div>` : '';
     if (nested) {
       const what = c.changes.map(x => x.label).join(', ');
-      return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
+      return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.ustatus)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
     const left = p.list.filter(x => x.state === 'todo').length, nOk = p.list.filter(x => x.state === 'ok').length, nBad = p.list.filter(x => x.state === 'flag').length;
     const submitBar = open ? `<div class="bar"><span class="st">${nOk} approved \u00b7 ${nBad} rejected \u00b7 ${left} left to decide</span><button class="btn ${nBad ? 'btn-danger' : 'btn-primary'}" type="button" data-submit="${esc(c.id)}" ${left ? 'disabled' : ''}>Submit decision</button></div>` : '';
-    const block = '';
-    return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2>${sc(c.status)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
+    const block = stageBar(c);
+    return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2>${sc(c.ustatus)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}${open ? ' · ' + p.list.filter(x => x.state !== 'todo').length + ' of ' + p.total + ' reviewed' : ''}</span></div>
       <div style="display:flex;gap:8px;align-items:center"></div></div>
       ${app ? `<p style="margin:0;color:var(--cadet-base)">${esc(c.type === 'update' ? 'Changes to a service that is already active. Nothing changes until every item is approved.' : c.kind === 'payout' ? (c.isNew ? 'The payout method, submitted for the first time. There are no earlier values to compare with.' : 'A change to the payout method, with the current and the requested account side by side. Nothing is applied until every item is approved.') : (c.isNew ? 'The business details, submitted for the first time. There are no earlier values to compare with. Check them against the documents.' : 'A change to the business details (KYB/KYC). Nothing is applied until every item is approved. Check it against the supporting documents.'))}</p>` : ''}
       ${note}${block}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div>${submitBar}</section>`;
@@ -253,6 +266,9 @@
      this only links to the other kind on the same application. */
   /* What to do now, in one line. */
   function todoLine(c) {
+    const next = { 'Sent to Bank': 'Record the bank answer: Approved by bank, Rejected by bank (merchant not qualified) or Missing bank requirements (returns to Sales).', 'Approved by Bank': 'Move the case to Pending Onboarding Configurations.', 'Pending Onboarding Configurations': 'Mark the case Active once the merchant configurations are done.',
+      'Pending Sales Action': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.', 'Missing Bank Requirements': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.' }[c.ustatus];
+    if (next && c.type === 'service') return `<div class="info" role="status"><b>What to do:</b> ${next}</div>`;
     if (c.status !== 'Underwriting Review') return '';
     const p = U.progress(c), left = p.list.filter(x => x.state === 'todo').length, bad = p.list.filter(x => x.state === 'flag').length;
     const msg = left ? `Decide ${left} item${left === 1 ? '' : 's'}, then press <b>Submit decision</b>. Nothing closes until you submit.`
@@ -261,7 +277,7 @@
   }
   function relatedCard(c) {
     const list = U.related(c); if (!list.length) return '';
-    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Other cases on this application</h2><p>Each case is reviewed on its own.</p></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.type === 'application' ? r.changes.map(x => x.label).join(', ') : r.service)}</span><span class="f">${esc(r.caseId)} · ${esc(r.caseType)}</span></div><div class="a">${sc(r.status)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
+    return `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Other cases on this application</h2><p>Each case is reviewed on its own.</p></div></div><div>${list.map(r => `<div class="row"><div class="i"><span class="n">${esc(r.type === 'application' ? r.changes.map(x => x.label).join(', ') : r.service)}</span><span class="f">${esc(r.caseId)} · ${esc(r.caseType)}</span></div><div class="a">${sc(r.ustatus)}<a class="btn btn-outline btn-sm" href="sales-case.html?id=${encodeURIComponent(r.id)}">Open</a></div></div>`).join('')}</div></section>`;
   }
   /* The two phases of a service case. Phase 1 is the review below; phase 2, the bank preparation, comes later. */
   function phases(c, p) {
@@ -299,7 +315,7 @@
       ${parts.map(x => part(x)).join('')}
       ${c.type === 'update' ? `<section class="card sec"><div class="sec-h"><div class="tt"><h2>The service as it is now</h2><p>For reference. This is what the changes above are applied to.</p></div></div>${pricingDetail(c)}</section>` : ''}
       ${relatedCard(c)}
-      ${c.type === 'service' && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}
+      ${U.PHASE2 && c.type === 'service' && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
         ${notes.map(n => `<div class="note"><div class="k">${esc(n.by)} · ${esc(C.fmtDate(n.ts))}</div><div>${esc(n.text)}</div></div>`).join('')}</section></div>`;
@@ -318,9 +334,20 @@
         y.onclick = () => { U.setReview(U.get(cid), key, 'flag', t.value.trim()); api.close(); decided(cid); };
       } });
   }
+  const BANK = { approved: ['Approved by the bank', 'Anything the bank said (optional)', false, 'btn-primary', 'Approved by bank'], rejected: ['Rejected by the bank: merchant not qualified', 'Why the bank rejected the merchant (optional)', false, 'btn-danger', 'Rejected by bank'], missing: ['Missing bank requirements', 'What does the bank still need from the merchant?', true, 'btn-danger', 'Return to Sales'] };
+  function bankModal(cid, kind) {
+    const c = U.get(cid), m = BANK[kind];
+    SA.modal({ title: m[0] + '?', sub: esc(c.caseId) + ' \u00b7 ' + esc(c.service), body: `<div class="fld"><label for="bkC">Comment</label><textarea class="inp" id="bkC" rows="2" placeholder="${esc(m[1])}"></textarea></div>${kind === 'missing' ? '<p style="margin:0">The case returns to Sales with this comment.</p>' : ''}`,
+      foot: `<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn ${m[3]}" data-y ${m[2] ? 'disabled' : ''}>${esc(m[4])}</button>`,
+      bind(api) {
+        const t = api.el.querySelector('#bkC'), y = api.el.querySelector('[data-y]');
+        t.oninput = () => { y.disabled = m[2] && !t.value.trim(); }; api.el.querySelector('[data-n]').onclick = api.close;
+        y.onclick = () => { U.bankReply(U.get(cid), kind, t.value.trim()); api.close(); render(); SA.toast(m[0]); };
+      } });
+  }
   /* The flow: decide every item (Approve or Reject), then press "Submit decision". Nothing closes until you submit. */
   const OUTCOME = c => c.type === 'update' ? 'The changes are applied to the service and the case is completed.' : c.type === 'application' ? (c.kind === 'payout' ? 'The payout method is updated and the case is completed.' : 'The details are updated and the case is completed.')
-    : (U.PHASE2 ? 'The case moves on to bank preparation.' : 'The service request is completed.');
+    : 'The case is sent to the bank.';
   function decided() { render(); }
   function submitModal(cid) {
     const c = U.get(cid), p = U.progress(c), ok = p.list.filter(x => x.state === 'ok'), bad = p.list.filter(x => x.state === 'flag');
@@ -340,6 +367,8 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-stage]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.case); if (b.dataset.stage === 'config' ? U.toConfig(cc) : U.activate(cc)) { render(); SA.toast(b.dataset.stage === 'config' ? 'Moved to Pending Onboarding Configurations' : 'The case is Active'); } });
+    q('[data-bank]').forEach(b => b.onclick = () => bankModal(b.dataset.case, b.dataset.bank));
     q('[data-submit]').forEach(b => b.onclick = () => submitModal(b.dataset.submit));
     q('[data-bmbatch]').forEach(b => b.onclick = () => UWBM.open(() => render()));
     q('[data-sent]').forEach(b => b.onclick = () => { const v = i => (document.getElementById(i) || {}).value; if (U.markSent(U.get(b.dataset.sent), v('sentBatch'), v('sentRef'))) { render(); SA.toast('Marked as sent to the bank'); } });
