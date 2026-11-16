@@ -271,7 +271,7 @@ window.UW = (function () {
     seedDemo(); autoAssign();
     return [].concat.apply([], states().map(s => s.order.filter(id => s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1).map(id => build(s, id))
       .concat((s.kyc || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildKyc(s, x)))
-      .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x))))).filter(canSee);
+      .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x))))).filter(canSee).filter(received);
   }
   function get(cid) {
     seedDemo(); autoAssign();
@@ -280,8 +280,10 @@ window.UW = (function () {
     if (String(id).indexOf('upd:') === 0) { const x = (s.updates || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildUpdate(s, x) : null; }
     else if (String(id).indexOf('kyc:') === 0) { const x = (s.kyc || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildKyc(s, x) : null; }
     else c = s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1 ? build(s, id) : null;
-    return c && canSee(c) ? c : null;
+    return c && canSee(c) && received(c) ? c : null;
   }
+  /* A case is only received by Underwriting when it is complete: one with a required document or link missing never reaches the queue. */
+  const received = c => !(c.ustatus === 'Underwriting Review' && checks(c).some(x => x.missing));
   const state = () => states().length > 0;
 
   /* ── Review checklist ── */
