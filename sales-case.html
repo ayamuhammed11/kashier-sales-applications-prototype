@@ -317,7 +317,6 @@
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
       ${c.type === 'update' ? `<section class="card sec"><div class="sec-h"><div class="tt"><h2>The service as it is now</h2><p>For reference. This is what the changes above are applied to.</p></div></div>${pricingDetail(c)}</section>` : ''}
-      ${relatedCard(c)}
       ${U.PHASE2 && c.type === 'service' && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
         <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
