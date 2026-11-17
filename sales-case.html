@@ -19,6 +19,11 @@
   .ttl h1 { margin: 0; }
   .hl { background: var(--warning-bg, #fff4d6); color: var(--text, #1f2937); padding: 2px 10px; border-radius: 6px; font-weight: 700; }
   .meta a.linkb { text-decoration: underline; }
+  .stsel.st-ok, .stsel option.st-ok { background: var(--lemon-10); color: var(--lemon-80); }
+  .stsel.st-warn, .stsel option.st-warn { background: var(--mango-10); color: var(--mango-70); }
+  .stsel.st-info, .stsel option.st-info { background: var(--primary-10); color: var(--link); }
+  .stsel.st-bad, .stsel option.st-bad { background: var(--error-10); color: var(--destructive); }
+  .stsel.st-ok { border-color: var(--lemon-20); } .stsel.st-warn { border-color: var(--mango-20); } .stsel.st-info { border-color: var(--ocean-20); } .stsel.st-bad { border-color: #FFD0D6; }
   .stsel { width: auto; min-width: 170px; font-weight: 600; }
   .acts.hacts { border: 0; padding: 0; margin-block-start: 12px; justify-content: flex-start; }
   .hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
@@ -178,41 +183,27 @@
     return `<div class="row"><div class="i"><span class="n">${esc(x.label)}</span>${fl || ll ? `<div class="files">${fl}${ll}</div>` : detail ? `<span class="f">${detail}</span>` : ''}${x.state === 'flag' ? `<span class="f bad">${esc(x.reason)}</span>` : ''}</div><div class="a">${decision(x, c)}</div></div>`;
   }
   const nFiles = p => p.list.reduce((n, x) => n + (x.list ? x.list.length : 0), 0);
-  /* The manual steps after the review. Each button moves the case one step; the salesperson sees the result on the application. */
-  function stageBar(c) {
-    const d = `data-case="${esc(c.id)}"`;
-    if (c.ustatus === 'Underwriting Review') {
-      const miss = U.progress(c).list.filter(x => x.missing).length;
-      return `<button class="btn btn-outline-danger" type="button" ${d} data-tr="reject">Reject case</button><button class="btn btn-primary" type="button" ${d} data-tr="approve" ${miss ? 'disabled title="' + miss + ' required item' + (miss === 1 ? ' is' : 's are') + ' missing, so the case cannot be approved."' : ''}>Approve case</button>`;
-    }
-    return '';
-  }
-  /* After the review, the steps sit at the top of the case, beside its status. Reject and Approve stay at the bottom. */
-  function topBar(c) {
-    const d = `data-case="${esc(c.id)}"`;
-    if (c.type !== 'service') return '';
-    if (c.ustatus === 'Sent to Bank') return `<button class="btn btn-outline-danger" type="button" ${d} data-bank="missing">Missing bank requirements</button><button class="btn btn-outline-danger" type="button" ${d} data-bank="rejected">Rejected by bank</button><button class="btn btn-primary" type="button" ${d} data-bank="approved">Approved by bank</button>`;
-    if (c.ustatus === 'Pending Onboarding Configurations') return `<button class="btn btn-primary" type="button" ${d} data-stage="active">Active</button>`;
-    return '';
+  /* The status of the case is one dropdown. Any status can be set at any time, forwards or backwards. */
+  function statusSel(c) {
+    const opts = c.type === 'service' ? U.ORDER : ['Underwriting Review', 'UW Approved', 'Pending Sales Action'];
+    return `<select class="sel stsel st-${U.STATUS[c.ustatus].sc}" data-case="${esc(c.id)}" data-status aria-label="Change the case status">${opts.map(o => `<option value="${esc(o)}" class="st-${U.STATUS[o].sc}" ${o === c.ustatus ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   }
   /* One block per case: the title, its status, and the items to decide. */
   function part(c, nested) {
     const p = U.progress(c), open = c.status === 'Underwriting Review', app = c.type !== 'service';
     const by = c.reject && c.reject.by ? esc(c.reject.by) : '', why = c.reject ? esc(c.reject.comment || '') : '', us = c.ustatus;
-    const note = us === 'Pending Sales Action' ? `<div class="info bad"><b>Rejected${by ? ' by ' + by : ''}.</b> ${why} The case is returned to Sales, who fix it on the application and resubmit.</div>`
-      : us === 'Missing Bank Requirements' ? `<div class="info bad"><b>${by || 'The bank'} needs more from the merchant.</b> ${why} The case is returned to Sales, who fix it on the application and resubmit.</div>`
+    const note = us === 'Pending Sales Action' ? (c.reject && c.reject.from === 'bank' ? `<div class="info bad"><b>${by || 'The bank'} needs more from the merchant.</b> ${why} The case is returned to Sales, who fix it on the application and resubmit.</div>` : `<div class="info bad"><b>Rejected${by ? ' by ' + by : ''}.</b> ${why} The case is returned to Sales, who fix it on the application and resubmit.</div>`)
       : us === 'Rejected by Bank' ? `<div class="info bad"><b>Merchant not qualified:</b> ${why}</div>`
       : us === 'UW Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the ${c.type === 'update' ? 'service' : 'application'}.</div>`
-      : us === 'Sent to Bank' ? '<div class="info ok"><b>Approved by Underwriting and sent to the bank.</b> Record the bank answer below.</div>'
-      : us === 'Pending Onboarding Configurations' ? '<div class="info ok"><b>The bank approved this case. The merchant is being configured.</b> Mark the case Active when the configurations are done.</div>'
+      : us === 'Sent to Bank' ? '<div class="info ok"><b>Approved by Underwriting and sent to the bank.</b> Change the status when the bank answers.</div>'
+      : us === 'Pending Onboarding Configurations' ? '<div class="info ok"><b>The bank approved this case. The merchant is being configured.</b> Set the status to Active when the configurations are done.</div>'
       : us === 'Active' ? `<div class="info ok"><b>Active${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> The service is live for the merchant.</div>` : '';
     if (nested) {
       const what = c.changes.map(x => x.label).join(', ');
       return `<div class="sub" data-part="${esc(c.id)}"><div class="ptitle"><h3>${esc(what)}</h3>${sc(c.ustatus)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}</span></div>${note}<div>${p.list.map(x => row(x, c)).join('')}</div></div>`;
     }
     const left = p.list.filter(x => x.state === 'todo').length, nOk = p.list.filter(x => x.state === 'ok').length, nBad = p.list.filter(x => x.state === 'flag').length;
-    const block = stageBar(c);
-    const submitBar = block ? `<div class="acts">${block}</div>` : '';
+    const submitBar = '';
     return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2><span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}</span></div>
       </div>
       ${app ? `<p style="margin:0;color:var(--cadet-base)">${esc(c.type === 'update' ? 'Changes to a service that is already active. Nothing changes until every item is approved.' : c.kind === 'payout' ? (c.isNew ? 'The payout method, submitted for the first time. There are no earlier values to compare with.' : 'A change to the payout method, with the current and the requested account side by side. Nothing is applied until every item is approved.') : (c.isNew ? 'The business details, submitted for the first time. There are no earlier values to compare with. Check them against the documents.' : 'A change to the business details (KYB/KYC). Nothing is applied until every item is approved. Check it against the supporting documents.'))}</p>` : ''}
@@ -321,8 +312,8 @@
     const info = (c.channel ? [['Channel', hl(c.channel)], ['Service', hl(c.service.replace(/ \(\w+\)$/, ''))]] : []).concat([['Business', { html: `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` }], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity],  ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]])
       .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
     page.innerHTML = `<div class="wrap">
-      <header class="hdr"><div>${crumb(c.caseId)}<div class="ttl"><h1>${esc(c.caseId)}</h1>${c.ustatus === 'UW Approved' && c.type === 'service' ? `<select class="sel stsel" data-case="${esc(c.id)}" data-status aria-label="Change the case status"><option value="uw" selected>UW Approved</option><option value="bank">Sent to Bank</option></select>` : sc(c.ustatus)}</div>
-        <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<a class="linkb" href="${esc(appHref(c))}" title="Open the application">${esc(c.appId)}</a><button type="button" class="linkb" data-logs>View logs</button></div>${topBar(c) ? `<div class="acts hacts">${topBar(c)}</div>` : ''}</div>${profile}</header>
+      <header class="hdr"><div>${crumb(c.caseId)}<div class="ttl"><h1>${esc(c.caseId)}</h1>${statusSel(c)}</div>
+        <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<a class="linkb" href="${esc(appHref(c))}" title="Open the application">${esc(c.appId)}</a><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
       ${app || !U.STEPPER ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
@@ -347,29 +338,19 @@
         y.onclick = () => { U.setReview(U.get(cid), key, 'flag', t.value.trim()); api.close(); decided(cid); };
       } });
   }
-  const BANK = { approved: ['Approved by the bank', 'Anything the bank said (optional)', false, 'btn-primary', 'Approved by bank'], rejected: ['Rejected by the bank: merchant not qualified', 'Why the bank rejected the merchant (optional)', false, 'btn-danger', 'Rejected by bank'], missing: ['Missing bank requirements', 'What does the bank still need from the merchant?', true, 'btn-danger', 'Return to Sales'] };
-  function bankModal(cid, kind) {
-    const c = U.get(cid), m = BANK[kind];
-    SA.modal({ title: m[0] + '?', sub: esc(c.caseId) + ' \u00b7 ' + esc(c.service), body: `<div class="fld"><label for="bkC">Comment</label><textarea class="inp" id="bkC" rows="2" placeholder="${esc(m[1])}"></textarea></div>${kind === 'missing' ? '<p style="margin:0">The case returns to Sales with this comment.</p>' : ''}`,
-      foot: `<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn ${m[3]}" data-y ${m[2] ? 'disabled' : ''}>${esc(m[4])}</button>`,
-      bind(api) {
-        const t = api.el.querySelector('#bkC'), y = api.el.querySelector('[data-y]');
-        t.oninput = () => { y.disabled = m[2] && !t.value.trim(); }; api.el.querySelector('[data-n]').onclick = api.close;
-        y.onclick = () => { U.bankReply(U.get(cid), kind, t.value.trim()); api.close(); render(); SA.toast(m[0]); };
-      } });
-  }
   function decided() { render(); }
-  /* The manual move out of Underwriting Review: UW Approved (only when every item is approved) or Pending Sales Action (back to Sales, with the reasons). */
-  function transition(cid, kind) {
-    const c = U.get(cid), p = U.progress(c), bad = p.list.filter(x => x.state === 'flag');
-    if (kind === 'approve') { if (U.approve(c)) { render(); SA.toast(c.caseId + ' approved'); } return; }
-    SA.modal({ title: 'Reject this case?', sub: esc(c.caseId) + ' \u00b7 ' + esc(c.caseType), body: `<p style="margin:0">The case moves to <b>Pending Sales Action</b> and returns to Sales.</p><div class="fld"><label for="trC">Comment for Sales</label><textarea class="inp" id="trC" rows="3" placeholder="What does Sales need to fix?">${esc(bad.map(f => f.label + ': ' + f.reason).join('. '))}</textarea></div>`,
-      foot: '<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-danger" data-y>Reject case</button>',
+  /* Moving to Pending Sales Action (back to Sales) or Rejected by Bank (merchant not qualified) asks for the reason. */
+  function commentModal(cid, to) {
+    const c = U.get(cid), sales = to === 'Pending Sales Action';
+    SA.modal({ title: sales ? 'Return this case to Sales?' : 'Rejected by the bank?', sub: esc(c.caseId) + ' \u00b7 ' + esc(c.service || c.caseType),
+      body: `<p style="margin:0">${sales ? 'The case moves to <b>Pending Sales Action</b> and returns to Sales.' : 'The case moves to <b>Rejected by Bank</b>: merchant not qualified.'}</p><div class="fld"><label for="trC">${sales ? 'Comment for Sales' : 'Rejection reason'}</label><textarea class="inp" id="trC" rows="3" placeholder="${sales ? 'What does Sales need to fix?' : 'Why did the bank reject the merchant?'}"></textarea></div>`,
+      foot: `<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-danger" data-y ${sales ? 'disabled' : ''}>${sales ? 'Return to Sales' : 'Rejected by bank'}</button>`,
       bind(api) {
-        const t = api.el.querySelector('#trC'), y = api.el.querySelector('[data-y]'); y.disabled = !t.value.trim();
-        t.oninput = () => { y.disabled = !t.value.trim(); }; api.el.querySelector('[data-n]').onclick = api.close;
-        y.onclick = () => { U.reject(U.get(cid), t.value.trim()); api.close(); render(); SA.toast(c.caseId + ' returned to Sales'); };
+        const t = api.el.querySelector('#trC'), y = api.el.querySelector('[data-y]');
+        t.oninput = () => { y.disabled = sales && !t.value.trim(); }; api.el.querySelector('[data-n]').onclick = api.close;
+        y.onclick = () => { U.setStatus(U.get(cid), to, t.value.trim()); api.close(); render(); SA.toast(c.caseId + ' is now ' + to); };
       } });
+    render();   // the dropdown shows the current status again until the change is confirmed
   }
   function bind(c) {
     const q = s => document.querySelectorAll(s), one = s => document.querySelector(s);
@@ -377,10 +358,11 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
-    q('[data-status]').forEach(b => b.onchange = () => { if (b.value === 'bank' && U.toBank(U.get(b.dataset.case))) { render(); SA.toast('Sent to Bank'); } });
-    q('[data-stage]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.case), k = b.dataset.stage; if ((k === 'bank' ? U.toBank(cc) : k === 'config' ? U.toConfig(cc) : U.activate(cc))) { render(); SA.toast(k === 'bank' ? 'Sent to Bank' : k === 'config' ? 'Moved to Pending Onboarding Configurations' : 'The case is Active'); } });
-    q('[data-bank]').forEach(b => b.onclick = () => bankModal(b.dataset.case, b.dataset.bank));
-    q('[data-tr]').forEach(b => b.onclick = () => transition(b.dataset.case, b.dataset.tr));
+    q('[data-status]').forEach(b => b.onchange = () => {
+      const cur = U.get(b.dataset.case), to = b.value;
+      if (to === 'Pending Sales Action' || to === 'Rejected by Bank') { commentModal(b.dataset.case, to); return; }
+      if (U.setStatus(cur, to)) { render(); SA.toast(cur.caseId + ' is now ' + to); } else b.value = cur.ustatus;
+    });
     q('[data-bmbatch]').forEach(b => b.onclick = () => UWBM.open(() => render()));
     q('[data-sent]').forEach(b => b.onclick = () => { const v = i => (document.getElementById(i) || {}).value; if (U.markSent(U.get(b.dataset.sent), v('sentBatch'), v('sentRef'))) { render(); SA.toast('Marked as sent to the bank'); } });
     q('[data-answer]').forEach(b => b.onclick = () => {

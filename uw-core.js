@@ -23,23 +23,23 @@ window.UW = (function () {
   const SLA = { 'Underwriting Review': 72, 'Bank Submission': 120 };
   /* The case statuses, moved by hand by Underwriting:
        Underwriting Review -> UW Approved (a service case goes on: Sent to Bank) | UW rejected: Pending Sales Action (returned to Sales)
-       Sent to Bank -> Pending Onboarding Configurations (bank approved) | Rejected by Bank (merchant not qualified) | Missing Bank Requirements (returned to Sales)
+       Sent to Bank -> Pending Onboarding Configurations (bank approved) | Rejected by Bank (merchant not qualified) | Pending Sales Action (bank needs more, returned to Sales)
        Pending Onboarding Configurations -> Active
+     Underwriting can set any status at any time, forwards or backwards (setStatus).
      They sit on top of the sales application's own status (Underwriting Review, Bank Submission, Rejected, Live), which the salesperson still sees. */
   const STATUS = {
     'Underwriting Review': { tone: 'warning', sc: 'warn', label: 'Underwriting Review' },
     'UW Approved': { tone: 'positive', sc: 'ok', label: 'UW Approved' },
     'Pending Sales Action': { tone: 'warning', sc: 'warn', label: 'Pending Sales Action' },
     'Sent to Bank': { tone: 'neutral', sc: 'info', label: 'Sent to Bank' },
-    'Rejected by Bank': { tone: 'negative', sc: 'bad', label: 'Rejected by Bank' },
-    'Missing Bank Requirements': { tone: 'warning', sc: 'warn', label: 'Missing Bank Requirements' },
     'Pending Onboarding Configurations': { tone: 'neutral', sc: 'info', label: 'Pending Onboarding Configurations' },
     Active: { tone: 'positive', sc: 'ok', label: 'Active' },
+    'Rejected by Bank': { tone: 'negative', sc: 'bad', label: 'Rejected by Bank' },
   };
   const ORDER = Object.keys(STATUS);
   /* The status a case shows, from the sales application's status and the little Underwriting adds (stage, and who rejected it). */
   const ustatus = (raw, x) => raw === 'Underwriting Review' ? 'Underwriting Review' : raw === 'Live' ? 'Active' : raw === 'Approved' ? 'UW Approved'
-    : raw === 'Rejected' ? (x.reject && x.reject.from === 'bank' ? (x.reject.final ? 'Rejected by Bank' : 'Missing Bank Requirements') : 'Pending Sales Action')
+    : raw === 'Rejected' ? (x.reject && x.reject.from === 'bank' ? (x.reject.final ? 'Rejected by Bank' : 'Pending Sales Action') : 'Pending Sales Action')
     : raw === 'Bank Submission' ? ({ uwOk: 'UW Approved', bankOk: 'Pending Onboarding Configurations', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
   const SHOWN = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved', 'Rejected'];
   /* The four case types. Service Activation Request: a newly requested service (pricing, website, documents, contract). Service Update: a change to
@@ -190,10 +190,30 @@ window.UW = (function () {
       svc: [{ id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 2 }, { id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 2, sell: 1.0 }], kyc: [{ st: 'Underwriting Review', h: 2, isNew: true, part: 'kyb' }, { st: 'Underwriting Review', h: 2, isNew: true, part: 'payout' }] },
     { name: 'Beni Suef Bakery', industry: 'Food & Beverage', email: 'sara@benisuefbakery.com', phone: '+20 122 505 6060', by: 'Nour Hamdy', at: '21 Oct 2026', web: 'facebook.com/benisuefbakery', docs: DOCS_ON.concat(DOCS_BM),
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 1 }], kyc: [{ st: 'Underwriting Review', h: 1, isNew: true, part: 'kyb' }, { st: 'Underwriting Review', h: 1, isNew: true, part: 'payout' }] },
+    { name: 'Alexandria Seafood House', industry: 'Food & Beverage', email: 'mahmoud@alexseafood.com', phone: '+20 100 701 1010', by: 'Aya Muhammed', at: '23 Oct 2026', web: 'www.alexseafood.com', store: 'alexandria.jpg', docs: DOCS_POS.concat(DOCS_ON),
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 5 }, { id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 9 }] },
+    { name: 'Sharm Diving Center', industry: 'Travel & Tourism', email: 'hana@sharmdiving.com', phone: '+20 111 702 2020', by: 'Nour Hamdy', at: '23 Oct 2026', web: 'www.sharmdiving.com', docs: DOCS_ON,
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 14 }, { id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 28, sell: 1.0 }] },
+    { name: 'Port Said Electronics', industry: 'Retail & E-commerce', email: 'tarek@pselectronics.com', phone: '+20 122 703 3030', by: 'Mostafa Khaled', at: '24 Oct 2026', web: 'www.pselectronics.com', store: 'port.jpg', docs: DOCS_POS.concat(DOCS_ON).concat(DOCS_BM),
+      svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 3 }, { id: 'POS Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 46 }] },
+    { name: 'Mansoura Medical Supplies', industry: 'Healthcare / Pharmacy', email: 'dina@mansouramed.com', phone: '+20 100 704 4040', by: 'Karim Zaki', at: '24 Oct 2026', web: 'www.mansouramed.com', docs: DOCS_ON,
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 8 }, { id: 'Online Souhoola', model: 'PF', st: 'Underwriting Review', h: 60, sell: 1.0 }] },
+    { name: 'Fayoum Organic Farms', industry: 'Food & Beverage', email: 'ali@fayoumorganic.com', phone: '+20 111 705 5050', by: 'Aya Muhammed', at: '25 Oct 2026', web: 'instagram.com/fayoumorganic', docs: DOCS_ON,
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 11 }, { id: 'Online Valu', model: 'PF', st: 'Underwriting Review', h: 72, sell: 1.0 }] },
+    { name: 'Hurghada Water Sports', industry: 'Entertainment & Media', email: 'nada@hurghadawater.com', phone: '+20 122 706 6060', by: 'Nour Hamdy', at: '25 Oct 2026', web: 'www.hurghadawater.com', store: 'hurghada.jpg', docs: DOCS_POS.concat(DOCS_ON),
+      svc: [{ id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 1 }, { id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 18 }] },
+    { name: 'Suez Auto Parts', industry: 'Retail & E-commerce', email: 'sameh@suezauto.com', phone: '+20 100 707 7070', by: 'Mostafa Khaled', at: '26 Oct 2026', web: 'www.suezauto.com', docs: DOCS_ON,
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 26 }, { id: 'Online Basata', model: 'PF', st: 'Underwriting Review', h: 5, sell: 1.0 }] },
+    { name: 'Qena Textile Trading', industry: 'Retail & E-commerce', email: 'hoda@qenatextile.com', phone: '+20 111 708 8080', by: 'Karim Zaki', at: '26 Oct 2026', web: 'facebook.com/qenatextile', docs: DOCS_ON.concat(DOCS_BM),
+      svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 33 }, { id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 7, sell: 1.0 }] },
+    { name: 'Damietta Furniture Mall', industry: 'Retail & E-commerce', email: 'amr@damiettafurniture.com', phone: '+20 122 709 9090', by: 'Aya Muhammed', at: '27 Oct 2026', web: 'www.damiettafurniture.com', store: 'damietta.jpg', docs: DOCS_POS.concat(DOCS_ON),
+      svc: [{ id: 'POS Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 4 }, { id: 'POS Wallet', model: 'PF', st: 'Underwriting Review', h: 12, sell: 1.0 }] },
+    { name: 'Sohag Language School', industry: 'Education', email: 'mervat@sohagschool.edu', phone: '+20 100 710 1111', by: 'Nour Hamdy', at: '27 Oct 2026', web: 'www.sohagschool.edu', docs: DOCS_ON,
+      svc: [{ id: 'Online Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 2 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 38, sell: 1.0 }] },
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 16;
+  const DEMO_VER = 18;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -387,6 +407,28 @@ window.UW = (function () {
     if (outcome === 'approved') return move(c, 'Bank Submission', { stage: 'config' }, 'recorded that ' + bank + ' approved the ' + c.service + ' case', why || 'Approved by the bank. The merchant configurations are being set up.');
     if (outcome === 'rejected') return move(c, 'Rejected', rej(true), 'recorded that ' + bank + ' rejected the ' + c.service + ' case', 'Merchant not qualified' + (why ? ': ' + why : '') + '.');
     return move(c, 'Rejected', rej(false), 'returned the ' + c.service + ' case to Sales: missing bank requirements', why);
+  }
+  /* Any status, at any time, in either direction. A status written here replaces the earlier decision (rejection, go-live date) rather than stacking on it. */
+  function setStatus(c, to, comment) {
+    const why = String(comment || '').trim(), svc = c.service || c.caseType, bank = (c.banks || [])[0] || 'The bank', back = 'moved the ' + svc + ' case to ' + to;
+    if (to === c.ustatus) return false;
+    if (c.type !== 'service') {
+      const s = stateFor(c.appId), k = s && (c.type === 'update' ? updOf(s, c) : kycOf(s, c)); if (!k) return false;
+      if (to === 'Pending Sales Action') return c.type === 'update' ? rejectUpdate(c, why) : rejectKyc(c, why);
+      if (to === 'UW Approved') return c.type === 'update' ? approveUpdate(c) : approveKyc(c);
+      if (to !== 'Underwriting Review') return false;
+      k.status = 'Underwriting Review'; delete k.reject; delete k.decision; k.since = new Date(CLOCK).toISOString();
+      addLog(s, k.key, back, 'check', ''); save(s); return true;
+    }
+    const clear = { reject: undefined, liveSince: undefined };
+    if (to === 'Underwriting Review') return move(c, 'Underwriting Review', clear, back, '');
+    if (to === 'UW Approved') return move(c, 'Bank Submission', Object.assign(clear, { stage: 'uwOk' }), back, '');
+    if (to === 'Sent to Bank') return move(c, 'Bank Submission', clear, back, '');
+    if (to === 'Pending Onboarding Configurations') return move(c, 'Bank Submission', Object.assign(clear, { stage: 'config' }), back, '');
+    if (to === 'Active') return move(c, 'Live', Object.assign(clear, { liveSince: new Date(CLOCK).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }), back, '');
+    if (to === 'Rejected by Bank') return move(c, 'Rejected', { reject: { source: 'uw', from: 'bank', final: true, by: bank, role: 'Bank', comment: why, at: nowStr() }, liveSince: undefined }, back, 'Merchant not qualified' + (why ? ': ' + why : '') + '.');
+    if (to === 'Pending Sales Action') return move(c, 'Rejected', { reject: { source: 'uw', by: C.user().name, role: 'Underwriting', comment: why, at: nowStr() }, liveSince: undefined }, back, why);
+    return false;
   }
   const toConfig = c => c.ustatus === 'Pending Onboarding Configurations' && move(c, 'Bank Submission', { stage: 'config' }, 'moved the ' + c.service + ' case to Pending Onboarding Configurations', 'The bank approved. The merchant configurations are being set up.');
   const activate = c => c.ustatus === 'Pending Onboarding Configurations' && goLive(c);
@@ -618,6 +660,6 @@ window.UW = (function () {
   }
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
-    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
+    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, setStatus: setStatus, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
     resetDemo: resetDemo, TYPE: TYPE, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();
