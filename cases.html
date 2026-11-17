@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="sales-applications/shared/base.css">
 <link rel="stylesheet" href="sales-applications/shared/sa.css">
 <link rel="stylesheet" href="components/filter-bar.css">
+<link rel="stylesheet" href="uw-case-view.css">
 <style>
   /* My Applications list: agent-portal shell, styleguide list page (tables.md) */
   .wrap { max-width: 1600px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
@@ -107,9 +108,12 @@
 <script src="cases-core.js"></script>
 <script src="uw-core.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="void 0"></script>
+<script src="nbe-defaults.js" onerror="void 0"></script>
+<script src="nbe-export.js" onerror="void 0"></script>
 <script src="bm-defaults.js" onerror="void 0"></script>
 <script src="bm-export.js" onerror="void 0"></script>
 <script src="uw-bm.js"></script>
+<script src="uw-case-view.js"></script>
 <script>
 /* Cases: the Underwriting team's list, in the same agent-portal shell, filter bar and table as My Applications.
    Statuses are the sales application's own case statuses, so a case reads the same on both sides. */
@@ -124,14 +128,19 @@
 
   /* One row per case: a sales service case, a sales application case (business details / payout methods), or an application case from the Merchant module. */
   const prepKey = p => !p ? '' : p.waitingMerchant ? 'Waiting for the merchant' : p.sent ? 'Waiting for the bank' : p.prepared ? (p.bankKey === 'BM' ? 'In the next batch' : 'Send to the bank') : p.complete ? 'Mark as ready' : 'Missing information';
+  /* The rows are read again whenever a case is changed in the drawer, so the list always shows the current status. */
+  let ROWS = [];
+  function loadRows() {
   const ALL = U.asCases(), CNT = {};
   ALL.forEach(c => { CNT[c.app.id] = (CNT[c.app.id] || 0) + 1; });
-  const ROWS = ALL.map(c => ({ stage: c.stage, prep: c.prep, prepKey: prepKey(c.prep), isNew: c.isNew, kind: c.kind, summary: c.summary || '', other: CNT[c.app.id] - 1,
+  ROWS = ALL.map(c => ({ stage: c.stage, prep: c.prep, prepKey: prepKey(c.prep), isNew: c.isNew, kind: c.kind, summary: c.summary || '', other: CNT[c.app.id] - 1,
     id: c.no, href: c.href || 'case-details.html?app=' + encodeURIComponent(c.app.id), biz: c.app.biz, mid: c.mid || '', industry: c.industry || '', service: c.service || '', channel: c.channel || '', sub: [c.mid, c.industry].filter(Boolean).join(' \u00b7 ') || 'MID pending',
     status: c.ustatus, type: c.caseType, banks: banksOf(c), actor: c.app.actor, assignee: c.assignee || '',
     since: c.since, day: String(c.since).slice(0, 10), open: c.ustatus === 'Underwriting Review', raw: c }))
     // What needs a decision first (oldest waiting on top), then the rest, newest first.
     .sort((a, b) => (STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status)) || (a.open ? 1 : -1) * (new Date(a.since) - new Date(b.since)));
+  }
+  loadRows();
 
   const st = { tab: 'review', q: '', page: 1, size: 10, data: 'loaded', filters: {} };
   const FIELDS = () => [
@@ -214,8 +223,17 @@
     chg: { size: el => { st.size = +el.value; st.page = 1; } },
     act: { prev: () => { st.page--; refresh(); return false; }, next: () => { st.page++; refresh(); return false; } }
   };
-  document.addEventListener('click', e => { if (e.target.closest('[data-bmopen]')) { UWBM.open(() => SA.rerender()); return; } const tb = e.target.closest('[data-tab]'); if (tb) { st.tab = tb.dataset.tab; st.filters = {}; st.page = 1; SA.rerender(); return; } const tr = e.target.closest('tr[data-href]'); if (tr) location.href = tr.dataset.href; });
-  document.addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[data-href]'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); location.href = tr.dataset.href; } });
+  /* A case opens in a drawer over the list: its details, status, actions, notes and logs, without leaving the page. */
+  function openCase(href) {
+    const m = /^sales-case\.html\?id=(.+)$/.exec(href || ''); if (!m) return false;
+    const id = decodeURIComponent(m[1]), c = U.get(id); if (!c) return false;
+    SA.drawer({ size: 'xl', title: esc(c.merchant.name), sub: esc(c.type === 'service' ? c.service : c.caseType),
+      onClose() { loadRows(); SA.rerender(); },
+      render(api) { CaseView.mount(api.body, id, { embedded: true, onChange() { /* the list refreshes when the drawer closes */ }, onLeave(msg) { api.close(); SA.toast(msg); } }); } });
+    return true;
+  }
+  document.addEventListener('click', e => { if (e.target.closest('[data-bmopen]')) { UWBM.open(() => SA.rerender()); return; } const tb = e.target.closest('[data-tab]'); if (tb) { st.tab = tb.dataset.tab; st.filters = {}; st.page = 1; SA.rerender(); return; } const tr = e.target.closest('tr[data-href], a.rc[href]'); if (tr) { const h = tr.dataset.href || tr.getAttribute('href'); if (openCase(h)) e.preventDefault(); else if (tr.dataset.href) location.href = h; } });
+  document.addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[data-href]'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (!openCase(tr.dataset.href)) location.href = tr.dataset.href; } });
   SA.mount(V);
   try { const m = sessionStorage.getItem('cases-toast'); if (m) { sessionStorage.removeItem('cases-toast'); SA.toast(m); } } catch (e) { /* storage unavailable */ }
 })();
