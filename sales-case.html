@@ -15,6 +15,12 @@
   .sec-h { flex-wrap: wrap; }
   .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; padding-block-start: 16px; border-block-start: 1px solid var(--border, #e5e7eb); }
   .acts:empty { display: none; }
+  .ttl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ttl h1 { margin: 0; }
+  .hl { background: var(--warning-bg, #fff4d6); color: var(--text, #1f2937); padding: 2px 10px; border-radius: 6px; font-weight: 700; }
+  .meta a.linkb { text-decoration: underline; }
+  .stsel { width: auto; min-width: 170px; font-weight: 600; }
+  .acts.hacts { border: 0; padding: 0; margin-block-start: 12px; justify-content: flex-start; }
   .hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .hdr > div:first-child { flex: 1; min-width: 0; }
   .meta { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; color: var(--cadet-base); font-size: 14px; margin-block-start: 8px; }
@@ -92,6 +98,8 @@
   const dl = rows => `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v && v.html ? v.html : v == null || v === '' ? '—' : esc(v)}</dd>`).join('')}</dl>`;
   const links = list => list && list.length ? { html: list.map(u => `<a class="linkb" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>`).join(', ') } : '';
   const profile = `<button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button>`;
+  /* The application this case belongs to, opened in the sales app for the same business and service. */
+  const appHref = c => 'sales-applications/application.html?state=ready&mid=' + encodeURIComponent(c.mid) + (c.type === 'service' ? '&cases=' + encodeURIComponent(String(c.id).split('::').pop() + '~' + c.status) : '') + '&as=sales';
   const crumb = last => `<nav class="crumb" aria-label="Breadcrumb"><a href="cases.html">Cases</a><svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${AGENT_ICONS['chevron-right']}</svg><span aria-current="page">${esc(last)}</span></nav>`;
   const go = msg => { location.href = 'cases.html'; try { sessionStorage.setItem('cases-toast', msg); } catch (e) { /* storage unavailable */ } };
 
@@ -177,8 +185,12 @@
       const miss = U.progress(c).list.filter(x => x.missing).length;
       return `<button class="btn btn-outline-danger" type="button" ${d} data-tr="reject">Reject case</button><button class="btn btn-primary" type="button" ${d} data-tr="approve" ${miss ? 'disabled title="' + miss + ' required item' + (miss === 1 ? ' is' : 's are') + ' missing, so the case cannot be approved."' : ''}>Approve case</button>`;
     }
+    return '';
+  }
+  /* After the review, the steps sit at the top of the case, beside its status. Reject and Approve stay at the bottom. */
+  function topBar(c) {
+    const d = `data-case="${esc(c.id)}"`;
     if (c.type !== 'service') return '';
-    if (c.ustatus === 'UW Approved') return `<button class="btn btn-primary" type="button" ${d} data-stage="bank">Send to bank</button>`;
     if (c.ustatus === 'Sent to Bank') return `<button class="btn btn-outline-danger" type="button" ${d} data-bank="missing">Missing bank requirements</button><button class="btn btn-outline-danger" type="button" ${d} data-bank="rejected">Rejected by bank</button><button class="btn btn-primary" type="button" ${d} data-bank="approved">Approved by bank</button>`;
     if (c.ustatus === 'Pending Onboarding Configurations') return `<button class="btn btn-primary" type="button" ${d} data-stage="active">Active</button>`;
     return '';
@@ -201,7 +213,7 @@
     const left = p.list.filter(x => x.state === 'todo').length, nOk = p.list.filter(x => x.state === 'ok').length, nBad = p.list.filter(x => x.state === 'flag').length;
     const block = stageBar(c);
     const submitBar = block ? `<div class="acts">${block}</div>` : '';
-    return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2>${sc(c.ustatus)}<span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}</span></div>
+    return `<section class="card sec" data-part="${esc(c.id)}"><div class="sec-h"><div class="ptitle"><h2>${app ? esc(c.caseType) : esc(c.service)}</h2><span style="font-size:13px;color:var(--cadet-base)">${esc(c.caseId)}</span></div>
       </div>
       ${app ? `<p style="margin:0;color:var(--cadet-base)">${esc(c.type === 'update' ? 'Changes to a service that is already active. Nothing changes until every item is approved.' : c.kind === 'payout' ? (c.isNew ? 'The payout method, submitted for the first time. There are no earlier values to compare with.' : 'A change to the payout method, with the current and the requested account side by side. Nothing is applied until every item is approved.') : (c.isNew ? 'The business details, submitted for the first time. There are no earlier values to compare with. Check them against the documents.' : 'A change to the business details (KYB/KYC). Nothing is applied until every item is approved. Check it against the supporting documents.'))}</p>` : ''}
       ${note}<div>${app ? p.list.map(x => row(x, c)).join('') : [['pricing', 'Services & pricing'], ['website', 'Website or social media'], ['documents', 'Documents'], ['contracts', 'Contract']].map(([t, h]) => { const xs = p.list.filter(x => x.tab === t); const n = xs.reduce((k, x) => k + (x.list ? x.list.length : 0), 0); return xs.length ? `<div class="sgrp"><div class="gh"><h3>${h}${xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) > 1 ? ' \u00b7 ' + xs.reduce((k, x) => k + (x.links ? x.links.length : 0), 0) + ' links' : ''}</h3>${n ? `<button class="btn btn-outline btn-sm" type="button" data-dlall="${esc(c.id)}" data-sec="${t}">${icon('download', 'ic')}Download all (${n})</button>` : ''}</div>${xs.map(x => row(x, c)).join('')}</div>` : ''; }).join('')}</div>${submitBar}</section>`;
@@ -271,7 +283,7 @@
   /* What to do now, in one line. */
   function todoLine(c) {
     const next = { 'Sent to Bank': 'Record the bank answer: Approved by bank, Rejected by bank (merchant not qualified) or Missing bank requirements (returns to Sales).', 'Pending Onboarding Configurations': 'Mark the case Active once the merchant configurations are done.',
-      'UW Approved': 'Press <b>Send to bank</b>.', 'Pending Sales Action': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.', 'Missing Bank Requirements': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.' }[c.ustatus];
+      'UW Approved': 'Change the status to <b>Sent to Bank</b>.', 'Pending Sales Action': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.', 'Missing Bank Requirements': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.' }[c.ustatus];
     if (next && c.type === 'service') return `<div class="info" role="status"><b>What to do:</b> ${next}</div>`;
     if (c.status !== 'Underwriting Review') return '';
     const msg = 'Check the items below, then <b>Approve case</b>, or <b>Reject case</b> to return it to Sales (Pending Sales Action).';
@@ -305,11 +317,12 @@
     // The application as a whole is not handled here; the case only points back to it.
     const parts = [c];
     const notes = c.local.notes;
-    const info = [['Business', { html: `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` }], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity],  ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]]
+    const hl = t => ({ html: `<b class="hl">${esc(t)}</b>` });
+    const info = (c.channel ? [['Channel', hl(c.channel)], ['Service', hl(c.service.replace(/ \(\w+\)$/, ''))]] : []).concat([['Business', { html: `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` }], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity],  ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]])
       .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
     page.innerHTML = `<div class="wrap">
-      <header class="hdr"><div>${crumb(c.caseId)}<h1>${titleIsBusiness ? `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` : esc(c.service)}</h1>
-        <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<span>${esc(c.appId)}</span><button type="button" class="linkb" data-logs>View logs</button></div></div>${profile}</header>
+      <header class="hdr"><div>${crumb(c.caseId)}<div class="ttl"><h1>${esc(c.caseId)}</h1>${c.ustatus === 'UW Approved' && c.type === 'service' ? `<select class="sel stsel" data-case="${esc(c.id)}" data-status aria-label="Change the case status"><option value="uw" selected>UW Approved</option><option value="bank">Sent to Bank</option></select>` : sc(c.ustatus)}</div>
+        <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<a class="linkb" href="${esc(appHref(c))}" title="Open the application">${esc(c.appId)}</a><button type="button" class="linkb" data-logs>View logs</button></div>${topBar(c) ? `<div class="acts hacts">${topBar(c)}</div>` : ''}</div>${profile}</header>
       ${app || !U.STEPPER ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
         ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
@@ -364,6 +377,7 @@
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
+    q('[data-status]').forEach(b => b.onchange = () => { if (b.value === 'bank' && U.toBank(U.get(b.dataset.case))) { render(); SA.toast('Sent to Bank'); } });
     q('[data-stage]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.case), k = b.dataset.stage; if ((k === 'bank' ? U.toBank(cc) : k === 'config' ? U.toConfig(cc) : U.activate(cc))) { render(); SA.toast(k === 'bank' ? 'Sent to Bank' : k === 'config' ? 'Moved to Pending Onboarding Configurations' : 'The case is Active'); } });
     q('[data-bank]').forEach(b => b.onclick = () => bankModal(b.dataset.case, b.dataset.bank));
     q('[data-tr]').forEach(b => b.onclick = () => transition(b.dataset.case, b.dataset.tr));
