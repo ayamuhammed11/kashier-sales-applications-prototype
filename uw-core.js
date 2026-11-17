@@ -23,15 +23,14 @@ window.UW = (function () {
   const SLA = { 'Underwriting Review': 72, 'Bank Submission': 120 };
   /* The case statuses, moved by hand by Underwriting:
        Underwriting Review -> UW Approved (a service case goes on: Sent to Bank) | UW rejected: Pending Sales Action (returned to Sales)
-       Sent to Bank -> Approved by Bank | Rejected by Bank (merchant not qualified) | Missing Bank Requirements (returned to Sales)
-       Approved by Bank -> Pending Onboarding Configurations -> Active
+       Sent to Bank -> Pending Onboarding Configurations (bank approved) | Rejected by Bank (merchant not qualified) | Missing Bank Requirements (returned to Sales)
+       Pending Onboarding Configurations -> Active
      They sit on top of the sales application's own status (Underwriting Review, Bank Submission, Rejected, Live), which the salesperson still sees. */
   const STATUS = {
     'Underwriting Review': { tone: 'warning', sc: 'warn', label: 'Underwriting Review' },
     'UW Approved': { tone: 'positive', sc: 'ok', label: 'UW Approved' },
     'Pending Sales Action': { tone: 'warning', sc: 'warn', label: 'Pending Sales Action' },
     'Sent to Bank': { tone: 'neutral', sc: 'info', label: 'Sent to Bank' },
-    'Approved by Bank': { tone: 'positive', sc: 'ok2', label: 'Approved by Bank' },
     'Rejected by Bank': { tone: 'negative', sc: 'bad', label: 'Rejected by Bank' },
     'Missing Bank Requirements': { tone: 'warning', sc: 'warn', label: 'Missing Bank Requirements' },
     'Pending Onboarding Configurations': { tone: 'neutral', sc: 'info', label: 'Pending Onboarding Configurations' },
@@ -41,7 +40,7 @@ window.UW = (function () {
   /* The status a case shows, from the sales application's status and the little Underwriting adds (stage, and who rejected it). */
   const ustatus = (raw, x) => raw === 'Underwriting Review' ? 'Underwriting Review' : raw === 'Live' ? 'Active' : raw === 'Approved' ? 'UW Approved'
     : raw === 'Rejected' ? (x.reject && x.reject.from === 'bank' ? (x.reject.final ? 'Rejected by Bank' : 'Missing Bank Requirements') : 'Pending Sales Action')
-    : raw === 'Bank Submission' ? ({ uwOk: 'UW Approved', bankOk: 'Approved by Bank', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
+    : raw === 'Bank Submission' ? ({ uwOk: 'UW Approved', bankOk: 'Pending Onboarding Configurations', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
   const SHOWN = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved', 'Rejected'];
   /* The four case types. Service Activation Request: a newly requested service (pricing, website, documents, contract). Service Update: a change to
      a service that is already active. Change KYB/KYC: the business details (name, industry, contact...), with their supporting documents. Change Payout
@@ -385,11 +384,11 @@ window.UW = (function () {
     if (c.ustatus !== 'Sent to Bank') return false;
     const bank = (c.banks || [])[0] || 'The bank', why = String(comment || '').trim();
     const rej = final => ({ reject: { source: 'uw', from: 'bank', final: final, by: bank, role: 'Bank', comment: why, at: nowStr() } });
-    if (outcome === 'approved') return move(c, 'Bank Submission', { stage: 'bankOk' }, 'recorded that ' + bank + ' approved the ' + c.service + ' case', why || 'Approved by the bank.');
+    if (outcome === 'approved') return move(c, 'Bank Submission', { stage: 'config' }, 'recorded that ' + bank + ' approved the ' + c.service + ' case', why || 'Approved by the bank. The merchant configurations are being set up.');
     if (outcome === 'rejected') return move(c, 'Rejected', rej(true), 'recorded that ' + bank + ' rejected the ' + c.service + ' case', 'Merchant not qualified' + (why ? ': ' + why : '') + '.');
     return move(c, 'Rejected', rej(false), 'returned the ' + c.service + ' case to Sales: missing bank requirements', why);
   }
-  const toConfig = c => c.ustatus === 'Approved by Bank' && move(c, 'Bank Submission', { stage: 'config' }, 'moved the ' + c.service + ' case to Pending Onboarding Configurations', 'The bank approved. The merchant configurations are being set up.');
+  const toConfig = c => c.ustatus === 'Pending Onboarding Configurations' && move(c, 'Bank Submission', { stage: 'config' }, 'moved the ' + c.service + ' case to Pending Onboarding Configurations', 'The bank approved. The merchant configurations are being set up.');
   const activate = c => c.ustatus === 'Pending Onboarding Configurations' && goLive(c);
 
 

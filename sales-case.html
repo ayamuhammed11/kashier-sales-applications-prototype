@@ -180,7 +180,6 @@
     if (c.type !== 'service') return '';
     if (c.ustatus === 'UW Approved') return `<button class="btn btn-primary" type="button" ${d} data-stage="bank">Send to bank</button>`;
     if (c.ustatus === 'Sent to Bank') return `<button class="btn btn-outline-danger" type="button" ${d} data-bank="missing">Missing bank requirements</button><button class="btn btn-outline-danger" type="button" ${d} data-bank="rejected">Rejected by bank</button><button class="btn btn-primary" type="button" ${d} data-bank="approved">Approved by bank</button>`;
-    if (c.ustatus === 'Approved by Bank') return `<button class="btn btn-primary" type="button" ${d} data-stage="config">Pending Onboarding Configurations</button>`;
     if (c.ustatus === 'Pending Onboarding Configurations') return `<button class="btn btn-primary" type="button" ${d} data-stage="active">Active</button>`;
     return '';
   }
@@ -193,8 +192,7 @@
       : us === 'Rejected by Bank' ? `<div class="info bad"><b>Merchant not qualified:</b> ${why}</div>`
       : us === 'UW Approved' ? `<div class="info ok"><b>Approved${c.decision ? ' by ' + esc(c.decision.by) : ''}.</b> The changes are now on the ${c.type === 'update' ? 'service' : 'application'}.</div>`
       : us === 'Sent to Bank' ? '<div class="info ok"><b>Approved by Underwriting and sent to the bank.</b> Record the bank answer below.</div>'
-      : us === 'Approved by Bank' ? '<div class="info ok"><b>The bank approved this case.</b> Next, move it to Pending Onboarding Configurations.</div>'
-      : us === 'Pending Onboarding Configurations' ? '<div class="info ok"><b>The merchant is being configured.</b> Mark the case Active when the configurations are done.</div>'
+      : us === 'Pending Onboarding Configurations' ? '<div class="info ok"><b>The bank approved this case. The merchant is being configured.</b> Mark the case Active when the configurations are done.</div>'
       : us === 'Active' ? `<div class="info ok"><b>Active${c.liveSince ? ' since ' + esc(c.liveSince) : ''}.</b> The service is live for the merchant.</div>` : '';
     if (nested) {
       const what = c.changes.map(x => x.label).join(', ');
@@ -272,7 +270,7 @@
      this only links to the other kind on the same application. */
   /* What to do now, in one line. */
   function todoLine(c) {
-    const next = { 'Sent to Bank': 'Record the bank answer: Approved by bank, Rejected by bank (merchant not qualified) or Missing bank requirements (returns to Sales).', 'Approved by Bank': 'Move the case to Pending Onboarding Configurations.', 'Pending Onboarding Configurations': 'Mark the case Active once the merchant configurations are done.',
+    const next = { 'Sent to Bank': 'Record the bank answer: Approved by bank, Rejected by bank (merchant not qualified) or Missing bank requirements (returns to Sales).', 'Pending Onboarding Configurations': 'Mark the case Active once the merchant configurations are done.',
       'UW Approved': 'Press <b>Send to bank</b>.', 'Pending Sales Action': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.', 'Missing Bank Requirements': 'Nothing. The case is with Sales, and comes back to Underwriting Review when they resubmit it.' }[c.ustatus];
     if (next && c.type === 'service') return `<div class="info" role="status"><b>What to do:</b> ${next}</div>`;
     if (c.status !== 'Underwriting Review') return '';
