@@ -140,7 +140,7 @@
   function blankLine() { return { bank: '', adv: false, rates: {}, rule: null, custom: false }; }
   function blankState() {
     return {
-      cases: {}, kyc: [], nextCase: 1, fixing: false, mid: '', comments: [], commentDraft: '', appId: '', submittedAt: '', submitComment: '', cancelComment: '',
+      cases: {}, kyc: [], updates: [], nextCase: 1, fixing: false, mid: '', comments: [], commentDraft: '', appId: '', submittedAt: '', submitComment: '', cancelComment: '',
       merchant: { name: 'Delta Pharma Group', email: 'nourhan@deltapharma.eg', phone: '+20 111 234 5678' },
       entity: 'Registered Business', industry: 'Healthcare / Pharmacy', activities: ['Healthcare / Pharmacy'], owner: '',
       svc: {}, order: [], terminals: '',
@@ -154,8 +154,11 @@
   let S = blankState();
   let V = null;           // the variant: { key, render(), live: {}, onGoto(target) }
   const KEY = () => 'sa-dir-' + (V && V.key);
-  function save() { if (ext) { if (window.UW && UW.saveState) UW.saveState(JSON.parse(JSON.stringify(S))); return; } try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch (e) { } }
-  function load() { try { const s = JSON.parse(localStorage.getItem(KEY()) || 'null'); if (s && s.merchant) { S = Object.assign(blankState(), s); if (!s.cases) { S.cases = {}; if (s.status && s.status !== 'New') S.order.forEach(id => { S.cases[id] = { status: s.status, prev: s.prevStatus, cancelComment: s.cancelComment }; }); } delete S.status; } } catch (e) { } ME = ROLES[S.viewAs] || ROLES.sales; if (S.appId && !S.fixing) { const gone = S.order.filter(id => (S.cases[id] || {}).status === undefined); gone.forEach(id => { delete S.svc[id]; }); S.order = S.order.filter(id => !gone.includes(id)); } }
+  /* ?app=APP-ID opens any application the Cases module knows (the demo ones too), not only the one saved by this page.
+     It is read from and written back to that application. */
+  let hostApp = null, hostRO = false;
+  function save() { if (ext || hostApp) { if (window.UW && UW.saveState) UW.saveState(JSON.parse(JSON.stringify(S))); return; } try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch (e) { } }
+  function load() { try { const s = hostApp ? JSON.parse(JSON.stringify(UW.stateFor(hostApp) || null)) : JSON.parse(localStorage.getItem(KEY()) || 'null'); if (s && s.merchant) { S = Object.assign(blankState(), s); if (!s.cases) { S.cases = {}; if (s.status && s.status !== 'New') S.order.forEach(id => { S.cases[id] = { status: s.status, prev: s.prevStatus, cancelComment: s.cancelComment }; }); } delete S.status; } } catch (e) { } ME = ROLES[S.viewAs] || ROLES.sales; if (S.appId && !S.fixing) { const gone = S.order.filter(id => (S.cases[id] || {}).status === undefined); gone.forEach(id => { delete S.svc[id]; }); S.order = S.order.filter(id => !gone.includes(id)); } }
   const log = (text, ic = 'pencil', detail = '', id) => { S.log.unshift({ t: nowStr(), who: ME.name, text, ic, detail, id }); };
 
   /* ---------- Pricing ---------- */
@@ -968,8 +971,8 @@
     save(); if (!ext) Cases.actAs('appuw');
     try { return UW.get(uwId(id), true); } catch (e) { return null; } finally { if (!ext) Cases.actAs(null); }
   }
-  function reloadS() { if (ext) { const s = UW.stateFor(S.appId); if (s) S = Object.assign(blankState(), JSON.parse(JSON.stringify(s))); } else load(); }
-  const uwCanAct = () => isUW() && (!ext || ext.canAct);
+  function reloadS() { if (ext && !hostApp) { const s = UW.stateFor(S.appId); if (s) S = Object.assign(blankState(), JSON.parse(JSON.stringify(s))); } else load(); }
+  const uwCanAct = () => isUW() && !hostRO && (!ext || ext.canAct);
   /* The case status is a button in the status's colour. It opens the moves allowed from the current status (UW.transitions), each as
      "transition name -> target status", with View workflow under them. A move that returns the case or records a rejection asks why first. */
   const stCls = st => (window.UW && UW.STATUS[st] ? UW.STATUS[st].sc : 'neu');
@@ -1038,10 +1041,10 @@
     o = o || {}; if (ext || !st) return false;
     const prev = { S, ME };
     S = Object.assign(blankState(), JSON.parse(JSON.stringify(st))); ME = ROLES[o.role] || ROLES.uw;
-    const isKyc = (S.kyc || []).some(k => k.key === lid);
-    if (!isKyc && !S.svc[lid]) { S = prev.S; ME = prev.ME; return false; }
+    const isKyc = (S.kyc || []).some(k => k.key === lid), isUpd = (S.updates || []).some(u => u.key === lid);
+    if (!isKyc && !isUpd && !S.svc[lid]) { S = prev.S; ME = prev.ME; return false; }
     ext = { canAct: o.canAct !== false, done() { S = prev.S; ME = prev.ME; ext = null; if (o.onClose) o.onClose(); } };
-    if (isKyc) openKycCase(kycById(lid)); else openCase(lid);
+    if (isKyc) openKycCase(kycById(lid)); else if (isUpd) openUpdCase(updById(lid)); else openCase(lid);
     return true;
   }
   const closedDr = () => { caseDr = null; if (ext) ext.done(); };
@@ -1151,6 +1154,93 @@
   }
   /* Edit the general information of a submitted application: business info, website / social links, store image (POS) and payout methods.
      Pricing and the cases are not touched. Changes are made on a copy and only applied on Save. */
+  /* ---------- Service updates ----------
+     A live service is never changed in place. A Sales user edits it here, and the changes become a new pending case (Service Update) for the
+     Underwriting team. They are applied to the service only when Underwriting approves the case. One open update per service at a time. */
+  const updById = key => (S.updates || []).find(u => u.key === key);
+  const updOpen = u => ['Underwriting Review', 'Rejected'].includes(u.status);
+  const openUpdOf = id => (S.updates || []).find(u => u.service === id && updOpen(u));
+  const canEditLive = () => !isUW();
+  const rateTxt = r => r && r.rate !== '' && r.rate != null ? `${fmtN(r.rate)}% + ${fmtN(r.fee)} EGP` : 'Not set';
+  /* Case IDs run across every application in the prototype, so a new case takes the next free number. */
+  function nextCaseId() {
+    let m = 0; const scan = st => { if (!st) return; Object.values(st.cases || {}).concat(st.kyc || [], st.updates || []).forEach(x => { const n = +String(x.caseId || '').replace(/\D/g, ''); if (n > m) m = n; }); };
+    scan(S); try { scan(JSON.parse(localStorage.getItem('sa-dir-final') || 'null')); Object.values(JSON.parse(localStorage.getItem('kashierUwDemoApps') || '{}')).forEach(scan); } catch (e) { /* storage unavailable */ }
+    return 'CASE-' + String(m + 1).padStart(3, '0');
+  }
+  function openEditLive(id, prev) {
+    const svc = S.svc[id], card = isCard(id), was = (prev && prev.patches) || [];
+    const pr = (li, key) => was.find(x => x.type === 'rate' && (x.li || 0) === li && x.key === key);
+    const opsNow = (was.find(x => x.type === 'ops') || {}).ops || svc.ops || [], notesNow = (was.find(x => x.type === 'notes') || {}).notes;
+    const rows = svc.lines.map((l, li) => tiersFor(id, l).map(t => { const cur = l.rates[t.key] || {}, v = pr(li, t.key) || cur, k = li + '|' + t.key;
+      return `<tr><td>${l.bank ? `<div class="hint">${esc(l.bank)}</div>` : ''}${esc(t.label)}</td><td class="num">${rateTxt(cur)}</td>
+        <td><div class="eu-in"><label class="sr-only" for="eur-${k}">${esc(t.label)} rate</label><input class="inp num" id="eur-${k}" inputmode="decimal" data-eu="${k}" data-p="rate" value="${esc(v.rate == null ? '' : v.rate)}"><span>% +</span><label class="sr-only" for="euf-${k}">${esc(t.label)} fee</label><input class="inp num" id="euf-${k}" inputmode="decimal" data-eu="${k}" data-p="fee" value="${esc(v.fee == null ? '' : v.fee)}"><span>EGP</span></div></td></tr>`; }).join('')).join('');
+    drawer({ size: 'xl', title: prev ? 'Edit and resubmit the update' : 'Edit active service', sub: `${esc(label(id))} · ${esc(S.merchant.name)}`, render(api) {
+      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>The service stays live with its current setup. Your changes become a new <b>Service Update</b> case for the Underwriting team, and apply only once it is approved.</p></div>
+        ${prev && prev.reject ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${prev.reject.comment ? `<p>${esc(prev.reject.comment)}</p>` : ''}</div></div>` : ''}
+        <section class="cd-s"><h3 class="sub-h">Rates</h3><div class="rscroll" style="display:block"><table class="rtbl eu-t"><thead><tr><th>Rate type</th><th>Current</th><th>New</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+        ${card ? `<section class="cd-s"><h3 class="sub-h">Advanced operations</h3><div class="opt-l">${OPS[chOf(id)].map(o => `<label class="cbx"><input type="checkbox" data-euop value="${esc(o)}" ${opsNow.includes(o) ? 'checked' : ''}>${esc(o)}</label>`).join('')}</div></section>` : ''}
+        <section class="cd-s"><div class="fld"><label for="eun">Notes <span class="opt">(optional)</span></label><textarea class="inp" id="eun" placeholder="Any comment about this setup">${esc(notesNow != null ? notesNow : (svc.notes || ''))}</textarea></div>
+        <div class="fld"><label for="euc">Why the change? <span class="opt">(optional)</span></label><textarea class="inp" id="euc" placeholder="Shown to the Underwriting team with the case">${esc((prev && prev.comment) || '')}</textarea></div></section>`;
+      api.foot.innerHTML = `<span class="hint eu-h" id="euh">No changes yet.</span><span class="sp"></span><button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-primary" data-y disabled>${prev ? 'Resubmit update' : 'Submit update'}</button>`;
+      const b = api.body, y = api.foot.querySelector('[data-y]'), h = api.foot.querySelector('#euh');
+      const collect = () => {
+        const patches = [], changes = []; let bad = false;
+        svc.lines.forEach((l, li) => tiersFor(id, l).forEach(t => {
+          const k = li + '|' + t.key, r = b.querySelector(`[data-eu="${k}"][data-p="rate"]`).value.trim().replace(',', '.'), f = b.querySelector(`[data-eu="${k}"][data-p="fee"]`).value.trim().replace(',', '.'), cur = l.rates[t.key] || {};
+          if (r === '' || f === '' || isNaN(+r) || isNaN(+f) || +r < 0 || +f < 0) { bad = true; return; }
+          if (+r !== +cur.rate || +f !== +cur.fee) { patches.push({ type: 'rate', li, key: t.key, rate: r, fee: f }); changes.push({ label: (l.bank ? l.bank + ' · ' : '') + t.label, from: rateTxt(cur), to: rateTxt({ rate: r, fee: f }) }); }
+        }));
+        if (card) { const ops = [...b.querySelectorAll('[data-euop]:checked')].map(x => x.value); if (ops.join('|') !== (svc.ops || []).join('|')) { patches.push({ type: 'ops', ops }); changes.push({ label: 'Advanced operations', from: (svc.ops || []).length ? svc.ops.join(', ') : 'None', to: ops.length ? ops.join(', ') : 'None' }); } }
+        const nt = b.querySelector('#eun').value.trim(); if (nt !== (svc.notes || '').trim()) { patches.push({ type: 'notes', notes: nt }); changes.push({ label: 'Notes', from: svc.notes || 'None', to: nt || 'None' }); }
+        return { patches, changes, bad };
+      };
+      const check = () => { const r = collect(); y.disabled = r.bad || !r.patches.length; h.textContent = r.bad ? 'Enter a rate and a fee for every rate type.' : r.patches.length ? `${r.patches.length} change${r.patches.length > 1 ? 's' : ''} to submit.` : 'No changes yet.'; };
+      b.addEventListener('input', check); b.addEventListener('change', check); check();
+      api.foot.querySelector('[data-n]').onclick = () => api.close();
+      y.onclick = () => {
+        const r = collect(); if (r.bad || !r.patches.length) return;
+        const comment = b.querySelector('#euc').value.trim(), since = new Date(CLOCK).toISOString();
+        let u = prev && updById(prev.key);
+        if (u) { Object.assign(u, { patches: r.patches, changes: r.changes, comment, status: 'Underwriting Review', since }); delete u.reject; log(`resubmitted the update of the ${label(id)} service`, 'send', r.changes.map(x => x.label).join(', '), u.key); }
+        else {
+          S.updates = S.updates || []; const n = S.updates.reduce((m, x) => Math.max(m, x.n || 0), 0) + 1;
+          u = { n, key: 'upd:' + n, caseId: nextCaseId(), status: 'Underwriting Review', service: id, patches: r.patches, changes: r.changes, comment, by: ME.name, role: ME.role, at: nowStr(), since };
+          S.updates.push(u); log(`requested an update of the ${label(id)} service`, 'send', r.changes.map(x => x.label).join(', '), u.key);
+        }
+        api.close(); rerender(); toast(`${u.caseId} created. The changes apply once the Underwriting team approves them.`);
+      };
+    } });
+  }
+  function updRow(u) {
+    const rej = u.status === 'Rejected';
+    return `<div class="crow ${u.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><b>${esc(nmOf(u.service))} · Service update</b>${chipOf(u.status, u)}</div>${rej ? `<div class="crow-n">Returned by the Underwriting team${u.reject && u.reject.comment ? ': ' + esc(u.reject.comment) : ''}</div>` : ''}</div>
+      <div class="crow-a"><button type="button" class="btn btn-outline btn-sm" data-act="openUpd" data-id="${esc(u.key)}">View case${icon('right', 'ic mirror')}</button></div></div>`;
+  }
+  /* The Service Update case: the same drawer as every other case, with each role's actions in its top row. */
+  function openUpdCase(u0) {
+    const key = u0.key;
+    const draw = () => {
+      const u = updById(key); if (!u) { caseDr.api.close(true); return; }
+      const uw = isUW(), open = u.status === 'Underwriting Review', rej = u.status === 'Rejected', uc = uw ? uwCase(key) : null;
+      const note = open ? 'Waiting for the Underwriting team. The service keeps its current setup until the update is approved.' : u.status === 'Approved' ? 'Approved by the Underwriting team. The changes are applied to the service.' : u.status === 'Canceled' ? 'Canceled. None of the changes were applied.' : 'Returned to the salesperson.';
+      const acts = uw ? (uc && uc.ustatus === 'Underwriting Review' ? uwDecide(!uwCanAct()) : '') : (open || rej) ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="ucancel">Cancel update</button>' : '';
+      caseDr.api.setTitle(`${esc(label(u.service))} · Service update`, `${esc(u.caseId)} · ${esc(S.merchant.name)}`);
+      const tab = caseDr.tab;
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : chipOf(u.status, u)}<span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${u.reject && u.reject.comment ? `<p>${esc(u.reject.comment)}</p>` : ''}<p class="rj-h">Edit the changes and resubmit, or cancel the update.</p></div></div>${uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="ufix">Edit and resubmit</button></div>'}` : ''}</div>
+        <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
+        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3><div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Field</th><th>Current</th><th>Requested</th></tr></thead><tbody>${u.changes.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from)}</td><td><b>${esc(c.to)}</b></td></tr>`).join('')}</tbody></table></div></section>
+        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(u.caseId)}</dd><dt>Type</dt><dd>Service Update</dd><dt>Service</dt><dd>${esc(label(u.service))}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(u.by)} (${esc(u.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(u.at))}</dd>${u.comment ? `<dt>Reason</dt><dd>${esc(u.comment)}</dd>` : ''}${uc ? `<dt>Assigned to</dt><dd>${esc(uc.assignee || 'Not assigned')}</dd>` : ''}${u.decision ? `<dt>Approved by</dt><dd>${esc(u.decision.by)} · ${esc(whenStr(u.decision.at))}</dd>` : ''}</dl></section>`}`;
+      const b = caseDr.api.body;
+      b.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); b.scrollTop = 0; }; });
+      const on = (sel, fn) => { const x = b.querySelector(sel); if (x) x.onclick = fn; };
+      on('[data-cd=ucancel]', () => confirmBox({ title: 'Cancel this service update?', body: `${esc(u.caseId)} is canceled and none of its changes are applied. The service keeps its current setup.`, ok: 'Cancel update', danger: true }).then(ok => { if (!ok) return; u.status = 'Canceled'; log(`canceled the update of the ${label(u.service)} service`, 'x', '', key); rerender(); toast(`${u.caseId} canceled`); }));
+      on('[data-cd=ufix]', () => { caseDr.api.close(true); openEditLive(u.service, u); });
+      if (uc) bindUw(b, key);
+    };
+    caseDr = { draw, tab: 'details' };
+    drawer({ size: 'xl', title: 'Service update', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
+  }
   function openEditGeneral(k) {
     const clone = o => JSON.parse(JSON.stringify(o));
     const D = k ? clone(k.proposed) : { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.length ? S.websites.slice() : [''], storeImage: S.storeImage, payouts: clone(S.payouts), primary: S.primary, nextPayout: S.nextPayout };
@@ -1260,14 +1350,14 @@
   function readOnlyView() {
     const head = profileHead(true);
     const live = S.order.filter(id => caseStatus(id) === 'Live'), canceled = S.order.filter(id => caseStatus(id) === 'Canceled');
-    const pending = S.order.filter(id => !['Live', 'Canceled', 'New'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const kycPending = S.kyc.filter(k => ['Underwriting Review', 'Rejected'].includes(k.status)), kycDone = S.kyc.filter(k => !['Underwriting Review', 'Rejected'].includes(k.status)), pendingN = pending.filter(id => caseStatus(id) !== 'New').length + kycPending.length;
+    const pending = S.order.filter(id => !['Live', 'Canceled', 'New'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const kycPending = S.kyc.filter(k => ['Underwriting Review', 'Rejected'].includes(k.status)), kycDone = S.kyc.filter(k => !['Underwriting Review', 'Rejected'].includes(k.status)), updPending = (S.updates || []).filter(updOpen), updDone = (S.updates || []).filter(u => !updOpen(u)), pendingN = pending.filter(id => caseStatus(id) !== 'New').length + kycPending.length + updPending.length;
     const allCanceled = S.order.length > 0 && !pending.length && !live.length && !S.kyc.some(k => k.status !== 'Canceled');
     const banner = allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
     /* Active services: the live cases. Just the service and its full log, no detail view. */
-    const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a"><button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
-    const noPend = !pending.length && !kycPending.length, noOther = !canceled.length && !kycDone.length;
+    const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a">${canEditLive() ? (openUpdOf(id) ? `<button type="button" class="btn btn-outline btn-sm" data-act="openUpd" data-id="${esc(openUpdOf(id).key)}" title="An update of this service is already pending">Update pending · ${esc(openUpdOf(id).caseId)}</button>` : `<button type="button" class="btn btn-outline btn-sm" data-act="editLive" data-id="${esc(id)}" aria-label="Edit ${esc(label(id))}">${icon('pencil', 'ic')}Edit service</button>`) : ''}<button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
+    const noPend = !pending.length && !kycPending.length && !updPending.length, noOther = !canceled.length && !kycDone.length && !updDone.length;
     const casesMsg = !S.order.length && !S.kyc.length ? 'No cases yet.' : noPend && noOther ? 'No pending cases. Every case is live.' : noPend ? 'No pending cases.' : '';
-    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div><button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length ? `<div class="crows">${pending.map(caseRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
+    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div><button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
     const frow = (lbl, file, thumb) => `<div class="frow"><div class="fi-w">${thumb ? `<span class="fthumb" aria-hidden="true">${icon('photo', 'ic-24')}</span>` : ''}<div class="fi"><b>${esc(lbl)}</b><span class="muted">${esc(file)}</span></div></div><div class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(file)}" data-l="${esc(lbl)}">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(file)}">${icon('download', 'ic')}Download</button></div></div>`;
@@ -1348,6 +1438,8 @@
     dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
     editGeneral: () => { openEditGeneral(); return false; },
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
+    openUpd: d => { const u = updById(d.id); u && openUpdCase(u); return false; },
+    editLive: d => { if (canEditLive() && S.svc[d.id] && !openUpdOf(d.id)) openEditLive(d.id); return false; },
     kycApprove: d => { const k = kycById(d.id); k && kycApprove(k); },
     kycReject: d => { const k = kycById(d.id); k && kycReject(k); return false; },
     kycFix: d => { const k = kycById(d.id); k && openEditGeneral(k); return false; },
@@ -1406,7 +1498,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
@@ -1507,7 +1599,16 @@
     if (qs.get('as') && ROLES[qs.get('as')]) { S.viewAs = qs.get('as'); ME = ROLES[S.viewAs]; const v = document.getElementById('viewAs'); if (v) v.value = S.viewAs; }
   }
   function mount(variant, variants) {
+    const qs = new URLSearchParams(location.search);
+    if (qs.get('app') && window.UW && UW.stateFor(qs.get('app'))) { hostApp = qs.get('app'); hostRO = qs.get('ro') === '1'; }
     V = variant; load(); shell(variants); rerender();
+    if (qs.get('case')) openFromQuery(qs.get('case'));
+  }
+  /* ?case=ID opens that case's drawer as soon as the application is shown, as if the user had opened it from the cases section. */
+  function openFromQuery(cid) {
+    if (S.kyc.some(k => k.key === cid)) { openKycCase(kycById(cid)); return; }
+    if (S.svc[cid] && S.cases[cid]) { openCase(cid); return; }
+    const u = updById(cid); if (u) openUpdCase(u);
   }
 
   window.SA = {

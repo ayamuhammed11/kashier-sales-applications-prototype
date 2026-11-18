@@ -553,3 +553,9 @@ body.locked { overflow: hidden; }
 @media (max-width: 480px) { .wz { grid-template-columns: 1fr; } }
 
 .drawer .db > .wz { margin-block-end: 4px; }
+
+/* Edit an active service: current rate beside the new rate and fee */
+.eu-t td { vertical-align: middle; }
+.eu-in { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.eu-in .inp { width: 88px; min-width: 0; }
+.eu-in span { color: var(--cadet-base); font-size: 13px; }
