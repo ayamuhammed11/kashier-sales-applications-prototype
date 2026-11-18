@@ -1175,14 +1175,14 @@
     const rows = svc.lines.map((l, li) => tiersFor(id, l).map(t => { const cur = l.rates[t.key] || {}, v = pr(li, t.key) || cur, k = li + '|' + t.key;
       return `<tr><td>${l.bank ? `<div class="hint">${esc(l.bank)}</div>` : ''}${esc(t.label)}</td><td class="num">${rateTxt(cur)}</td>
         <td><div class="eu-in"><label class="sr-only" for="eur-${k}">${esc(t.label)} rate</label><input class="inp num" id="eur-${k}" inputmode="decimal" data-eu="${k}" data-p="rate" value="${esc(v.rate == null ? '' : v.rate)}"><span>% +</span><label class="sr-only" for="euf-${k}">${esc(t.label)} fee</label><input class="inp num" id="euf-${k}" inputmode="decimal" data-eu="${k}" data-p="fee" value="${esc(v.fee == null ? '' : v.fee)}"><span>EGP</span></div></td></tr>`; }).join('')).join('');
-    drawer({ size: 'xl', title: prev ? 'Edit and resubmit the update' : 'Edit active service', sub: `${esc(label(id))} · ${esc(S.merchant.name)}`, render(api) {
-      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>The service stays live with its current setup. Your changes become a new <b>Service Update</b> case for the Underwriting team, and apply only once it is approved.</p></div>
+    drawer({ size: 'xl', title: prev && prev.reject ? 'Edit and resubmit the update' : 'Edit active service', sub: `${esc(label(id))} · ${esc(S.merchant.name)}`, render(api) {
+      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>The service stays live with its current setup. ${prev ? `Your changes update the pending <b>${esc(prev.caseId)}</b> case for the Underwriting team, and apply only once it is approved.` : 'Your changes become a pending <b>Service Update</b> case for the Underwriting team, and apply only once it is approved.'}</p></div>
         ${prev && prev.reject ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${prev.reject.comment ? `<p>${esc(prev.reject.comment)}</p>` : ''}</div></div>` : ''}
         <section class="cd-s"><h3 class="sub-h">Rates</h3><div class="rscroll" style="display:block"><table class="rtbl eu-t"><thead><tr><th>Rate type</th><th>Current</th><th>New</th></tr></thead><tbody>${rows}</tbody></table></div></section>
         ${card ? `<section class="cd-s"><h3 class="sub-h">Advanced operations</h3><div class="opt-l">${OPS[chOf(id)].map(o => `<label class="cbx"><input type="checkbox" data-euop value="${esc(o)}" ${opsNow.includes(o) ? 'checked' : ''}>${esc(o)}</label>`).join('')}</div></section>` : ''}
         <section class="cd-s"><div class="fld"><label for="eun">Notes <span class="opt">(optional)</span></label><textarea class="inp" id="eun" placeholder="Any comment about this setup">${esc(notesNow != null ? notesNow : (svc.notes || ''))}</textarea></div>
         <div class="fld"><label for="euc">Why the change? <span class="opt">(optional)</span></label><textarea class="inp" id="euc" placeholder="Shown to the Underwriting team with the case">${esc((prev && prev.comment) || '')}</textarea></div></section>`;
-      api.foot.innerHTML = `<span class="hint eu-h" id="euh">No changes yet.</span><span class="sp"></span><button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-primary" data-y disabled>${prev ? 'Resubmit update' : 'Submit update'}</button>`;
+      api.foot.innerHTML = `<span class="hint eu-h" id="euh">No changes yet.</span><span class="sp"></span><button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-primary" data-y disabled>${prev ? (prev.reject ? 'Resubmit update' : 'Save changes') : 'Submit update'}</button>`;
       const b = api.body, y = api.foot.querySelector('[data-y]'), h = api.foot.querySelector('#euh');
       const collect = () => {
         const patches = [], changes = []; let bad = false;
@@ -1195,20 +1195,22 @@
         const nt = b.querySelector('#eun').value.trim(); if (nt !== (svc.notes || '').trim()) { patches.push({ type: 'notes', notes: nt }); changes.push({ label: 'Notes', from: svc.notes || 'None', to: nt || 'None' }); }
         return { patches, changes, bad };
       };
-      const check = () => { const r = collect(); y.disabled = r.bad || !r.patches.length; h.textContent = r.bad ? 'Enter a rate and a fee for every rate type.' : r.patches.length ? `${r.patches.length} change${r.patches.length > 1 ? 's' : ''} to submit.` : 'No changes yet.'; };
+      const check = () => { const r = collect(); y.disabled = r.bad || (!r.patches.length && !prev); h.textContent = r.bad ? 'Enter a rate and a fee for every rate type.' : r.patches.length ? `${r.patches.length} change${r.patches.length > 1 ? 's' : ''} to submit.` : prev ? `No changes left. Saving cancels ${prev.caseId}.` : 'No changes yet.'; };
       b.addEventListener('input', check); b.addEventListener('change', check); check();
       api.foot.querySelector('[data-n]').onclick = () => api.close();
       y.onclick = () => {
-        const r = collect(); if (r.bad || !r.patches.length) return;
+        const r = collect(); if (r.bad || (!r.patches.length && !prev)) return;
         const comment = b.querySelector('#euc').value.trim(), since = new Date(CLOCK).toISOString();
         let u = prev && updById(prev.key);
+        if (u && !r.patches.length) { u.status = 'Canceled'; u.since = since; log(`canceled the update of the ${label(id)} service`, 'x', 'All changes were undone', u.key); api.close(); rerender(); toast(`${u.caseId} canceled. The service keeps its current setup.`); return; }
+        const had = !!u;
         if (u) { Object.assign(u, { patches: r.patches, changes: r.changes, comment, status: 'Underwriting Review', since }); delete u.reject; log(`resubmitted the update of the ${label(id)} service`, 'send', r.changes.map(x => x.label).join(', '), u.key); }
         else {
           S.updates = S.updates || []; const n = S.updates.reduce((m, x) => Math.max(m, x.n || 0), 0) + 1;
           u = { n, key: 'upd:' + n, caseId: nextCaseId(), status: 'Underwriting Review', service: id, patches: r.patches, changes: r.changes, comment, by: ME.name, role: ME.role, at: nowStr(), since };
           S.updates.push(u); log(`requested an update of the ${label(id)} service`, 'send', r.changes.map(x => x.label).join(', '), u.key);
         }
-        api.close(); rerender(); toast(`${u.caseId} created. The changes apply once the Underwriting team approves them.`);
+        api.close(); rerender(); toast(had ? `${u.caseId} updated. The changes apply once the Underwriting team approves them.` : `${u.caseId} created. The changes apply once the Underwriting team approves them.`);
       };
     } });
   }
@@ -1354,7 +1356,7 @@
     const allCanceled = S.order.length > 0 && !pending.length && !live.length && !S.kyc.some(k => k.status !== 'Canceled');
     const banner = allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
     /* Active services: the live cases. Just the service and its full log, no detail view. */
-    const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a">${canEditLive() ? (openUpdOf(id) ? `<button type="button" class="btn btn-outline btn-sm" data-act="openUpd" data-id="${esc(openUpdOf(id).key)}" title="An update of this service is already pending">Update pending · ${esc(openUpdOf(id).caseId)}</button>` : `<button type="button" class="btn btn-outline btn-sm" data-act="editLive" data-id="${esc(id)}" aria-label="Edit ${esc(label(id))}">${icon('pencil', 'ic')}Edit service</button>`) : ''}<button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
+    const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a">${canEditLive() ? `<button type="button" class="btn btn-outline btn-sm" data-act="editLive" data-id="${esc(id)}" aria-label="Edit ${esc(label(id))}">${icon('pencil', 'ic')}Edit service</button>` : ''}<button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
     const noPend = !pending.length && !kycPending.length && !updPending.length, noOther = !canceled.length && !kycDone.length && !updDone.length;
     const casesMsg = !S.order.length && !S.kyc.length ? 'No cases yet.' : noPend && noOther ? 'No pending cases. Every case is live.' : noPend ? 'No pending cases.' : '';
     const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div><button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
@@ -1439,7 +1441,7 @@
     editGeneral: () => { openEditGeneral(); return false; },
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
     openUpd: d => { const u = updById(d.id); u && openUpdCase(u); return false; },
-    editLive: d => { if (canEditLive() && S.svc[d.id] && !openUpdOf(d.id)) openEditLive(d.id); return false; },
+    editLive: d => { if (canEditLive() && S.svc[d.id]) openEditLive(d.id, openUpdOf(d.id)); return false; },
     kycApprove: d => { const k = kycById(d.id); k && kycApprove(k); },
     kycReject: d => { const k = kycById(d.id); k && kycReject(k); return false; },
     kycFix: d => { const k = kycById(d.id); k && openEditGeneral(k); return false; },
