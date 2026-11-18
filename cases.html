@@ -223,10 +223,14 @@
     chg: { size: el => { st.size = +el.value; st.page = 1; } },
     act: { prev: () => { st.page--; refresh(); return false; }, next: () => { st.page++; refresh(); return false; } }
   };
-  /* A case opens in a drawer over the list: its details, status, actions, notes and logs, without leaving the page. */
+  /* A case opens over the list in the same case drawer as on the application: as if the application were open and the case opened from it.
+     The Underwriting user gets the Underwriting actions there; an agent acts only on the cases assigned to them. */
   function openCase(href) {
     const m = /^sales-case\.html\?id=(.+)$/.exec(href || ''); if (!m) return false;
     const id = decodeURIComponent(m[1]), c = U.get(id); if (!c) return false;
+    const me = Cases.user(), i = id.indexOf('::');
+    if (SA.openCaseIn(U.stateFor(id.slice(0, i)), id.slice(i + 2), { role: 'uw', canAct: me.canReassign || c.assignee === me.name, onClose() { loadRows(); SA.rerender(); } })) return true;
+    // A service update has no drawer on the application yet, so it keeps the Cases module view.
     SA.drawer({ size: 'xl', title: esc(c.merchant.name), sub: esc(c.type === 'service' ? c.service : c.caseType),
       onClose() { loadRows(); SA.rerender(); },
       render(api) { CaseView.mount(api.body, id, { embedded: true, onChange() { /* the list refreshes when the drawer closes */ }, onLeave(msg) { api.close(); SA.toast(msg); } }); } });

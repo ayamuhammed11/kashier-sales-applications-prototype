@@ -292,14 +292,16 @@ window.UW = (function () {
       .concat((s.kyc || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildKyc(s, x)))
       .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x))))).filter(canSee).filter(received);
   }
-  function get(cid) {
+  /* any: the application's own case drawer for Underwriting, which acts on every case of the application that is with Underwriting,
+     including one still missing information and one assigned to another agent. */
+  function get(cid, any) {
     seedDemo(); autoAssign();
     const p = split(cid), s = p[0] ? stateFor(p[0]) : states()[0]; if (!s) return null;
     const id = p[1]; let c = null;
     if (String(id).indexOf('upd:') === 0) { const x = (s.updates || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildUpdate(s, x) : null; }
     else if (String(id).indexOf('kyc:') === 0) { const x = (s.kyc || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildKyc(s, x) : null; }
     else c = s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1 ? build(s, id) : null;
-    return c && canSee(c) && received(c) ? c : null;
+    return c && (any || (canSee(c) && received(c))) ? c : null;
   }
   /* A case is only received by Underwriting when it is complete: one with a required document or link missing never reaches the queue. */
   const received = c => !(c.ustatus === 'Underwriting Review' && checks(c).some(x => x.missing));
@@ -408,6 +410,34 @@ window.UW = (function () {
     if (outcome === 'rejected') return move(c, 'Rejected', rej(true), 'recorded that ' + bank + ' rejected the ' + c.service + ' case', 'Merchant not qualified' + (why ? ': ' + why : '') + '.');
     return move(c, 'Rejected', rej(false), 'returned the ' + c.service + ' case to Sales: missing bank requirements', why);
   }
+  /* The case workflow. From each status, only the moves that make sense are offered, each with its own name (a transition), the way a
+     workflow tool does it: the status button opens "transition name -> target status". Forwards and backwards both have a named step. */
+  const FLOW = {
+    service: {
+      'Underwriting Review': [['Approve', 'UW Approved'], ['Return to Sales', 'Pending Sales Action']],
+      'UW Approved': [['Send to bank', 'Sent to Bank'], ['Back to review', 'Underwriting Review'], ['Return to Sales', 'Pending Sales Action']],
+      'Sent to Bank': [['Approved by bank', 'Pending Onboarding Configurations', 'approved'], ['Missing bank requirements', 'Pending Sales Action', 'missing'], ['Rejected by bank', 'Rejected by Bank', 'rejected'], ['Not sent yet', 'UW Approved']],
+      'Pending Onboarding Configurations': [['Configurations done', 'Active'], ['Back to bank', 'Sent to Bank']],
+      Active: [['Reopen configurations', 'Pending Onboarding Configurations']],
+      'Pending Sales Action': [['Resubmitted by Sales', 'Underwriting Review']],
+      'Rejected by Bank': [['Reopen review', 'Underwriting Review']]
+    },
+    change: {
+      'Underwriting Review': [['Approve', 'UW Approved'], ['Reject', 'Pending Sales Action']],
+      'UW Approved': [['Back to review', 'Underwriting Review']],
+      'Pending Sales Action': [['Resubmitted by Sales', 'Underwriting Review']]
+    }
+  };
+  const flowOf = c => FLOW[c.type === 'service' ? 'service' : 'change'];
+  /* The workflow's named moves first, then "Transition to" every other status, so Underwriting can still put a case in any status when needed. */
+  const transitions = c => {
+    const named = (flowOf(c)[c.ustatus] || []).map(([name, to, bank]) => ({ name: name, to: to, bank: bank || '' }));
+    const all = c.type === 'service' ? ORDER : ['Underwriting Review', 'UW Approved', 'Pending Sales Action'];
+    return named.concat(all.filter(st => st !== c.ustatus && !named.some(t => t.to === st)).map(st => ({ name: 'Transition to', to: st, bank: '', any: true })));
+  };
+  /* Returning to Sales, a missing bank requirement and a bank rejection always say why. */
+  const needsComment = t => t.to === 'Pending Sales Action' || t.to === 'Rejected by Bank';
+  function transition(c, t, comment) { return t.bank && c.ustatus === 'Sent to Bank' ? bankReply(c, t.bank, comment) : setStatus(c, t.to, comment); }
   /* Any status, at any time, in either direction. A status written here replaces the earlier decision (rejection, go-live date) rather than stacking on it. */
   function setStatus(c, to, comment) {
     const why = String(comment || '').trim(), svc = c.service || c.caseType, bank = (c.banks || [])[0] || 'The bank', back = 'moved the ' + svc + ' case to ' + to;
@@ -660,6 +690,6 @@ window.UW = (function () {
   }
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
-    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, setStatus: setStatus, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
+    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, setStatus: setStatus, FLOW: FLOW, flowOf: flowOf, transitions: transitions, transition: transition, needsComment: needsComment, stateFor: stateFor, saveState: save, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
     resetDemo: resetDemo, TYPE: TYPE, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();

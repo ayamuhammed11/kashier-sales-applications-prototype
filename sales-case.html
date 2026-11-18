@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="sales-applications/shared/sa.css">
 <link rel="stylesheet" href="components/filter-bar.css">
 <link rel="stylesheet" href="uw-case-view.css">
+<style>.wrap { max-width: 960px; margin-inline: auto; } .modal { max-width: 420px; } .modal .mh { padding: 16px 20px 4px; } .modal h2 { font-size: 18px; } .modal .mb { padding: 4px 20px 8px; gap: 8px; } .modal .mf { padding: 8px 20px 16px; } .modal textarea.inp { min-height: 64px; } .modal .hint { font-size: 12px; }</style>
 </head>
 <body>
 <script src="components/filter-bar.js"></script>
@@ -31,7 +32,7 @@
   const C = Cases, me = C.user(), U = UW;
   const id = new URLSearchParams(location.search).get('id');
   const USERS = { agent: 'Rana Adel \u00b7 Agent', agent2: 'Omar Hassan \u00b7 Agent', agent3: 'Salma Nabil \u00b7 Agent', manager: 'Layla Samir \u00b7 Manager' };
-  SA.mount({ key: 'case', render() { const p = document.getElementById('page'); if (!U.get(id)) { p.innerHTML = `<div class="wrap"><div class="card empty"><h3>Case not found</h3><p class="hint">It may be assigned to another agent, or the sales application was reset.</p><a class="btn btn-outline" href="cases.html">Back to Cases</a></div></div>`; return; } CaseView.mount(p, id, {}); },
+  SA.mount({ key: 'case', render() { const p = document.getElementById('page'); if (!U.get(id)) { p.innerHTML = `<div class="wrap"><div class="card empty" style="text-align:center;padding:48px 16px;display:flex;flex-direction:column;gap:8px;align-items:center"><h3>Case not found</h3><p class="hint">It may be assigned to another agent, or the sales application was reset.</p><a class="btn btn-outline" href="cases.html">Back to Cases</a></div></div>`; return; } CaseView.mount(p, id, {}); },
     protoControls: () => `<label class="lbl" for="role">View as</label><select id="role" data-keep>${Object.keys(USERS).map(k => `<option value="${k}" ${me.key === k ? 'selected' : ''}>${USERS[k]}</option>`).join('')}</select>`,
     bindProto() { document.getElementById('role').onchange = e => { try { localStorage.setItem('kashierCasesUser', e.target.value); } catch (x) { /* storage unavailable */ } location.reload(); }; } });
 })();

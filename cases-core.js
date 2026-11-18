@@ -21,8 +21,12 @@ window.Cases = (function () {
     agent2:  { key: 'agent2',  name: 'Omar Hassan', initials: 'OH', label: 'Underwriting Agent',   canReassign: false },
     agent3:  { key: 'agent3',  name: 'Salma Nabil', initials: 'SN', label: 'Underwriting Agent',   canReassign: false },
     manager: { key: 'manager', name: 'Layla Samir', initials: 'LS', label: 'Underwriting Manager', canReassign: true },
+    /* An Underwriting user of the sales portal, opening a case from an application: acts on any case, under their own name. */
+    appuw:   { key: 'appuw',   name: 'Layla Hassan', initials: 'LH', label: 'Underwriting', canReassign: true },
   };
-  function user() { let k = 'agent'; try { k = localStorage.getItem('kashierCasesUser') || 'agent'; } catch (e) { /* storage unavailable */ } return USERS[k] || USERS.agent; }
+  let actor = null;   // set only in memory, by a page that signs the user in itself (the application page)
+  function actAs(k) { actor = k || null; }
+  function user() { if (actor) return USERS[actor]; let k = 'agent'; try { k = localStorage.getItem('kashierCasesUser') || 'agent'; } catch (e) { /* storage unavailable */ } return USERS[k] || USERS.agent; }
   function setUser(k) { try { localStorage.setItem('kashierCasesUser', k); } catch (e) { /* storage unavailable */ } }
   // Decisions made here are recorded under whoever is signed in, not a fixed name.
   ME.name = user().name; ME.initials = user().initials;
@@ -391,7 +395,7 @@ window.Cases = (function () {
     if (d) closeDrawer(d.id);
   });
 
-  return { K: K, ME: ME, TEAM: TEAM, user: user, legalData: legalData, saveLegal: saveLegal, bmApplies: bmApplies, bmGate: bmGate, bmSheets: bmSheets, bmReadySheets: bmReadySheets, bmSent: bmSent, bmReady: bmReady, bmBatches: bmBatches, bmSend: bmSend, INTERNAL_TYPES: INTERNAL_TYPES, internalDocs: internalDocs, addInternalDoc: addInternalDoc, removeInternalDoc: removeInternalDoc, CATALOG: CATALOG, ratesFor: ratesFor, contractsRequired: contractsRequired, STATUS: STATUS, icon: icon, esc: esc, fmtDate: fmtDate, fmtDateTime: fmtDateTime, initials: initials, ageOf: ageOf, chip: chip,
+  return { K: K, ME: ME, TEAM: TEAM, user: user, actAs: actAs, legalData: legalData, saveLegal: saveLegal, bmApplies: bmApplies, bmGate: bmGate, bmSheets: bmSheets, bmReadySheets: bmReadySheets, bmSent: bmSent, bmReady: bmReady, bmBatches: bmBatches, bmSend: bmSend, INTERNAL_TYPES: INTERNAL_TYPES, internalDocs: internalDocs, addInternalDoc: addInternalDoc, removeInternalDoc: removeInternalDoc, CATALOG: CATALOG, ratesFor: ratesFor, contractsRequired: contractsRequired, STATUS: STATUS, icon: icon, esc: esc, fmtDate: fmtDate, fmtDateTime: fmtDateTime, initials: initials, ageOf: ageOf, chip: chip,
     all: all, get: get, local: local, assign: assign, addEvent: addEvent, checks: checks, progress: progress, setReview: setReview, payoutState: payoutState,
     approve: approve, reject: reject, goLive: goLive, addNote: addNote, activity: activity, mountShell: mountShell, toast: toast,
     openDrawer: openDrawer, closeDrawer: closeDrawer, openModal: openModal, closeModal: closeModal, caseNo: caseNo, docKey: docKey, conKey: conKey, conName: conName };

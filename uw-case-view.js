@@ -3,12 +3,12 @@
 window.CaseView = (function () {
   const { icon, esc } = SA, C = Cases, U = UW;
   let id = null, host = null, opts = {};
-  const me = C.user();
+  let me = C.user();
   const sc = st => { const m = U.STATUS[st]; return `<span class="sc ${m ? m.sc : 'neu'}">${esc(m ? m.label : st)}</span>`; };
   const tierName = k => k === 'local' ? 'Local rates' : k.indexOf('intl-') === 0 ? 'International · ' + k.slice(5) : k.replace(/-/g, ' ');
   const dl = rows => `<dl class="dl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v && v.html ? v.html : v == null || v === '' ? '—' : esc(v)}</dd>`).join('')}</dl>`;
   const links = list => list && list.length ? { html: list.map(u => `<a class="linkb" href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>`).join(', ') } : '';
-  const profile = `<button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button>`;
+  const profile = () => `<button type="button" class="profile" aria-label="Account: ${esc(me.name)}"><span class="pav">${esc(me.initials)}</span><span class="pdata"><span class="pname">${esc(me.name)}</span><span class="pmail">${esc(me.label)}</span></span>${icon('chevron', 'ic-16')}</button>`;
   /* The application this case belongs to, opened in the sales app for the same business and service. */
   const appHref = c => 'sales-applications/application.html?state=ready&mid=' + encodeURIComponent(c.mid) + (c.type === 'service' ? '&cases=' + encodeURIComponent(String(c.id).split('::').pop() + '~' + c.status) : '') + '&as=sales';
   const crumb = last => `<nav class="crumb" aria-label="Breadcrumb"><a href="cases.html">Cases</a><svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${AGENT_ICONS['chevron-right']}</svg><span aria-current="page">${esc(last)}</span></nav>`;
@@ -93,9 +93,16 @@ window.CaseView = (function () {
   }
   const nFiles = p => p.list.reduce((n, x) => n + (x.list ? x.list.length : 0), 0);
   /* The status of the case is one dropdown. Any status can be set at any time, forwards or backwards. */
-  function statusSel(c) {
-    const opts = c.type === 'service' ? U.ORDER : ['Underwriting Review', 'UW Approved', 'Pending Sales Action'];
-    return `<select class="sel stsel st-${U.STATUS[c.ustatus].sc}" data-case="${esc(c.id)}" data-status aria-label="Change the case status">${opts.map(o => `<option value="${esc(o)}" class="st-${U.STATUS[o].sc}" ${o === c.ustatus ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  // The status button and its workflow menu are shared with the application's case drawer (SA.statusBtn / SA.statusMenu).
+  function statusSel(c) { return SA.statusBtn(c, !canAct(c)); }
+  /* Every action a user may take on the case sits in one place, at the end of the case header. The host adds its own role's actions
+     (opts.actions, e.g. Sales: Cancel case, Review and resubmit); Underwriting adds Approve and Reject on a change request in review. */
+  function actionBar(c, ro, sales) {
+    const d = ro ? 'disabled' : '';
+    const uw = !sales && c.ustatus === 'Underwriting Review'
+      ? `<button type="button" class="btn btn-outline-danger" data-reject-case="${esc(c.id)}" ${d}>Reject</button><button type="button" class="btn btn-primary" data-approve-case="${esc(c.id)}" ${d}>Approve</button>` : '';
+    const html = (opts.actions ? opts.actions(c) : '') + uw;
+    return html ? `<div class="decide">${html}</div>` : '';
   }
   /* One block per case: the title, its status, and the items to decide. */
   function part(c, nested) {
@@ -220,22 +227,20 @@ window.CaseView = (function () {
     const hl = t => ({ html: `<b class="hl">${esc(t)}</b>` });
     const info = (c.channel ? [['Channel', hl(c.channel)], ['Service', hl(c.service.replace(/ \(\w+\)$/, ''))]] : []).concat([['Business', { html: `${esc(c.merchant.name)}<span class="mid" title="Account MID">${esc(c.mid)}</span>` }], ['Contact', c.merchant.email + ' · ' + c.merchant.phone], ['Industry', c.industry + ' · ' + c.entity],  ['Application', c.appId + ' · submitted by ' + c.submittedBy + (c.submittedAt ? ' on ' + c.submittedAt : '')]])
       .concat(mgr ? [] : [['Assigned to', c.assignee]]).concat(c.sla ? [['Time in stage', U.wait(c.hours) + (c.late ? ' · Late' : '') + ' (target ' + c.sla / 24 + ' days)']] : []);
-    const ro = !canAct(c);
-    page.innerHTML = `<div class="wrap${opts.embedded ? ' in-drawer' : ''}">
-      <header class="hdr"><div>${opts.embedded ? '' : crumb(c.caseId)}<div class="ttl"><h1>${esc(c.caseId)}</h1>${statusSel(c)}</div>
-        <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<a class="linkb" href="${esc(appHref(c))}" title="Open the application">${esc(c.appId)}</a><button type="button" class="linkb" data-logs>View logs</button></div></div>${opts.embedded ? '' : profile}</header>
-      ${ro ? `<div class="info" role="status"><b>View only.</b> This case is assigned to ${esc(c.assignee)}. Only the assignee or an Underwriting Manager can change it.</div>` : ''}
+    // Sales roles see the case as it is in Underwriting: the status as a chip, and only their own actions.
+    const sales = opts.role === 'sales', ro = sales || !canAct(c);
+    page.innerHTML = `<div class="wrap uwcv${opts.embedded ? ' in-drawer' : ''}">
+      <header class="hdr"><div>${opts.embedded ? '' : crumb(c.caseId)}<div class="ttl"><h1>${esc(c.caseId)}</h1>${sales ? sc(c.ustatus) : statusSel(c)}</div>
+        <div class="meta"><span class="tag">${esc(c.caseType)}${c.isNew ? ' \u00b7 first submission' : ''}</span>${titleIsBusiness ? '' : `<span><b>${esc(c.merchant.name)}</b><span class="mid" title="Account MID">${esc(c.mid)}</span></span>`}<a class="linkb" href="${esc(appHref(c))}" title="Open the application">${esc(c.appId)}</a><button type="button" class="linkb" data-logs>View logs</button></div></div>${actionBar(c, ro, sales)}${opts.embedded ? '' : profile()}</header>
+      ${ro && !sales ? `<div class="info" role="status"><b>View only.</b> This case is assigned to ${esc(c.assignee)}. Only the assignee or an Underwriting Manager can change it.</div>` : ''}
       ${app || !U.STEPPER ? '' : phases(c, U.progress(c))}
       <section class="card sec"><div class="sec-h"><div class="tt"><h2>Case info</h2></div></div>${dl(info)}
-        ${mgr ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
+        ${mgr && !sales ? `<div class="fld" style="max-width:280px"><label for="assignSel">Assigned to</label><select class="sel" id="assignSel">${C.TEAM.map(n => `<option ${n === c.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}</section>
       ${parts.map(x => part(x)).join('')}
       ${c.type === 'update' ? `<section class="card sec"><div class="sec-h"><div class="tt"><h2>The service as it is now</h2><p>For reference. This is what the changes above are applied to.</p></div></div>${pricingDetail(c)}</section>` : ''}
-      ${U.PHASE2 && c.type === 'service' && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}
-      <section class="card sec"><div class="sec-h"><div class="tt"><h2>Internal notes</h2><p>Seen by Underwriting only, never by Sales.</p></div></div>
-        <div class="fld"><textarea class="inp" id="noteTx" rows="2" placeholder="Add a note"></textarea></div><button class="btn btn-outline btn-sm" type="button" data-note style="align-self:flex-start">Add note</button>
-        ${notes.map(n => `<div class="note"><div class="k">${esc(n.by)} · ${esc(C.fmtDate(n.ts))}</div><div>${esc(n.text)}</div></div>`).join('')}</section></div>`;
+      ${U.PHASE2 && c.type === 'service' && c.status === 'Bank Submission' ? readinessCard(c) + formsCard(c) + answerCard(c) : ''}</div>`;
     bind(c);
-    if (ro) host.querySelectorAll('select:not([data-keep]),textarea,button[data-note],[data-ready],[data-unready],[data-sent],[data-answer],[data-bf]').forEach(e => { e.disabled = true; });
+    if (ro) host.querySelectorAll('select:not([data-keep]),textarea,[data-ready],[data-unready],[data-sent],[data-answer],[data-bf]').forEach(e => { e.disabled = true; });
   }
 
   /* The prototype keeps file names only, so a download is a small placeholder file under the real name. */
@@ -271,11 +276,12 @@ window.CaseView = (function () {
     q('[data-clear]').forEach(b => b.onclick = () => { U.setReview(U.get(b.dataset.case), b.dataset.clear, 'todo'); render(); });
     q('[data-flag]').forEach(b => b.onclick = () => flagModal(b.dataset.case, b.dataset.flag, b.dataset.lbl));
     q('[data-logs]').forEach(b => b.onclick = () => logsDrawer(c));
-    q('[data-status]').forEach(b => b.onchange = () => {
-      const cur = U.get(b.dataset.case), to = b.value;
-      if (to === 'Pending Sales Action' || to === 'Rejected by Bank') { commentModal(b.dataset.case, to); return; }
-      if (U.setStatus(cur, to)) { render(); changed(); SA.toast(cur.caseId + ' is now ' + to); } else b.value = cur.ustatus;
-    });
+    q('[data-stbtn]').forEach(b => b.onclick = () => SA.statusMenu(b, U.get(id), (t, cm) => {
+      const cur = U.get(id); if (U.transition(cur, t, cm)) { render(); changed(); SA.toast(cur.caseId + ': ' + t.name + '. Now ' + t.to + '.'); }
+    }));
+    q('[data-x]').forEach(b => b.onclick = () => { if (opts.onAction) opts.onAction(b.dataset.x, U.get(id)); });
+    q('[data-reject-case]').forEach(b => b.onclick = () => commentModal(b.dataset.rejectCase, 'Pending Sales Action'));
+    q('[data-approve-case]').forEach(b => b.onclick = () => { const cur = U.get(b.dataset.approveCase); if (U.setStatus(cur, 'UW Approved')) { render(); changed(); SA.toast(cur.caseId + ' approved. The changes are applied.'); } else SA.toast('Could not approve this case'); });
     q('[data-bmbatch]').forEach(b => b.onclick = () => UWBM.open(() => render()));
     q('[data-sent]').forEach(b => b.onclick = () => { const v = i => (host.querySelector('#' + i) || {}).value; if (U.markSent(U.get(b.dataset.sent), v('sentBatch'), v('sentRef'))) { render(); SA.toast('Marked as sent to the bank'); } });
     q('[data-answer]').forEach(b => b.onclick = () => {
@@ -310,8 +316,7 @@ window.CaseView = (function () {
     q('[data-dlall]').forEach(b => b.onclick = () => { const cc = U.get(b.dataset.dlall), sec = b.dataset.sec, nm = sec === 'contracts' ? 'contracts' : 'documents', names = [].concat.apply([], U.progress(cc).list.filter(x => x.tab === sec).map(x => x.list || [])); saveText(cc.caseId + '-' + nm + '.txt', 'The ' + nm + ' uploaded for ' + cc.caseId + ' (' + cc.merchant.name + ')\n\n' + names.join('\n') + '\n'); SA.toast('Downloading ' + names.length + ' ' + nm.slice(0, -1) + (names.length === 1 ? '' : 's')); });
     q('[data-live]').forEach(b => b.onclick = () => { U.goLive(U.get(b.dataset.live)); render(); SA.toast('Marked live'); });
     const s = one('#assignSel'); if (s) s.onchange = () => { U.assign(c, s.value); SA.toast('Reassigned to ' + s.value); render(); changed(); };
-    const n = one('[data-note]'); if (n) n.onclick = () => { const t = one('#noteTx').value.trim(); if (t) { U.addNote(c, t); render(); changed(); } };
   }
   window.addEventListener('nbe-ready', () => { try { if (host && id) render(); } catch (e) { /* not ready */ } });
-  return { mount(h, caseId, o) { host = h; id = caseId; opts = o || {}; render(); }, render() { if (host) render(); } };
+  return { mount(h, caseId, o) { host = h; id = caseId; opts = o || {}; me = C.user(); render(); }, render() { if (host) render(); } };
 })();

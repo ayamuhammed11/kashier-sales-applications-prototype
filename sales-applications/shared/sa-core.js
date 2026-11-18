@@ -154,7 +154,7 @@
   let S = blankState();
   let V = null;           // the variant: { key, render(), live: {}, onGoto(target) }
   const KEY = () => 'sa-dir-' + (V && V.key);
-  function save() { try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch (e) { } }
+  function save() { if (ext) { if (window.UW && UW.saveState) UW.saveState(JSON.parse(JSON.stringify(S))); return; } try { localStorage.setItem(KEY(), JSON.stringify(S)); } catch (e) { } }
   function load() { try { const s = JSON.parse(localStorage.getItem(KEY()) || 'null'); if (s && s.merchant) { S = Object.assign(blankState(), s); if (!s.cases) { S.cases = {}; if (s.status && s.status !== 'New') S.order.forEach(id => { S.cases[id] = { status: s.status, prev: s.prevStatus, cancelComment: s.cancelComment }; }); } delete S.status; } } catch (e) { } ME = ROLES[S.viewAs] || ROLES.sales; if (S.appId && !S.fixing) { const gone = S.order.filter(id => (S.cases[id] || {}).status === undefined); gone.forEach(id => { delete S.svc[id]; }); S.order = S.order.filter(id => !gone.includes(id)); } }
   const log = (text, ic = 'pencil', detail = '', id) => { S.log.unshift({ t: nowStr(), who: ME.name, text, ic, detail, id }); };
 
@@ -618,7 +618,19 @@
 
   /* ---------- Shared section renderers ---------- */
   const STATUS_CLS = { New: 'info', Rejected: 'bad', 'Waiting Rate Approval': 'warn', 'Underwriting Review': 'info', 'Bank Submission': 'ok', Canceled: 'neu', Live: 'ok', Approved: 'ok' };
-  const caseChip = id => `<span class="sc ${STATUS_CLS[caseStatus(id)] || 'neu'}">${esc(caseStatus(id))}</span>`;
+  /* Once a case is submitted it shows the same status as in the Cases module (Underwriting's names), so both screens always agree. */
+  const UW_SHOW = { 'Underwriting Review': ['Underwriting Review', 'warn'], 'UW Approved': ['UW Approved', 'ok'], 'Pending Sales Action': ['Pending Sales Action', 'warn'], 'Sent to Bank': ['Sent to Bank', 'info'],
+    'Pending Onboarding Configurations': ['Pending Onboarding Configurations', 'info'], Active: ['Active', 'ok'], 'Rejected by Bank': ['Rejected by Bank', 'bad'] };
+  function uwStatus(raw, x) {
+    x = x || {};
+    // Same rule as UW.ustatus in uw-core.js, kept here so pages without the Cases module show the same names.
+    const u = raw === 'Live' ? 'Active' : raw === 'Approved' ? 'UW Approved' : raw === 'Rejected' ? (x.reject && x.reject.from === 'bank' && x.reject.final ? 'Rejected by Bank' : 'Pending Sales Action')
+      : raw === 'Bank Submission' ? ({ uwOk: 'UW Approved', bankOk: 'Pending Onboarding Configurations', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
+    if (!UW_SHOW[u]) return null;
+    return { text: UW_SHOW[u][0], cls: UW_SHOW[u][1] };
+  }
+  const chipOf = (raw, x) => { const u = uwStatus(raw, x); return u ? `<span class="sc ${u.cls}">${esc(u.text)}</span>` : `<span class="sc ${STATUS_CLS[raw] || 'neu'}">${esc(raw)}</span>`; };
+  const caseChip = id => chipOf(caseStatus(id), S.cases[id] || {});
   const isEditable = s => s === 'New' || s === 'Rejected';
   /* The form is open until the first submit, and again when the salesperson chooses to fix a returned case. */
   const isEdit = () => !submitted() || (!!S.fixing && hasRejectedCase());
@@ -800,11 +812,15 @@
   function trackOf(id) {
     const st = caseStatus(id), fl = flagged().filter(f => f.id === id);
     const reviewed = fl.filter(f => decisionOf(f)).length, approvedN = fl.filter(approvedOk).length;
-    const steps = fl.length ? ['Submitted', 'Rate Approval', 'Underwriting Review', 'Bank Submission'] : ['Submitted', 'Underwriting Review', 'Bank Submission'];
-    if (st === 'Live') steps.push('Live');
-    const cur = st === 'Live' ? steps.length : st === 'Waiting Rate Approval' ? 1 : st === 'Underwriting Review' ? (fl.length ? 2 : 1) : st === 'Bank Submission' ? steps.length - 1 : -1;
     if (st === 'Canceled' || st === 'New') return '';
-    return `<ol class="track">${steps.map((t, k) => `<li class="${k < cur ? 'done' : k === cur ? 'now' : ''}"><span class="d">${k < cur ? icon('tick', 'ic-14', 2.5) : k + 1}</span><b>${t}</b><span class="hint">${k === 0 ? esc(S.submittedAt) : t === 'Live' ? esc(liveOf(id)) : t === 'Rate Approval' && k <= cur ? (st === 'Waiting Rate Approval' ? `${approvedN} approved · ${fl.length - reviewed} to review` : 'All rates approved') : ''}</span></li>`).join('')}</ol>`;
+    /* The steps are the case statuses of the Cases module, in order, so the tracker and the status chip always say the same thing. */
+    const steps = (fl.length ? ['Submitted', 'Rate Approval'] : ['Submitted']).concat(['Underwriting Review', 'UW Approved', 'Sent to Bank', 'Pending Onboarding Configurations', 'Active']);
+    const u = uwStatus(st, S.cases[id] || {}), now = u ? u.text : '';
+    // Off the main path: returned to Sales stops at the step it was returned from; rejected by the bank stops at Sent to Bank.
+    const r = (S.cases[id] || {}).reject || {}, off = now === 'Pending Sales Action' ? (r.from === 'bank' ? 'Sent to Bank' : r.source === 'approver' && fl.length ? 'Rate Approval' : 'Underwriting Review') : now === 'Rejected by Bank' ? 'Sent to Bank' : '';
+    const cur = st === 'Waiting Rate Approval' ? 1 : now === 'Active' ? steps.length : steps.indexOf(off || now);
+    const name = (t, k) => k === cur && off ? now : t;
+    return `<ol class="track">${steps.map((t, k) => `<li class="${k < cur ? 'done' : k === cur ? (off ? 'now bad' : 'now') : ''}"><span class="d">${k < cur ? icon('tick', 'ic-14', 2.5) : k === cur && off ? icon('xcircle', 'ic-14') : k + 1}</span><b>${esc(name(t, k))}</b><span class="hint">${k === 0 ? esc(S.submittedAt) : t === 'Active' ? esc(liveOf(id)) : t === 'Rate Approval' && k <= cur ? (st === 'Waiting Rate Approval' ? `${approvedN} approved · ${fl.length - reviewed} to review` : 'All rates approved') : ''}</span></li>`).join('')}</ol>`;
   }
   /* Documents a new service needs. Only what the service itself triggers (its channel, or the Bank Misr PSP annex) is asked for, and
      anything already uploaded on the application, for any other service, is reused and never asked for again. */
@@ -904,9 +920,7 @@
     const note = draft ? (svcIssues(id).length ? `Not submitted yet. ${esc(svcIssues(id)[0])}.` : missing.length ? `Not submitted yet. Still needed: ${missing.map(x => esc(x.name)).join(', ')}.` : 'Not submitted yet. It becomes its own case when you submit it.') : '';
     const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openCase" data-id="${esc(id)}" aria-label="View case ${esc(c.caseId || label(id))}">View case${icon('right', 'ic mirror')}</button>`;
     const acts = draft ? `<button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}">Edit setup</button><button type="button" class="btn btn-outline-danger btn-sm" data-act="rmSvc" data-id="${esc(id)}">Remove</button>${!svcIssues(id).length ? `<button type="button" class="btn btn-outline btn-sm" data-act="svcDocs" data-id="${esc(id)}">${missing.length ? `Continue setup (${missing.length})` : 'Review setup'}</button>` : ''}<button type="button" class="btn btn-primary btn-sm" data-act="submitCase" data-id="${esc(id)}" ${ready ? '' : 'disabled'}>Submit request</button>`
-      : rej ? `<button type="button" class="btn btn-primary btn-sm" data-act="fix">Review and resubmit</button>${view}`
-      : cx ? `<button type="button" class="btn btn-outline btn-sm" data-act="reopen" data-id="${esc(id)}">Reopen Case</button>${view}`
-      : view;
+      : view;   // a submitted case in the list only opens; its actions are inside the case
     return `<div class="crow ${draft ? 'draft' : ''} ${cx ? 'cx' : ''}" id="case-${id.replace(/\W/g, '')}"><div class="crow-m"><div class="crow-t">${c.caseId ? `<span class="cid">${esc(c.caseId)}</span>` : ''}<span class="tag info">${chOf(id)}</span><b>${esc(nmOf(id))}</b>${draft ? '<span class="sc neu">Not submitted</span>' : caseChip(id)}${waitPill(id)}</div>
       ${note ? `<div class="crow-n">${note}</div>` : ''}${rej ? rejectBox(id) : ''}${st === 'Bank Submission' ? waitBox(id) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
@@ -931,39 +945,137 @@
       const sel = l.rates[t.key] || {}, f = fl.find(x => x.key === `${id}::${l.bank}::${t.key}`), d = f && decisionOf(f), p = pubFor(id, l, t);
       const appr = !f ? '<span class="hint">No approval needed</span>'
         : d ? `<span class="sc ${d.decision === 'approved' ? 'ok' : 'bad'}">${d.decision}</span> <span class="hint">${esc(d.by)} (${esc(d.role)})${d.comment ? ' · ' + esc(d.comment) : ''}</span>`
-        : past ? '<span class="sc ok">approved</span>' : `<span class="sc warn">Pending</span> <span class="hint">${f.approver}</span>`;
+        : past ? '<span class="sc ok">approved</span>'
+        // the approver of this rate decides it right here, in the case
+        : f.approver === ME.tier && caseStatus(id) === 'Waiting Rate Approval' ? `<span class="cd-ra"><button type="button" class="btn btn-outline-danger btn-sm" data-cd-rej="${esc(f.key)}">Reject</button><button type="button" class="btn btn-outline btn-sm" data-cd-ok="${esc(f.key)}">${icon('tick', 'ic', 2)}Approve</button></span>`
+        : `<span class="sc warn">Pending</span> <span class="hint">${f.approver}</span>`;
       const why = f && S.just[f.key] ? `<div class="hint" style="margin-top:4px">Justification: ${esc(S.just[f.key])}</div>` : '';
       return `<tr><td>${l.bank ? `<div class="hint">${esc(l.bank)}</div>` : ''}${esc(t.label)}</td><td class="num"><b>${fmtN(sel.rate)}% + ${fmtN(sel.fee)} EGP</b></td><td class="num">${pubText(p)}</td><td>${appr}${why}</td></tr>`;
     }).join('')).join('');
     return `<div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Rate type</th><th>Requested</th><th>Published</th><th>Approval</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   let caseDr = null;
+  /* One case drawer for every case and every role. The application opens it for its own cases; the Cases list opens it for a case of any
+     application (openCaseIn). Each role gets only the actions it is allowed, all in the same place: the top row of the drawer.
+       Salesperson, Sales Manager, Head of Sales  Cancel Case / Reopen Case; Review and resubmit when the case is returned to Sales
+       Rate approvers                             Approve / Reject on their own rates, in Rates and approvals
+       Underwriting                               the case status (the Cases module statuses); Approve / Reject on a KYC update in review */
+  let ext = null;   // set while the Cases list has a case of another application open in this drawer
+  const uwId = id => S.appId + '::' + id;
+  /* The case as the Cases module sees it (status, assignee, documents), once it is with Underwriting. */
+  function uwCase(id) {
+    if (!window.UW || !window.Cases || !S.appId) return null;
+    save(); if (!ext) Cases.actAs('appuw');
+    try { return UW.get(uwId(id), true); } catch (e) { return null; } finally { if (!ext) Cases.actAs(null); }
+  }
+  function reloadS() { if (ext) { const s = UW.stateFor(S.appId); if (s) S = Object.assign(blankState(), JSON.parse(JSON.stringify(s))); } else load(); }
+  const uwCanAct = () => isUW() && (!ext || ext.canAct);
+  /* The case status is a button in the status's colour. It opens the moves allowed from the current status (UW.transitions), each as
+     "transition name -> target status", with View workflow under them. A move that returns the case or records a rejection asks why first. */
+  const stCls = st => (window.UW && UW.STATUS[st] ? UW.STATUS[st].sc : 'neu');
+  const stChip = st => `<span class="sc ${stCls(st)}">${esc(st)}</span>`;
+  const statusBtn = (c, disabled) => `<button type="button" class="stbtn ${stCls(c.ustatus)}" data-stbtn aria-haspopup="menu" aria-expanded="false" ${disabled ? 'disabled title="Only the assignee or an Underwriting Manager can change the status"' : ''}>${esc(c.ustatus)}${icon('chevron', 'ic-16')}</button>`;
+  function statusMenu(btn, c, run) {
+    const ts = UW.transitions(c);
+    const html = `<div class="tmenu" role="menu" aria-label="Change the status of ${esc(c.caseId)}">${ts.length ? ts.map((t, i) => `<button type="button" role="menuitem" class="tm-row" data-ti="${i}"><span class="tm-n">${esc(t.name)}</span>${icon('arrowR', 'ic-16 tm-a mirror')}${stChip(t.to)}</button>`).join('') : '<p class="tm-none">No moves from this status.</p>'}
+      <hr class="tm-sep"><button type="button" role="menuitem" class="tm-row tm-plain" data-wf>View workflow</button></div>`;
+    popover(btn, html, el => {
+      el.addEventListener('keydown', e => { if (e.key === 'Escape') e.stopPropagation(); });
+      el.querySelectorAll('[data-ti]').forEach(x => { x.onclick = () => { const t = ts[+x.dataset.ti]; closePop(); if (UW.needsComment(t)) moveComment(c, t, cm => run(t, cm)); else run(t, ''); }; });
+      el.querySelector('[data-wf]').onclick = () => { closePop(); workflowDrawer(c); };
+      const first = el.querySelector('.tm-row'); if (first) first.focus();
+    }, { width: 360 });
+  }
+  function moveComment(c, t, done) {
+    const lbl = t.to === 'Rejected by Bank' ? 'Rejection reason' : t.bank === 'missing' ? 'What the bank needs from the merchant' : 'Comment for Sales';
+    modal({ title: `${esc(t.name)}?`, sub: `${esc(c.caseId)} moves from ${stChip(c.ustatus)} to ${stChip(t.to)}${t.to === 'Pending Sales Action' ? ' and returns to Sales' : ''}.`,
+      body: `<div class="fld"><label for="mvc">${lbl}</label><textarea class="inp" id="mvc" placeholder="${t.to === 'Rejected by Bank' ? 'Why did the bank reject the merchant?' : 'What does Sales need to fix?'}"></textarea><span class="hint">Required. Sales sees it on the case.</span></div>`,
+      foot: `<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-danger" data-y disabled>${esc(t.name)}</button>`,
+      bind(api) {
+        const x = api.el.querySelector('#mvc'), y = api.el.querySelector('[data-y]');
+        x.oninput = () => { y.disabled = !x.value.trim(); };
+        api.el.querySelector('[data-n]').onclick = api.close;
+        y.onclick = () => { api.close(); done(x.value.trim()); };
+      } });
+  }
+  /* The whole workflow: every status and the moves out of it, the current one marked. */
+  function workflowDrawer(c) {
+    const f = UW.flowOf(c);
+    drawer({ title: 'Case workflow', sub: esc(c.type === 'service' ? 'Service activation request' : c.caseType) + ' · ' + esc(c.caseId), render(api) {
+      api.body.innerHTML = `<ol class="wf">${Object.keys(f).map(st => `<li class="${st === c.ustatus ? 'now' : ''}"><div class="wf-h">${stChip(st)}${st === c.ustatus ? '<span class="hint">Current status</span>' : ''}</div>
+        <ul>${f[st].map(([n, to]) => `<li><span>${esc(n)}</span>${icon('arrowR', 'ic-16 mirror')}${stChip(to)}</li>`).join('')}</ul></li>`).join('')}</ol>`;
+    } });
+  }
+  /* Approve / Reject for a case in Underwriting Review, in the drawer's top row (the same moves as in the status menu). */
+  const UW_OK = { name: 'Approve', to: 'UW Approved', bank: '' }, UW_REJ = { name: 'Return to Sales', to: 'Pending Sales Action', bank: '' };
+  const uwDecide = off => `<button type="button" class="btn btn-outline-danger btn-sm" data-cd-uwrej ${off ? 'disabled' : ''}>Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd-uwok ${off ? 'disabled' : ''}>${icon('tick', 'ic', 2)}Approve</button>`;
+  /* A move from the application's drawer: the Cases module records it, then the drawer shows the case again. */
+  function uwMove(id, t, comment) {
+    if (!ext) Cases.actAs('appuw');
+    const c = UW.get(uwId(id), true), ok = c && UW.transition(c, t, comment);
+    if (!ext) Cases.actAs(null);
+    if (ok) { reloadS(); toast(`${c.caseId}: ${t.name}. Now ${t.to}.`); }
+    rerender();
+  }
+  /* The files and links Underwriting checks, as the Cases module lists them. */
+  function uwDocs(uc) {
+    const items = UW.progress(uc).list.filter(x => (x.list && x.list.length) || (x.links && x.links.length)); if (!items.length) return '';
+    const href = u => /^https?:\/\//i.test(u) ? u : 'https://' + u;
+    return `<section class="cd-s"><h3 class="sub-h">Documents and links</h3><div class="frows">${items.map(x => (x.list || []).map(f => `<div class="frow"><div class="fi"><b>${esc(x.label)}</b><span class="muted">${esc(f)}</span></div><div class="fa"><button type="button" class="btn btn-outline btn-sm" data-cd-view="${esc(f)}" data-l="${esc(x.label)}">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-cd-dl="${esc(f)}">${icon('download', 'ic')}Download</button></div></div>`).join('')
+      + (x.links || []).map(u => `<div class="frow"><div class="fi"><b>${esc(x.label)}</b><span class="muted">${esc(u)}</span></div><div class="fa"><a class="btn btn-outline btn-sm" href="${esc(href(u))}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(u)} in a new tab">Open${icon('ext', 'ic')}</a></div></div>`).join('')).join('')}</div></section>`;
+  }
+  function bindUw(b, id) {
+    const ok = b.querySelector('[data-cd-uwok]'); if (ok) ok.onclick = () => uwMove(id, UW_OK, '');
+    const rj = b.querySelector('[data-cd-uwrej]'); if (rj) rj.onclick = () => { const c = UW.get(uwId(id), true); if (c) moveComment(c, Object.assign({}, UW_REJ, { name: 'Reject' }), cm => uwMove(id, UW_REJ, cm)); };
+    const sb = b.querySelector('[data-stbtn]'); if (sb) sb.onclick = () => { const c = UW.get(uwId(id), true); if (c) statusMenu(sb, c, (t, cm) => uwMove(id, t, cm)); };
+    const as = b.querySelector('[data-cd-assign]'); if (as) as.onchange = () => { const c = UW.get(uwId(id), true); if (c && UW.assign(c, as.value)) toast('Reassigned to ' + as.value); rerender(); };
+    b.querySelectorAll('[data-cd-view]').forEach(x => { x.onclick = () => drawer({ size: 'xl', title: esc(x.dataset.l), sub: esc(x.dataset.cdView), render(api) { api.body.innerHTML = `<div class="fprev fprev-lg">${icon('doc', 'ic-24')}<b>${esc(x.dataset.cdView)}</b><span class="hint">Preview of the uploaded file. The prototype does not store real files.</span></div>`; } }); });
+    b.querySelectorAll('[data-cd-dl]').forEach(x => { x.onclick = () => toast('Downloading ' + x.dataset.cdDl); });
+  }
+  /* The Cases list opens a case of any application in this same drawer: the application's saved state is loaded for the time the drawer is
+     open, every change is written back to that application, and the page's own state comes back when the drawer closes. */
+  function openCaseIn(st, lid, o) {
+    o = o || {}; if (ext || !st) return false;
+    const prev = { S, ME };
+    S = Object.assign(blankState(), JSON.parse(JSON.stringify(st))); ME = ROLES[o.role] || ROLES.uw;
+    const isKyc = (S.kyc || []).some(k => k.key === lid);
+    if (!isKyc && !S.svc[lid]) { S = prev.S; ME = prev.ME; return false; }
+    ext = { canAct: o.canAct !== false, done() { S = prev.S; ME = prev.ME; ext = null; if (o.onClose) o.onClose(); } };
+    if (isKyc) openKycCase(kycById(lid)); else openCase(lid);
+    return true;
+  }
+  const closedDr = () => { caseDr = null; if (ext) ext.done(); };
   function openCase(id) {
     const draw = () => {
       if (!S.svc[id]) { caseDr.api.close(true); return; }
-      const st = caseStatus(id), c = S.cases[id] || {}, svc = S.svc[id], banks = banksOf(id);
+      const st = caseStatus(id), c = S.cases[id] || {}, svc = S.svc[id], banks = banksOf(id), uc = uwCase(id), uwAct = isUW() && uc;
+      const canPick = ext && window.Cases && Cases.user().canReassign;
       const note = st === 'Canceled' ? `Canceled. View only.${c.cancelComment ? ' Comment: ' + esc(c.cancelComment) : ''}`
         : st === 'Live' ? `The merchant went live with this service on ${esc(liveOf(id))}. View only.`
         : st === 'Waiting Rate Approval' ? 'Waiting for rate approval. It moves to Underwriting Review once every rate is approved, and comes back to the salesperson to edit if any is rejected.'
-        : st === 'Rejected' ? 'Returned to the salesperson.' : `Submitted on ${esc(S.submittedAt)}. View only.`;
-      const act = st === 'Live' ? '' : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-cd="reopen">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="cancel">Cancel Case</button>`;
+        : st === 'Rejected' ? 'Returned to the salesperson.' : uwAct && uwCanAct() ? 'With Underwriting. Change the status as the case moves on.' : `Submitted on ${esc(S.submittedAt)}. View only.`;
+      const act = st === 'Live' || isUW() ? (uwAct && uc.ustatus === 'Underwriting Review' ? uwDecide(!uwCanAct()) : '') : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-cd="reopen">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="cancel">Cancel Case</button>`;
       caseDr.api.setTitle(`${esc(label(id))}`, `${esc(c.caseId || '')} · ${esc(S.merchant.name)}`);
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}</div><p class="case-n">${note}</p>${st === 'Bank Submission' ? waitBox(id) : ''}${st === 'Rejected' ? rejectBox(id) + '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>' : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uwAct ? statusBtn(uc, !uwCanAct()) : caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}</div><p class="case-n">${note}</p>${st === 'Bank Submission' ? waitBox(id) : ''}${st === 'Rejected' ? rejectBox(id) + (isUW() ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${caseDr.tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${caseDr.tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === id || !e.id).length}</span></button></div>
         ${caseDr.tab === 'log' ? `<section class="cd-s">${caseLogHTML(id)}</section>` : `${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
           ${needsBank(id) ? `<dt>Financial institution</dt><dd>${banks.length ? banks.map(esc).join(', ') : 'Not chosen'}</dd>` : ''}${chOf(id) === 'POS' ? `<dt>POS terminals</dt><dd>${esc(S.terminals || 'Not set')}</dd>` : ''}
           ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
-          ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''}</dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}</dl></section>
-        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>`}`;
+          ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''}</dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}
+          ${uc ? `<dt>Assigned to</dt><dd>${canPick ? `<select class="sel" data-cd-assign aria-label="Assigned to" style="max-width:240px">${Cases.TEAM.map(n => `<option ${n === uc.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : esc(uc.assignee || 'Not assigned')}</dd>` : ''}</dl></section>
+        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>${uc ? uwDocs(uc) : ''}`}`;
       caseDr.api.body.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); caseDr.api.body.scrollTop = 0; }; });
       const b = caseDr.api.body;
       const cb = b.querySelector('[data-cd=cancel]'), rb = b.querySelector('[data-cd=reopen]');
       if (cb) cb.onclick = () => openCancel(id); if (rb) rb.onclick = () => openReopen(id);
+      b.querySelectorAll('[data-cd-ok]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdOk); if (f) { decide(f, 'approved'); rerender(); toast(`Rate approved: ${label(f.id)}`); } }; });
+      b.querySelectorAll('[data-cd-rej]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdRej); if (f) openReject(f); }; });
       const fb = b.querySelector('[data-cd=fix]'); if (fb) fb.onclick = () => { caseDr.api.close(true); S.fixing = true; rerender(); scrollTo(0, 0); };
+      if (uc) bindUw(b, id);
     };
     caseDr = { draw, tab: 'details' };
-    drawer({ size: 'xl', title: esc(label(id)), sub: '', onClose() { caseDr = null; }, render(api) { caseDr.api = api; draw(); } });
+    drawer({ size: 'xl', title: esc(label(id)), sub: '', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
   }
   /* KYC cases: an edit of the merchant's general information is not applied directly. It becomes a case for the Underwriting team,
      related to the merchant KYC, and is applied only when Underwriting approves it. */
@@ -980,7 +1092,7 @@
     return ch;
   }
   const kycById = key => S.kyc.find(k => k.key === key);
-  const kycChip = k => `<span class="sc ${STATUS_CLS[k.status] || 'neu'}">${esc(k.status)}</span>`;
+  const kycChip = k => chipOf(k.status, k);
   const kycWaitH = k => k.status === 'Underwriting Review' && k.since ? Math.max(0, (CLOCK - Date.parse(k.since)) / 36e5) : null;
   const kycPill = k => { const h = kycWaitH(k); return isApprover() && h != null ? `<span class="wait ${h > WAIT_SLA['Underwriting Review'] ? 'late' : ''}">${icon('clock', 'ic-14')}${fmtWait(h)}${h > WAIT_SLA['Underwriting Review'] ? ' · Late' : ''}</span>` : ''; };
   function applyKyc(k) {
@@ -1011,20 +1123,19 @@
   function kycRow(k) {
     const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected';
     const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openKyc" data-id="${esc(k.key)}">View case${icon('right', 'ic mirror')}</button>`;
-    const acts = open && uw ? `<button type="button" class="btn btn-outline-danger btn-sm" data-act="kycReject" data-id="${esc(k.key)}">Reject</button><button type="button" class="btn btn-primary btn-sm" data-act="kycApprove" data-id="${esc(k.key)}">${icon('tick', 'ic', 2)}Approve</button>${view}`
-      : rej && !uw ? `<button type="button" class="btn btn-primary btn-sm" data-act="kycFix" data-id="${esc(k.key)}">Edit and resubmit</button>${view}` : view;
+    const acts = view;   // the list only opens the case; its actions are inside it
     return `<div class="crow ${k.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span><b>Merchant information update</b>${kycChip(k)}${kycPill(k)}</div>${rej ? kycRejectBox(k) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   function openKycCase(k0) {
     const key = k0.key;
     const draw = () => {
       const k = kycById(key); if (!k) { caseDr.api.close(true); return; }
-      const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected';
+      const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected', uc = uw ? uwCase(key) : null;
       const note = open ? 'Waiting for the Underwriting team. The changes are not on the application until they are approved.' : k.status === 'Approved' ? 'Approved by the Underwriting team. The changes are applied to the application.' : k.status === 'Canceled' ? 'Canceled. None of the changes were applied.' : 'Returned to the salesperson.';
-      const acts = open && uw ? `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kreject">Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd="kapprove">${icon('tick', 'ic', 2)}Approve</button>` : (open || rej) && !uw ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kcancel">Cancel update</button>' : '';
+      const acts = open && uw && uwCanAct() ? `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kreject">Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd="kapprove">${icon('tick', 'ic', 2)}Approve</button>` : (open || rej) && !uw ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kcancel">Cancel update</button>' : '';
       caseDr.api.setTitle('Merchant information update', `${esc(k.caseId)} · ${esc(S.merchant.name)}`);
       const tab = caseDr.tab;
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${kycChip(k)}<span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span>${kycPill(k)}<span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? kycRejectBox(k) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="kfix">Edit and resubmit</button></div>') : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : kycChip(k)}<span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span>${kycPill(k)}<span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? kycRejectBox(k) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="kfix">Edit and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
         ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3><div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Field</th><th>Current</th><th>Requested</th></tr></thead><tbody>${k.changes.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from)}</td><td><b>${esc(c.to)}</b></td></tr>`).join('')}</tbody></table></div></section>
         <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(k.caseId)}</dd><dt>Type</dt><dd>Merchant KYC update</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(k.by)} (${esc(k.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(k.at))}</dd>${k.decision ? `<dt>Approved by</dt><dd>${esc(k.decision.by)} · ${esc(whenStr(k.decision.at))}</dd>` : ''}</dl></section>`}`;
@@ -1033,9 +1144,10 @@
       const on = (sel, fn) => { const x = b.querySelector(sel); if (x) x.onclick = fn; };
       on('[data-cd=kapprove]', () => { kycApprove(k); rerender(); }); on('[data-cd=kreject]', () => kycReject(k)); on('[data-cd=kcancel]', () => kycCancel(k));
       on('[data-cd=kfix]', () => { caseDr.api.close(true); openEditGeneral(k); });
+      if (uc) bindUw(b, key);
     };
     caseDr = { draw, tab: 'details' };
-    drawer({ size: 'xl', title: 'Merchant information update', onClose() { caseDr = null; }, render(api) { caseDr.api = api; draw(); } });
+    drawer({ size: 'xl', title: 'Merchant information update', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
   }
   /* Edit the general information of a submitted application: business info, website / social links, store image (POS) and payout methods.
      Pricing and the cases are not touched. Changes are made on a copy and only applied on Save. */
@@ -1399,11 +1511,11 @@
   }
 
   window.SA = {
-    get S() { return S; }, mount, navIcon, rerender, soft, toast, icon, esc, fmtN, label, chOf, nmOf, isCard, needsBank, multiBank,
+    get S() { return S; }, reload: load, mount, navIcon, rerender, soft, toast, icon, esc, fmtN, label, chOf, nmOf, isCard, needsBank, multiBank,
     CHANNELS, SVC_NAMES, SVC_HINT, SERVICES, BANKS, tiersFor, verdict, verdictHTML, flagged, pubText, rateText, sortedRules, bestRule, applyRule, ruleRate,
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
     commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
-    openServiceSetup, beginSetup, cancelSetup, stepperHTML, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, get ME() { return ME; }
+    openServiceSetup, beginSetup, cancelSetup, stepperHTML, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, openCaseIn, statusBtn, statusMenu, get ME() { return ME; }
   };
 })();

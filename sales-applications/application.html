@@ -144,10 +144,20 @@
   .hub-pop { padding: 16px 20px 12px; overflow-y: auto; max-height: 70vh; }
   @media (max-width: 767px) { .c-status { flex-wrap: wrap; } .c-status .btn-primary { flex-basis: 100%; } .hub-cl { margin-inline-start: auto; } }
 </style>
+<link rel="stylesheet" href="../uw-case-view.css">
 </head>
 <body>
 <script src="shared/agent-icons.js"></script>
 <script src="shared/sa-core.js"></script>
+<script src="../rate-decisions.js"></script>
+<script src="../cases-core.js"></script>
+<script src="../nbe-defaults.js" onerror="void 0"></script>
+<script src="../nbe-export.js" onerror="void 0"></script>
+<script src="../bm-defaults.js" onerror="void 0"></script>
+<script src="../bm-export.js" onerror="void 0"></script>
+<script src="../uw-core.js"></script>
+<script src="../uw-bm.js"></script>
+<script src="../uw-case-view.js"></script>
 <script>
 (function () {
   const VARIANTS = [{ key: 'final', href: 'application.html', label: 'Final · Application' }, { key: 'a', href: 'variant-a.html', label: 'A' }, { key: 'b', href: 'variant-b.html', label: 'B' }, { key: 'c', href: 'variant-c.html', label: 'C' }, { key: 'cmp', href: 'compare.html', label: 'Compare' }];
