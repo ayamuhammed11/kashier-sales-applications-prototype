@@ -109,7 +109,7 @@ window.UW = (function () {
         : p.type === 'notes' ? { label: 'Notes', from: sv.notes || 'None', to: p.notes } : { label: 'Currencies', from: (sv.currencies || []).join(', '), to: p.list.join(', ') });
       app.updates.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: u.st, service: u.svc, patches: u.ch, changes: changes, by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(u.h || 20),
         reject: u.st === 'Rejected' ? { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: u.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: u.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
-      app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'requested an update of the ' + label(u.svc) + ' service', ic: 'send', detail: changes.map(x => x.label).join(', '), id: key });
+      app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'requested an update of the ' + label(u.svc) + ' service', ic: 'send', detail: changes.map(x => x.label + ': ' + (x.from == null || x.from === '' ? 'Not set' : x.from) + ' → ' + (x.to == null || x.to === '' ? 'Not set' : x.to)).join('; '), id: key });
     });
     (m.kyc || []).forEach((k, i) => {
       const P = { name: m.name, email: m.email, phone: m.phone, industry: m.industry, owner: '', websites: m.web ? [].concat(m.web) : [], storeImage: m.store || '', payouts: app.payouts.map(p => Object.assign({}, p)), primary: 1, nextPayout: 2 };
@@ -117,7 +117,7 @@ window.UW = (function () {
       const key = 'kyc:' + (i + 1);
       app.kyc.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: k.st, isNew: !!k.isNew, changes: changes, proposed: P, by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(k.h || 20),
         reject: k.st === 'Rejected' ? { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: k.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: k.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
-      app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'sent a KYC update to Underwriting', ic: 'send', detail: changes.map(x => x.label).join(', '), id: key });
+      app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'sent a KYC update to Underwriting', ic: 'send', detail: changes.map(x => x.label + ': ' + (x.from == null || x.from === '' ? 'Not set' : x.from) + ' → ' + (x.to == null || x.to === '' ? 'Not set' : x.to)).join('; '), id: key });
     });
     app.nextCase = c + 1;
     fillDemo(app, m, READY[m.name]);
@@ -363,7 +363,7 @@ window.UW = (function () {
     const s = stateFor(c.appId), k = s && kycOf(s, c); if (!k) return false; const P = k.proposed;
     // A new application's details are already on the application; only a change has anything to apply.
     if (!k.isNew) { s.merchant.name = P.name; s.merchant.email = P.email; s.merchant.phone = P.phone; s.industry = P.industry; s.owner = P.owner;
-      s.storeImage = P.storeImage; s.payouts = P.payouts.map(p => Object.assign({}, p)); s.primary = P.primary; s.nextPayout = Math.max(s.nextPayout, P.nextPayout); }
+      s.storeImage = P.storeImage; s.payouts = P.payouts.map(p => Object.assign({}, p)); s.primary = P.primary; s.nextPayout = Math.max(s.nextPayout, P.nextPayout); if (P.legal) s.legal = Object.assign({}, s.legal || {}, P.legal); }
     k.status = 'Approved'; k.decision = { by: C.user().name, at: nowStr() }; k.since = new Date(CLOCK).toISOString();
     addLog(s, k.key, k.isNew ? 'approved the application details' : 'approved the KYC update', 'check', k.isNew ? 'The submitted business details and payout method are confirmed' : 'The changes are now on the application'); save(s); return true;
   }

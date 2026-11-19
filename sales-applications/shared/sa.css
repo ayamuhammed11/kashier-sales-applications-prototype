@@ -350,7 +350,7 @@ body.locked { overflow: hidden; }
 .log .d { font-size: 13px; color: var(--cadet-base); margin-block-start: 2px; }
 
 /* ---------- Description list (read-only) ---------- */
-.dl { display: grid; grid-template-columns: minmax(140px, auto) 1fr; gap: 10px 16px; margin: 0; }
+.dl { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: 10px 16px; margin: 0; }
 .dl dt { color: var(--cadet-base); }
 .dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 
@@ -431,7 +431,7 @@ body.locked { overflow: hidden; }
 .prof-side .sec-h { flex-wrap: wrap; }
 .prof-side .sec-h .btn { width: 100%; }
 .prof-main, .prof-side { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-.dl-s { grid-template-columns: minmax(110px, auto) 1fr; gap: 8px 16px; font-size: 13px; }
+.dl-s { grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: 8px 16px; font-size: 13px; }
 @media (max-width: 767px) { .prof-h { padding: 16px; } .prof-n { border-inline-start: 0; padding-inline: 0; flex-direction: row; gap: 8px; align-items: baseline; } }
 
 /* Case rows in the profile. */
@@ -513,7 +513,8 @@ body.locked { overflow: hidden; }
 .cm-new { display: flex; gap: 12px; align-items: flex-start; }
 .cm-f { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .cm-f textarea { min-height: 72px; resize: vertical; }
-.cm-a { display: flex; justify-content: flex-end; }
+.cm-a { display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cm-a .hint { margin-inline-end: auto; }
 .cm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .cm { display: flex; gap: 12px; padding-block: 16px; border-block-start: 1px solid var(--border-subtle); }
 .cm-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -559,3 +560,16 @@ body.locked { overflow: hidden; }
 .eu-in { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .eu-in .inp { width: 88px; min-width: 0; }
 .eu-in span { color: var(--cadet-base); font-size: 13px; }
+
+/* Legal details: collected on the application for the bank onboarding sheets */
+.lg-h { display: flex; flex-direction: column; gap: 4px; margin-block-start: 8px; padding-block-start: 16px; border-block-start: 1px solid var(--border-subtle); }
+.lg-src { display: inline-flex; align-items: center; gap: 4px; color: var(--link); }
+.up-no { margin-block-start: 8px; max-width: 320px; }
+.cd-sh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dl dt .ar { display: block; font-size: 12px; font-weight: 400; color: var(--cadet-base); }
+
+/* A case ID inside a comment: opens that case */
+.cm-case { display: inline; border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; border-radius: 2px; }
+.cm-case:hover { color: var(--primary-hover); }
+.cm-case:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: 2px; }
+.nowrap { white-space: nowrap; }

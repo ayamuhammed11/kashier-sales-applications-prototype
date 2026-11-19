@@ -62,6 +62,14 @@
   /* ---------- Reference data ---------- */
   const ENTITIES = ['Individual Seller', 'Registered Business', 'Professional Business'];
   const OWNERS = ['Egyptian Owner', 'Foreign Owner'];
+  /* Legal details the banks need on their onboarding sheets (Online and POS). Sales collect them on the application, under the
+     same keys the Underwriting bank form reads (S.legal), so the case and the bank sheets are filled before Underwriting opens it. */
+  const LEGAL_FORMS = ['Sole proprietorship', 'LLC', 'Joint stock company', 'Partnership', 'Other'];
+  const LEGAL_AR = { 'Sole proprietorship': 'فردى', LLC: 'مسئولية محدودة', 'Joint stock company': 'مساهمة', Partnership: 'تضامن', Other: '' };
+  const BANK_CITIES = ['CAIRO', 'GIZA', 'ALEXANDRIA', 'PORT SAID', 'ISMAILIA', 'BANHA', 'LUXOR', 'ASWAN', 'ARISH', 'SHARM ELSHEKH', 'HURGHADA', 'MARSA MATROH', 'TABA', 'RAAS ELBAR', 'TANTA', 'MANSOURA',
+    'EL MAHALA', 'EL MENIA', 'BANI SWIEF', 'ASSUIT', 'SUHAG', 'SUEZ', 'EL FAYOUM', 'DOMYAT', 'SHEBEN EL KOUM', 'EL ZAGAZEG', 'KAFR ELSHEIKH', 'EL KHARGA', 'DAMANHOU'];
+  const LEGAL_LBL = { ownerName: 'Owner full name', legalForm: 'Legal form', addr1: 'Business address', city: 'City', ownerIdNo: 'National ID number', taxNo: 'Tax card number', crNo: 'Commercial registration number' };
+  const LEGAL_KEYS = Object.keys(LEGAL_LBL);
   const INDUSTRIES = ['Automotive', 'Education', 'Entertainment & Media', 'Fashion & Beauty', 'Financial Services', 'Food & Beverage',
     'Healthcare / Pharmacy', 'Insurance', 'Logistics & Delivery', 'Marketplace', 'Non-profit / NGO', 'Professional Services',
     'Real Estate', 'Retail & E-commerce', 'Technology / SaaS', 'Travel & Tourism'];
@@ -144,7 +152,7 @@
       merchant: { name: 'Delta Pharma Group', email: 'nourhan@deltapharma.eg', phone: '+20 111 234 5678' },
       entity: 'Registered Business', industry: 'Healthcare / Pharmacy', activities: ['Healthcare / Pharmacy'], owner: '',
       svc: {}, order: [], terminals: '',
-      websites: [''], docs: {}, storeImage: '', taxInvoice: false,
+      websites: [''], docs: {}, storeImage: '', taxInvoice: false, legal: {}, legalSrc: {},
       payouts: [], primary: null, nextPayout: 1,
       reqContracts: {}, contracts: [], nextContract: 1,
       just: {}, visited: {}, step: 0, viewAs: 'sales', decisions: {}, watch: {}, submittedBy: '',
@@ -345,6 +353,7 @@
     if (hasCh('POS') && !S.storeImage) out.push('Upload the Store Image');
     if (S.taxInvoice && !docDone(TAX_DOC)) out.push('Upload the Tax Identification Card (needed for the tax invoice)');
     if (![...req.keys()].some(docDone)) out.push('Upload at least one document');
+    ['ownerIdNo', 'taxNo', 'crNo'].forEach(k => { const e = legalErr(k); if (e) out.push(e); });
     return out;
   }
   function payoutIssues(p) {
@@ -377,9 +386,11 @@
   function checklist() {
     const m = S.merchant;
     const mIss = [!m.name.trim() && 'business name', !emailOk(m.email) && 'a valid email', !phoneOk(m.phone) && 'a phone with country code'].filter(Boolean);
+    const lIss = ['ownerName', 'legalForm', 'city', 'addr1'].map(legalErr).filter(Boolean);
     const svc = servicesIssues(), docs = documentsIssues(), pay = payoutsIssues(), con = contractsIssues(), jus = justIssues();
     return [
       { k: 'merchant', label: 'Merchant details: business name, email and phone', done: !mIss.length, hint: mIss.length ? 'Enter ' + mIss.join(', ') : '', target: 'merchant' },
+      { k: 'legal', label: 'Legal details: owner name, legal form, city and address', done: !lIss.length, hint: lIss[0] ? lIss[0] + (lIss.length > 1 ? ` (+${lIss.length - 1} more)` : '') : '', target: 'legal' },
       { k: 'type', label: 'Merchant type and industry', done: !!(S.entity && S.industry), hint: !S.entity ? 'Pick the merchant type' : !S.industry ? 'Pick the industry' : '', target: 'criteria' },
       { k: 'acts', label: 'At least one activity selected', done: S.activities.length > 0, target: 'criteria' },
       { k: 'svc1', label: 'At least one service selected', done: S.order.length > 0, target: 'services' },
@@ -666,14 +677,130 @@
   function draftHead() {
     return submitted() ? '' : profileHead(false);
   }
+  /* o = { entity, owner } the checks run against: the application's, or the ones being edited in a KYC update. */
+  const legalOf = (L, o) => ({ ind: o.entity === 'Individual Seller', foreign: o.owner === 'Foreign Owner', tax: o.entity !== 'Individual Seller', cr: o.entity === 'Registered Business', v: k => String((L || {})[k] || '').trim() });
+  const idLabel = o => o.owner === 'Foreign Owner' ? 'Passport number' : 'National ID number';
+  function legalCheck(k, L, o) {
+    const x = legalOf(L, o), v = x.v(k);
+    switch (k) {
+      case 'ownerName': return !v ? 'Enter the owner full name' : !/^[A-Za-z .'-]+$/.test(v) || v.split(/\s+/).length < 2 ? 'Enter the full name in English, as on the ID' : '';
+      case 'legalForm': return x.ind || v ? '' : 'Choose the legal form';
+      case 'addr1': return !v ? 'Enter the business address' : !/^[A-Za-z0-9 .,'\/#()-]+$/.test(v) ? 'Write the address in English' : '';
+      case 'city': return v ? '' : 'Choose the city';
+      case 'ownerIdNo': return x.foreign ? (!v ? 'Enter the passport number' : !/^[A-Za-z0-9]{6,12}$/.test(v) ? 'Enter a valid passport number' : '') : !v ? 'Enter the national ID number' : !/^[23]\d{13}$/.test(v) ? 'Enter the 14-digit national ID number' : '';
+      case 'taxNo': return !x.tax ? '' : !v ? 'Enter the tax card number' : !/^\d{9}$/.test(v.replace(/[\s-]/g, '')) ? 'Enter the 9-digit tax card number' : '';
+      case 'crNo': return !x.cr ? '' : !v ? 'Enter the commercial registration number' : !/^\d{1,10}$/.test(v) ? 'Enter the registration number, digits only' : '';
+    }
+    return '';
+  }
+  const LG = () => S.legal || (S.legal = {});
+  const appO = () => ({ entity: S.entity, owner: S.owner });
+  const legalErr = k => legalCheck(k, LG(), appO());
+  /* Errors show once the field was left, or as soon as a typed value is wrong. */
+  const legalShow = k => (S.visited['lg_' + k] || String(LG()[k] || '').trim()) ? legalErr(k) : '';
+  const srcHint = k => (S.legalSrc || {})[k] ? `<span class="hint lg-src">${icon('info', 'ic-14')}Read from the uploaded ${esc(S.legalSrc[k])}. Check it matches.</span>` : '';
+  function legalInput(k, extra = '', label = LEGAL_LBL[k]) {
+    const e = legalShow(k);
+    return `<div class="fld"><label for="lg-${k}">${esc(label)}</label><input class="inp ${e ? 'err' : ''}" id="lg-${k}" data-path="legal.${k}" value="${esc(LG()[k] || '')}" ${extra}>${srcHint(k)}${fieldErr(e, e)}</div>`;
+  }
+  function legalFields(o = {}) {
+    const L = LG(), ind = S.entity === 'Individual Seller', fe = legalShow('legalForm'), ce = legalShow('city');
+    return `${o.bare ? '' : `<div class="lg-h"><span class="sub-h">Legal details</span><span class="hint">Sent to the bank with every service. Enter them in English, as on the merchant's documents.</span></div>`}
+    <div class="grid3">${legalInput('ownerName', 'autocomplete="name" placeholder="e.g. Mohamed Ahmed Mahmoud"')}
+      <div class="fld"><label for="lg-legalForm">Legal form</label>${ind ? `<input class="inp" id="lg-legalForm" value="Sole proprietorship" readonly aria-describedby="lgfH"><span class="hint" id="lgfH">Set by the merchant type.</span>`
+        : `<select class="sel ${L.legalForm ? '' : 'is-empty'} ${fe ? 'err' : ''}" id="lg-legalForm" data-act-change="legal" data-k="legalForm"><option value="">Select legal form</option>${LEGAL_FORMS.filter(f => f !== 'Sole proprietorship' || S.entity === 'Professional Business').map(f => `<option ${L.legalForm === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>${srcHint('legalForm')}${fieldErr(fe, fe)}`}</div>
+      <div class="fld"><label for="lg-city">City</label><select class="sel ${L.city ? '' : 'is-empty'} ${ce ? 'err' : ''}" id="lg-city" data-act-change="legal" data-k="city"><option value="">Select city</option>${BANK_CITIES.map(c => `<option ${L.city === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select><span class="hint">From the banks' city list.</span>${fieldErr(ce, ce)}</div>
+    </div>${legalInput('addr1', 'autocomplete="street-address" placeholder="e.g. 14 El Hegaz St, Heliopolis"')}`;
+  }
+  /* The registration numbers sit with the document they come from. */
+  function docNo(n) {
+    const k = n === TAX_DOC ? 'taxNo' : n === 'Commercial Registration (CR)' ? 'crNo' : n === (S.owner === 'Foreign Owner' ? "Owner's Passport" : 'National ID') ? 'ownerIdNo' : '';
+    if (!k || legalCheck(k, {}, appO()) === '' && k !== 'ownerIdNo') return '';
+    return `<div class="up-no">${legalInput(k, 'inputmode="' + (S.owner === 'Foreign Owner' && k === 'ownerIdNo' ? 'text' : 'numeric') + '" dir="ltr" autocomplete="off"', k === 'ownerIdNo' ? idLabel(appO()) : LEGAL_LBL[k])}</div>`;
+  }
+  /* Prototype stand-in for reading the uploaded document: fills the numbers it holds when they are still empty. */
+  function readDoc(n) {
+    const seed = [...(S.merchant.name || 'x')].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7), dg = (len, off) => String(seed * 7919 + off).replace(/\D/g, '').padEnd(len, '7').slice(0, len);
+    const name = S.merchant.email && /^nourhan@/i.test(S.merchant.email) ? 'Nourhan Adel Mostafa' : ['Mohamed Ahmed Mahmoud', 'Ahmed Mohamed Kamel', 'Omar Hisham Ali', 'Sara Mahmoud Hassan'][seed % 4];
+    const got = n === 'National ID' ? { ownerIdNo: '2' + dg(13, 1).replace(/^0/, '8'), ownerName: name } : n === "Owner's Passport" ? { ownerIdNo: 'A' + dg(8, 2), ownerName: name }
+      : n === TAX_DOC ? { taxNo: dg(9, 3).replace(/^0/, '4') } : n === 'Commercial Registration (CR)' ? Object.assign({ crNo: dg(6, 4).replace(/^0/, '1') }, S.entity === 'Individual Seller' ? {} : { legalForm: 'LLC' }) : null;
+    if (!got) return;
+    const L = LG(), filled = Object.keys(got).filter(k => !String(L[k] || '').trim());
+    if (!filled.length) return;
+    S.legalSrc = S.legalSrc || {};
+    filled.forEach(k => { L[k] = got[k]; S.legalSrc[k] = n; });
+    toast(`Read from the ${n}: ${filled.map(k => (k === 'ownerIdNo' ? idLabel(appO()) : LEGAL_LBL[k]).toLowerCase()).join(', ')}. Check ${filled.length > 1 ? 'them' : 'it'} in Legal details.`);
+  }
+  /* The values of the bank onboarding sheets for a service, as the bank writes them. */
+  function bankSheet(id) {
+    const L = LG(), x = legalOf(L, appO()), ph = String(S.merchant.phone || '').replace(/\D/g, '').replace(/^20/, '').replace(/^0/, '');
+    const form = x.ind ? 'Sole proprietorship' : x.v('legalForm');
+    const rows = [['Owner name', 'اسم التاجر', x.v('ownerName')], ['Commercial name', 'الاسم التجاري', S.merchant.name], ['Address', 'عنوان التاجر', x.v('addr1')], ['City', 'المحافظة', x.v('city')],
+      ['Company type', '', form ? `${form}${LEGAL_AR[form] ? ' · ' + LEGAL_AR[form] : ''}` : ''], ['Tax card number', 'رقم البطاقة الضريبية', x.tax ? x.v('taxNo') : 'NA'], ['Commercial registration number', 'رقم السجل التجارى', x.cr ? x.v('crNo') : 'NA'],
+      [idLabel(appO()), 'رقم بطاقة الرقم القومي', x.v('ownerIdNo')], ['Mobile', 'الموبايل', ph]];
+    if (chOf(id) === 'Online') rows.push(['Website / app', 'الموقع / التطبيق', S.websites.map(w => w.trim()).filter(Boolean)[0] || '']);
+    rows.push(['Email', 'البريد الالكتروني', S.merchant.email]);
+    return rows;
+  }
+  function legalDl() {
+    const L = LG(), x = legalOf(L, appO()), v = k => x.v(k) || '<span class="tag req">Missing</span>', t = k => x.v(k) ? esc(x.v(k)) : v(k);
+    return `<dt>Owner full name</dt><dd>${t('ownerName')}</dd><dt>Legal form</dt><dd>${x.ind ? 'Sole proprietorship' : t('legalForm')}</dd><dt>Business address</dt><dd>${t('addr1')}${x.v('city') ? ', ' + esc(x.v('city')) : ''}</dd>
+      <dt>${idLabel(appO())}</dt><dd dir="ltr">${t('ownerIdNo')}</dd>${x.tax ? `<dt>Tax card number</dt><dd>${t('taxNo')}</dd>` : ''}${x.cr ? `<dt>Commercial registration number</dt><dd>${t('crNo')}</dd>` : ''}`;
+  }
+  /* Its own card on the submitted application: the merchant's official identity for the bank. Underwriting corrects it here. */
+  function legalCard() {
+    const x = legalOf(LG(), appO()), keys = LEGAL_KEYS.filter(k => !(k === 'legalForm' && x.ind) && !(k === 'taxNo' && !x.tax) && !(k === 'crNo' && !x.cr)), miss = keys.filter(k => !x.v(k)).length;
+    return `<section class="card sec prof-wide" id="legal-card"><div class="sub-hr"><h2 class="sub-h">Legal details ${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</h2>${isUW() && uwCanAct() ? `<button type="button" class="btn btn-outline btn-sm" data-act="legalEdit">${icon('pencil', 'ic')}Edit legal details</button>` : ''}</div>
+      <p class="hint" style="margin:0">Sent to the bank with every service, as on the merchant's documents.${isUW() ? '' : ' To change them, use Edit application details.'}</p><dl class="dl dl-s">${legalDl()}</dl></section>`;
+  }
+  function bankSheetHTML(id) {
+    const rows = bankSheet(id), miss = rows.filter(r => !r[2]).length, canEdit = isUW() && uwCanAct();
+    return `<section class="cd-s"><div class="cd-sh"><h3 class="sub-h">Bank onboarding data</h3>${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}<span class="sp"></span>${canEdit ? `<button type="button" class="btn btn-outline btn-sm" data-cd="legal">${icon('pencil', 'ic')}Edit legal details</button>` : ''}</div>
+      <p class="hint" style="margin:0">The values for the bank's ${esc(chOf(id))} sheet, filled in by Sales on the application.</p>
+      <dl class="dl">${rows.map(r => `<dt>${esc(r[0])}${r[1] ? `<span class="ar"><bdi lang="ar">${esc(r[1])}</bdi></span>` : ''}</dt><dd>${r[2] ? `<span dir="auto">${esc(r[2])}</span>` : '<span class="tag req">Missing</span>'}</dd>`).join('')}</dl></section>`;
+  }
+  /* Underwriting corrects the legal details straight on the application; each change is logged. */
+  function openLegalEdit(id) {
+    const D = JSON.parse(JSON.stringify(LG())), o = appO(); let tried = false;
+    const was = k => String(LG()[k] || '').trim();
+    const curTxt = k => String(D[k] || '').trim() !== was(k) ? `Current: ${esc(was(k) || 'Not set')}` : '';
+    drawer({ size: 'md', title: 'Edit legal details', sub: esc(S.merchant.name), render(api) {
+      const draw = () => {
+        const e = k => tried || String(D[k] || '').trim() ? legalCheck(k, D, o) : '', ind = o.entity === 'Individual Seller';
+        const cur = k => `<span class="hint" data-cur="${k}">${curTxt(k)}</span>`;
+        const inp = (k, lbl, ex = '') => `<div class="fld"><label for="le-${k}">${esc(lbl)}</label><input class="inp ${e(k) ? 'err' : ''}" id="le-${k}" data-le="${k}" value="${esc(D[k] || '')}" ${ex}>${cur(k)}${fieldErr(e(k), e(k))}</div>`;
+        const sel = (k, lbl, opts) => `<div class="fld"><label for="le-${k}">${esc(lbl)}</label><select class="sel ${D[k] ? '' : 'is-empty'} ${e(k) ? 'err' : ''}" id="le-${k}" data-le="${k}"><option value="">Select</option>${opts.map(x => `<option ${D[k] === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>${cur(k)}${fieldErr(e(k), e(k))}</div>`;
+        const x = legalOf(D, o);
+        api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>Changes apply to the application right away and are logged. Sales see them on the application.</p></div>
+          ${inp('ownerName', 'Owner full name')}${ind ? '' : sel('legalForm', 'Legal form', LEGAL_FORMS)}${inp('addr1', 'Business address')}${sel('city', 'City', BANK_CITIES)}
+          ${inp('ownerIdNo', idLabel(o), 'dir="ltr"')}${x.tax ? inp('taxNo', 'Tax card number', 'dir="ltr" inputmode="numeric"') : ''}${x.cr ? inp('crNo', 'Commercial registration number', 'dir="ltr" inputmode="numeric"') : ''}`;
+        api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-primary" data-y>Save changes</button>`;
+        api.foot.querySelector('[data-n]').onclick = () => api.close();
+        api.foot.querySelector('[data-y]').onclick = () => {
+          tried = true; if (LEGAL_KEYS.some(k => legalCheck(k, D, o))) { draw(); return; }
+          const L = LG(), ch = LEGAL_KEYS.filter(k => String(L[k] || '').trim() !== String(D[k] || '').trim());
+          if (!ch.length) { api.close(); toast('Nothing changed'); return; }
+          log('updated the legal details', 'pencil', chgLog(ch.map(k => ({ label: k === 'ownerIdNo' ? idLabel(o) : LEGAL_LBL[k], from: L[k] || '', to: String(D[k] || '').trim() }))), id);
+          ch.forEach(k => { L[k] = String(D[k] || '').trim(); if (S.legalSrc) delete S.legalSrc[k]; });
+          api.close(); rerender(); if (caseDr && caseDr.draw) caseDr.draw(); toast('Legal details updated');
+        };
+      };
+      api.body.addEventListener('input', ev => { const k = ev.target.dataset.le; if (k && ev.target.tagName !== 'SELECT') { D[k] = ev.target.value; const h = api.body.querySelector(`[data-cur="${k}"]`); if (h) h.innerHTML = curTxt(k); } });
+      api.body.addEventListener('change', ev => { const k = ev.target.dataset.le; if (k) { D[k] = ev.target.value; draw(); } });
+      draw();
+    } });
+  }
+  /* Every change request shows each field's current value next to the requested one. */
+  const chgTable = (ch, newH = 'Requested') => `<div class="rscroll" style="display:block"><table class="rtbl ro-svc chg-t"><thead><tr><th>Field</th><th>Current</th><th>${newH}</th></tr></thead><tbody>${ch.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from == null || c.from === '' ? 'Not set' : c.from)}</td><td><b>${esc(c.to == null || c.to === '' ? 'Not set' : c.to)}</b></td></tr>`).join('')}</tbody></table></div>`;
+  const chgLog = ch => ch.map(c => `${c.label}: ${c.from == null || c.from === '' ? 'Not set' : c.from} → ${c.to == null || c.to === '' ? 'Not set' : c.to}`).join('; ');
   function fieldErr(cond, msg) { return cond ? `<span class="ferr">${icon('warn', 'ic-14')}${msg}</span>` : ''; }
-  function merchantFields() {
+  function merchantFields(o = {}) {
     const m = S.merchant, t = S.visited.merchant;
     return `<div class="grid3">
       <div class="fld"><label for="mn">Business Name</label><input class="inp ${t && !m.name.trim() ? 'err' : ''}" id="mn" data-path="merchant.name" value="${esc(m.name)}" autocomplete="organization">${fieldErr(t && !m.name.trim(), 'Enter the business name')}</div>
       <div class="fld"><label for="me">Contact Email</label><input class="inp ${t && !emailOk(m.email) ? 'err' : ''}" id="me" type="email" data-path="merchant.email" value="${esc(m.email)}" autocomplete="email">${fieldErr(t && !emailOk(m.email), 'Enter a valid email, e.g. name@company.com')}</div>
       <div class="fld"><label for="mp">Contact Phone</label><input class="inp ${t && !phoneOk(m.phone) ? 'err' : ''}" id="mp" type="tel" dir="ltr" data-path="merchant.phone" value="${esc(m.phone)}" autocomplete="tel">${fieldErr(t && !phoneOk(m.phone), 'Include the country code, e.g. +20 100 123 4567')}</div>
-    </div><p class="hint" style="margin:0">Pre-filled from the Zoho CRM lead.</p>`;
+    </div><p class="hint" style="margin:0">Pre-filled from the Zoho CRM lead.</p>${o.noLegal ? '' : legalFields()}`;
   }
   function criteriaFields({ compact = false } = {}) {
     return `<div class="${compact ? 'grid2' : 'crit'}">
@@ -714,6 +841,7 @@
     const rows = names.map(n => {
       const d = DOCS[n], st = S.docs[n] || {}, ok = docDone(n), taxReq = n === TAX_DOC && S.taxInvoice;
       return `<div class="up" id="doc-${n.replace(/\W/g, '')}"><div class="tt"><b>${esc(n)}<span class="ar">· <bdi lang="ar">${d.ar}</bdi></span>${ok ? '<span class="tag ok">Uploaded</span>' : taxReq ? '' : '<span class="opt">(optional)</span>'}</b><span class="m">Applies to: ${req.get(n).map(esc).join(', ')} · ${d.formats} · max ${d.size} MB</span>
+${docNo(n)}
         ${n === TAX_DOC ? `<label class="cbx ${taxUp ? '' : 'dis'}" style="margin-top:6px"><input type="checkbox" data-act-change="tax" ${S.taxInvoice ? 'checked' : ''} ${taxUp || S.taxInvoice ? '' : 'disabled'}>The merchant needs a tax invoice${taxUp ? '' : ' <span class="hint">· Upload the tax ID first</span>'}</label>` : ''}</div>
         <div class="acts">${slotsOf(n).map(sl => st[sl] ? fileChip(st[sl], 'rmDoc', { n, sl }) : `<button type="button" class="btn btn-outline btn-sm" data-act="upDoc" data-n="${esc(n)}" data-sl="${esc(sl)}">${icon('upload', 'ic')}${sl === 'File' ? 'Upload' : esc(sl)}</button>`).join('')}</div></div>`;
     }).join('');
@@ -1067,11 +1195,12 @@
           ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
           ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''}</dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}
           ${uc ? `<dt>Assigned to</dt><dd>${canPick ? `<select class="sel" data-cd-assign aria-label="Assigned to" style="max-width:240px">${Cases.TEAM.map(n => `<option ${n === uc.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : esc(uc.assignee || 'Not assigned')}</dd>` : ''}</dl></section>
-        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>${uc ? uwDocs(uc) : ''}`}`;
+        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>${bankSheetHTML(id)}${uc ? uwDocs(uc) : ''}`}`;
       caseDr.api.body.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); caseDr.api.body.scrollTop = 0; }; });
       const b = caseDr.api.body;
       const cb = b.querySelector('[data-cd=cancel]'), rb = b.querySelector('[data-cd=reopen]');
       if (cb) cb.onclick = () => openCancel(id); if (rb) rb.onclick = () => openReopen(id);
+      const lb = b.querySelector('[data-cd=legal]'); if (lb) lb.onclick = () => openLegalEdit(id);
       b.querySelectorAll('[data-cd-ok]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdOk); if (f) { decide(f, 'approved'); rerender(); toast(`Rate approved: ${label(f.id)}`); } }; });
       b.querySelectorAll('[data-cd-rej]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdRej); if (f) openReject(f); }; });
       const fb = b.querySelector('[data-cd=fix]'); if (fb) fb.onclick = () => { caseDr.api.close(true); S.fixing = true; rerender(); scrollTo(0, 0); };
@@ -1091,6 +1220,7 @@
     const old = new Map(S.payouts.map(p => [p.id, p])), nw = new Map(P.payouts.map(p => [p.id, p]));
     P.payouts.forEach(p => { const o = old.get(p.id); if (!o) ch.push({ label: 'Payout method added', from: 'None', to: full(p) }); else if (full(o) !== full(p)) ch.push({ label: 'Payout method changed', from: full(o), to: full(p) }); });
     S.payouts.forEach(o => { if (!nw.has(o.id)) ch.push({ label: 'Payout method removed', from: full(o), to: 'None' }); });
+    if (P.legal) LEGAL_KEYS.forEach(k => add(k === 'ownerIdNo' ? idLabel({ owner: P.owner }) : LEGAL_LBL[k], LG()[k] || '', P.legal[k] || ''));
     if (P.primary !== S.primary) { const a = old.get(S.primary), b = nw.get(P.primary); ch.push({ label: 'Primary payout method', from: a ? full(a) : 'None', to: b ? full(b) : 'None' }); }
     return ch;
   }
@@ -1102,6 +1232,7 @@
     const P = k.proposed;
     S.merchant.name = P.name; S.merchant.email = P.email; S.merchant.phone = P.phone; S.industry = P.industry; S.owner = P.owner;
     S.websites = P.websites.length ? P.websites.slice() : ['']; S.storeImage = P.storeImage; S.payouts = P.payouts.map(p => Object.assign({}, p)); S.primary = P.primary; S.nextPayout = Math.max(S.nextPayout, P.nextPayout);
+    if (P.legal) { S.legal = Object.assign({}, LG(), P.legal); S.legalSrc = {}; }
   }
   const isUW = () => ME.key === 'uw';
   function kycApprove(k) { applyKyc(k); k.status = 'Approved'; k.decision = { by: ME.name, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('approved the KYC update', 'check', 'The changes are now on the application', k.key); toast(`${k.caseId} approved. The changes are applied.`); }
@@ -1140,7 +1271,7 @@
       const tab = caseDr.tab;
       caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : kycChip(k)}<span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span>${kycPill(k)}<span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? kycRejectBox(k) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="kfix">Edit and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
-        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3><div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Field</th><th>Current</th><th>Requested</th></tr></thead><tbody>${k.changes.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from)}</td><td><b>${esc(c.to)}</b></td></tr>`).join('')}</tbody></table></div></section>
+        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3>${chgTable(k.changes)}</section>
         <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(k.caseId)}</dd><dt>Type</dt><dd>Merchant KYC update</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(k.by)} (${esc(k.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(k.at))}</dd>${k.decision ? `<dt>Approved by</dt><dd>${esc(k.decision.by)} · ${esc(whenStr(k.decision.at))}</dd>` : ''}</dl></section>`}`;
       const b = caseDr.api.body;
       b.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); b.scrollTop = 0; }; });
@@ -1204,11 +1335,11 @@
         let u = prev && updById(prev.key);
         if (u && !r.patches.length) { u.status = 'Canceled'; u.since = since; log(`canceled the update of the ${label(id)} service`, 'x', 'All changes were undone', u.key); api.close(); rerender(); toast(`${u.caseId} canceled. The service keeps its current setup.`); return; }
         const had = !!u;
-        if (u) { Object.assign(u, { patches: r.patches, changes: r.changes, comment, status: 'Underwriting Review', since }); delete u.reject; log(`resubmitted the update of the ${label(id)} service`, 'send', r.changes.map(x => x.label).join(', '), u.key); }
+        if (u) { Object.assign(u, { patches: r.patches, changes: r.changes, comment, status: 'Underwriting Review', since }); delete u.reject; log(`resubmitted the update of the ${label(id)} service`, 'send', chgLog(r.changes), u.key); }
         else {
           S.updates = S.updates || []; const n = S.updates.reduce((m, x) => Math.max(m, x.n || 0), 0) + 1;
           u = { n, key: 'upd:' + n, caseId: nextCaseId(), status: 'Underwriting Review', service: id, patches: r.patches, changes: r.changes, comment, by: ME.name, role: ME.role, at: nowStr(), since };
-          S.updates.push(u); log(`requested an update of the ${label(id)} service`, 'send', r.changes.map(x => x.label).join(', '), u.key);
+          S.updates.push(u); log(`requested an update of the ${label(id)} service`, 'send', chgLog(r.changes), u.key);
         }
         api.close(); rerender(); toast(had ? `${u.caseId} updated. The changes apply once the Underwriting team approves them.` : `${u.caseId} created. The changes apply once the Underwriting team approves them.`);
       };
@@ -1231,7 +1362,7 @@
       const tab = caseDr.tab;
       caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : chipOf(u.status, u)}<span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${u.reject && u.reject.comment ? `<p>${esc(u.reject.comment)}</p>` : ''}<p class="rj-h">Edit the changes and resubmit, or cancel the update.</p></div></div>${uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="ufix">Edit and resubmit</button></div>'}` : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
-        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3><div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Field</th><th>Current</th><th>Requested</th></tr></thead><tbody>${u.changes.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from)}</td><td><b>${esc(c.to)}</b></td></tr>`).join('')}</tbody></table></div></section>
+        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3>${chgTable(u.changes)}</section>
         <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(u.caseId)}</dd><dt>Type</dt><dd>Service Update</dd><dt>Service</dt><dd>${esc(label(u.service))}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(u.by)} (${esc(u.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(u.at))}</dd>${u.comment ? `<dt>Reason</dt><dd>${esc(u.comment)}</dd>` : ''}${uc ? `<dt>Assigned to</dt><dd>${esc(uc.assignee || 'Not assigned')}</dd>` : ''}${u.decision ? `<dt>Approved by</dt><dd>${esc(u.decision.by)} · ${esc(whenStr(u.decision.at))}</dd>` : ''}</dl></section>`}`;
       const b = caseDr.api.body;
       b.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); b.scrollTop = 0; }; });
@@ -1245,7 +1376,8 @@
   }
   function openEditGeneral(k) {
     const clone = o => JSON.parse(JSON.stringify(o));
-    const D = k ? clone(k.proposed) : { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.length ? S.websites.slice() : [''], storeImage: S.storeImage, payouts: clone(S.payouts), primary: S.primary, nextPayout: S.nextPayout };
+    const D = k ? clone(k.proposed) : { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.length ? S.websites.slice() : [''], storeImage: S.storeImage, payouts: clone(S.payouts), primary: S.primary, nextPayout: S.nextPayout, legal: clone(LG()) };
+    if (!D.legal) D.legal = clone(LG());
     if (!D.websites.length) D.websites = [''];
     const orig = JSON.stringify(D); let tried = false, saved = false, api;
     const payIssues = p => {
@@ -1271,11 +1403,14 @@
       D.websites.forEach((w, i) => { if (w.trim() && !urlOk(w)) e.web[i] = 'Enter a valid website or social media link'; });
       if (hasCh('Online') && !filled.length) e.webAny = 'Online services need at least one website or social media link';
       if (!D.payouts.length) e.payAny = 'Add at least one payout method';
+      e.legal = {}; LEGAL_KEYS.forEach(k => { const m = legalCheck(k, D.legal, { entity: S.entity, owner: D.owner }); if (m) e.legal[k] = m; });
       D.payouts.forEach(p => { const x = payIssues(p); if (Object.keys(x).length) e.pay[p.id] = x; });
-      e.any = !!(e.name || e.email || e.phone || e.webAny || e.payAny || Object.keys(e.web).length || Object.keys(e.pay).length);
+      e.any = !!(e.name || e.email || e.phone || e.webAny || e.payAny || Object.keys(e.web).length || Object.keys(e.pay).length || Object.keys(e.legal).length);
       return e;
     };
-    const E = () => tried ? errs() : { pay: {}, web: {} };
+    const E = () => tried ? errs() : { pay: {}, web: {}, legal: {} };
+    const buildP = () => ({ name: D.name.trim(), email: D.email.trim(), phone: D.phone.trim(), industry: D.industry, owner: D.owner, websites: D.websites.map(x => x.trim()).filter(Boolean), storeImage: D.storeImage, payouts: D.payouts.map(p => Object.assign({}, p, { name: p.name.trim() })), primary: D.primary, nextPayout: D.nextPayout, legal: Object.fromEntries(Object.entries(D.legal).map(([k, v]) => [k, String(v == null ? '' : v).trim()])) });
+    const summary = () => { const ch = kycChanges(buildP()); return ch.length ? chgTable(ch, 'New') : '<p class="hint" style="margin:0">No changes yet. Each field you change is listed here with its current value.</p>'; };
     const fe = m => m ? `<span class="ferr">${icon('warn', 'ic-14')}${m}</span>` : '';
     const input = (id, lbl, key, val, err, extra = '') => `<div class="fld"><label for="${id}">${lbl}</label><input class="inp ${err ? 'err' : ''}" id="${id}" data-e="${key}" value="${esc(val)}" ${extra}>${fe(err)}</div>`;
     const select = (id, lbl, key, val, opts, ph, err) => `<div class="fld"><label for="${id}">${lbl}</label><select class="sel ${val ? '' : 'is-empty'} ${err ? 'err' : ''}" id="${id}" data-e="${key}"><option value="">${ph}</option>${opts.map(o => `<option ${val === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>${fe(err)}</div>`;
@@ -1292,9 +1427,15 @@
       return `<div class="note">${icon('info', 'ic')}<p>Changes are not applied right away. They are sent to the Underwriting team as a KYC case and take effect once approved.</p></div>
         <section class="cd-s"><h3 class="sub-h">Business information</h3><div class="grid2">${input('eName', 'Business Name', 'name', D.name, e.name)}${input('eEmail', 'Contact Email', 'email', D.email, e.email, 'type="email"')}${input('ePhone', 'Contact Phone', 'phone', D.phone, e.phone, 'type="tel" dir="ltr"')}${select('eInd', 'Industry', 'industry', D.industry, INDUSTRIES, 'Select industry', '')}${select('eOwn', 'Business Owner Nationality', 'owner', D.owner, OWNERS, 'Not set', '')}</div>
           <p class="hint" style="margin:0">Merchant type and activities decide the pricing rules, so they are not edited here.</p></section>
+        <section class="cd-s"><h3 class="sub-h">Legal details</h3><p class="hint" style="margin:0">Sent to the bank. In English, as on the merchant's documents.</p><div class="grid2">${(() => { const o = { entity: S.entity, owner: D.owner }, x = legalOf(D.legal, o), L = D.legal;
+          return input('eLon', 'Owner full name', 'legal:ownerName', L.ownerName || '', e.legal.ownerName) + (x.ind ? '' : select('eLlf', 'Legal form', 'legal:legalForm', L.legalForm || '', LEGAL_FORMS, 'Select legal form', e.legal.legalForm))
+            + input('eLad', 'Business address', 'legal:addr1', L.addr1 || '', e.legal.addr1) + select('eLct', 'City', 'legal:city', L.city || '', BANK_CITIES, 'Select city', e.legal.city)
+            + input('eLid', idLabel(o), 'legal:ownerIdNo', L.ownerIdNo || '', e.legal.ownerIdNo, 'dir="ltr"') + (x.tax ? input('eLtx', 'Tax card number', 'legal:taxNo', L.taxNo || '', e.legal.taxNo, 'dir="ltr" inputmode="numeric"') : '')
+            + (x.cr ? input('eLcr', 'Commercial registration number', 'legal:crNo', L.crNo || '', e.legal.crNo, 'dir="ltr" inputmode="numeric"') : ''); })()}</div></section>
         <section class="cd-s"><h3 class="sub-h">Website and social media links</h3>${D.websites.map((w, i) => `<div class="eweb"><div class="fld" style="flex:1"><label class="sr-only" for="eW${i}">Link ${i + 1}</label><input class="inp ${e.web[i] ? 'err' : ''}" id="eW${i}" dir="ltr" data-e="web:${i}" value="${esc(w)}" placeholder="www.merchant.com">${fe(e.web[i])}</div>${D.websites.length > 1 ? `<button type="button" class="icon-btn" data-ea="rmLink" data-i="${i}" aria-label="Remove link ${i + 1}">${icon('x', 'ic')}</button>` : ''}</div>`).join('')}${fe(e.webAny)}<button type="button" class="link-btn" data-ea="addLink" style="align-self:flex-start">${icon('plus', 'ic')}Add another link</button></section>
         ${hasCh('POS') ? `<section class="cd-s"><h3 class="sub-h">Store image</h3><p class="hint" style="margin:0">Required for POS services. JPG, PNG · max 5 MB.</p><div class="st-row">${D.storeImage ? `<span class="muted">${esc(D.storeImage)}</span>` : ''}<button type="button" class="btn btn-outline btn-sm" data-ea="store">${icon('upload', 'ic')}${D.storeImage ? 'Replace image' : 'Upload image'}</button></div></section>` : ''}
-        <section class="cd-s"><h3 class="sub-h">Payout methods</h3>${fe(e.payAny)}<div class="items">${pay}</div><div class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="bank">${icon('plus', 'ic')}Add bank account</button><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="wallet">${icon('plus', 'ic')}Add e-wallet</button></div></section>`;
+        <section class="cd-s"><h3 class="sub-h">Payout methods</h3>${fe(e.payAny)}<div class="items">${pay}</div><div class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="bank">${icon('plus', 'ic')}Add bank account</button><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="wallet">${icon('plus', 'ic')}Add e-wallet</button></div></section>
+        <section class="cd-s"><h3 class="sub-h">Your changes</h3><div data-sum>${summary()}</div></section>`;
     };
     const draw = () => {
       const keep = api.body.scrollTop; api.body.innerHTML = html(); api.body.scrollTop = keep;
@@ -1304,18 +1445,19 @@
     };
     const setField = (key, val) => {
       if (key.startsWith('web:')) { D.websites[+key.slice(4)] = val; return; }
+      if (key.startsWith('legal:')) { D.legal[key.slice(6)] = val; return; }
       if (key.startsWith('pay:')) { const [, id, f] = key.split(':'); const p = D.payouts.find(x => x.id === +id); p[f] = val; if (f === 'bank') p.branch = ''; return; }
       D[key] = val;
     };
     const save = () => {
       tried = true; if (errs().any) { draw(); const bad = api.body.querySelector('.err, .ferr'); bad && bad.scrollIntoView({ block: 'center' }); return; }
-      const P = { name: D.name.trim(), email: D.email.trim(), phone: D.phone.trim(), industry: D.industry, owner: D.owner, websites: D.websites.map(x => x.trim()).filter(Boolean), storeImage: D.storeImage, payouts: D.payouts.map(p => Object.assign({}, p, { name: p.name.trim() })), primary: D.primary, nextPayout: D.nextPayout };
+      const P = buildP();
       const changes = kycChanges(P);
       saved = true; api.close(true);
       if (!changes.length) { toast('Nothing to send: the details are the same as the application'); return; }
       const iso = new Date(CLOCK).toISOString();
-      if (k) { Object.assign(k, { status: 'Underwriting Review', changes, proposed: P, reject: null, since: iso }); log('resubmitted the KYC update to Underwriting', 'send', changes.map(c => c.label).join(', '), k.key); }
-      else { const n = S.kyc.reduce((m, x) => Math.max(m, x.n), 0) + 1; k = { n, key: 'kyc:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status: 'Underwriting Review', changes, proposed: P, by: ME.name, role: ME.role, at: nowStr(), since: iso }; S.kyc.push(k); log('sent a KYC update to Underwriting', 'send', changes.map(c => c.label).join(', '), k.key); }
+      if (k) { Object.assign(k, { status: 'Underwriting Review', changes, proposed: P, reject: null, since: iso }); log('resubmitted the KYC update to Underwriting', 'send', chgLog(changes), k.key); }
+      else { const n = S.kyc.reduce((m, x) => Math.max(m, x.n), 0) + 1; k = { n, key: 'kyc:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status: 'Underwriting Review', changes, proposed: P, by: ME.name, role: ME.role, at: nowStr(), since: iso }; S.kyc.push(k); log('sent a KYC update to Underwriting', 'send', chgLog(changes), k.key); }
       rerender(); toast(`Sent to Underwriting as ${k.caseId}`);
     };
     drawer({ size: 'xl', title: k ? 'Edit and resubmit the KYC update' : 'Edit application details', sub: esc(S.merchant.name),
@@ -1326,7 +1468,7 @@
       },
       render(a) {
         api = a; draw();
-        a.body.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.e; if (k && e.target.tagName !== 'SELECT') setField(k, e.target.value); });
+        a.body.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.e; if (k && e.target.tagName !== 'SELECT') { setField(k, e.target.value); const sm = a.body.querySelector('[data-sum]'); if (sm) sm.innerHTML = summary(); } });
         a.body.addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.e; if (k && e.target.tagName === 'SELECT') { setField(k, e.target.value); draw(); } });
         a.body.addEventListener('click', e => {
           const b = e.target.closest('[data-ea]'); if (!b) return; const i = +b.dataset.i;
@@ -1342,12 +1484,31 @@
       } });
   }
   /* Comments (after the first submission only): a running conversation on the application between the salesperson, managers and the onboarding team. */
+  /* CASE IDs written in a comment become links to that case: on this application its drawer opens; on another application the
+     page moves there with the case open. An ID that matches no case stays plain text. */
+  function findCase(cid) {
+    const id = String(cid).toUpperCase(), inSt = st => { if (!st) return null;
+      const svc = Object.keys(st.cases || {}).find(k => String((st.cases[k] || {}).caseId).toUpperCase() === id); if (svc) return svc;
+      const x = (st.kyc || []).concat(st.updates || []).find(k => String(k.caseId).toUpperCase() === id); return x ? x.key : null; };
+    const here = inSt(S); if (here) return { local: here };
+    try {
+      const all = [JSON.parse(localStorage.getItem('sa-dir-final') || 'null')].concat(Object.values(JSON.parse(localStorage.getItem('kashierUwDemoApps') || '{}')));
+      for (const st of all) { const k = st && st.appId && st.appId !== S.appId ? inSt(st) : null; if (k) return { app: st.appId, key: k, biz: (st.merchant || {}).name || st.appId }; }
+    } catch (e) { /* storage unavailable */ }
+    return null;
+  }
+  const linkCases = t => esc(t).replace(/\bCASE-\d{1,6}\b/gi, m => { const f = findCase(m); return f ? `<button type="button" class="cm-case" data-act="caseRef" data-c="${esc(m.toUpperCase())}" title="${f.local ? 'Open this case' : 'Open this case on ' + esc(f.biz)}">${esc(m.toUpperCase())}</button>` : m; });
+  function openCaseRef(cid) {
+    const f = findCase(cid); if (!f) { toast(`${cid} was not found`); return; }
+    if (f.local) { openFromQuery(f.local); return; }
+    location.href = `application.html?app=${encodeURIComponent(f.app)}&case=${encodeURIComponent(f.key)}&as=${encodeURIComponent(ME.key)}`;
+  }
   function commentsSection() {
     if (!submitted()) return '';   // available only after the first submission
     const list = S.comments.slice().reverse();
     return `<section class="card sec" id="s-comments"><div class="sec-h"><div class="tt"><h2>Comments <span class="cnt">${S.comments.length}</span></h2><p>Notes about this application, visible to everyone working on it.</p></div></div>
-      <div class="cm-new"><span class="pav" aria-hidden="true">${esc(ME.init)}</span><div class="cm-f"><label class="sr-only" for="cmText">Add a comment</label><textarea class="inp" id="cmText" data-path="commentDraft" placeholder="Write a comment…">${esc(S.commentDraft)}</textarea><div class="cm-a"><button type="button" class="btn btn-primary btn-sm" data-act="postComment">Post comment</button></div></div></div>
-      ${list.length ? `<ul class="cm-list">${list.map(c => `<li class="cm"><span class="pav" aria-hidden="true">${esc(c.init)}</span><div class="cm-b"><div class="cm-h"><b>${esc(c.who)}</b><span class="cm-t num">${esc(whenStr(c.t))}</span></div><p>${esc(c.text)}</p></div></li>`).join('')}</ul>` : '<p class="hint" style="margin:0">No comments yet.</p>'}</section>`;
+      <div class="cm-new"><span class="pav" aria-hidden="true">${esc(ME.init)}</span><div class="cm-f"><label class="sr-only" for="cmText">Add a comment</label><textarea class="inp" id="cmText" data-path="commentDraft" placeholder="Write a comment…" aria-describedby="cmH">${esc(S.commentDraft)}</textarea><div class="cm-a"><span class="hint" id="cmH">Type a case ID, like <span class="nowrap">${esc(Object.values(S.cases).map(c => c.caseId).filter(Boolean)[0] || 'CASE-001')}</span>, to link to that case.</span><button type="button" class="btn btn-primary btn-sm" data-act="postComment">Post comment</button></div></div></div>
+      ${list.length ? `<ul class="cm-list">${list.map(c => `<li class="cm"><span class="pav" aria-hidden="true">${esc(c.init)}</span><div class="cm-b"><div class="cm-h"><b>${esc(c.who)}</b><span class="cm-t num">${esc(whenStr(c.t))}</span></div><p>${linkCases(c.text)}</p></div></li>`).join('')}</ul>` : '<p class="hint" style="margin:0">No comments yet.</p>'}</section>`;
   }
   function readOnlyView() {
     const head = profileHead(true);
@@ -1369,6 +1530,7 @@
     const conRows = requiredContracts().filter(r => S.reqContracts[r.label]).map(r => frow(r.label, S.reqContracts[r.label])).concat(S.contracts.filter(c => c.file).map(c => frow(c.label || 'Contract', c.file)));
     const info = `<div class="prof-info">
       <section class="card sec prof-wide"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}${S.websites.map(x => x.trim()).filter(Boolean).length ? `<dt>Website / social media</dt><dd class="wl">${S.websites.map(x => x.trim()).filter(Boolean).map(u => `<a href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" dir="ltr">${esc(u)}${icon('ext', 'ic-14')}</a>`).join('')}</dd>` : ''}${hasCh('POS') && S.storeImage ? `<dt>Store image</dt><dd><div class="st-row"><span class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(S.storeImage)}" data-l="Store image">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(S.storeImage)}">${icon('download', 'ic')}Download</button></span></div></dd>` : ''}`)}</section>
+      ${legalCard()}
       <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Documents</h2>${docRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="docs" data-n="${docRows.length}">${icon('download', 'ic')}Download all (${docRows.length})</button>` : ''}</div>${docRows.length ? `<div class="frows">${docRows.join('')}</div>` : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
       <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Contracts</h2>${conRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="contracts" data-n="${conRows.length}">${icon('download', 'ic')}Download all (${conRows.length})</button>` : ''}</div>${conRows.length ? `<div class="frows">${conRows.join('')}</div>` : '<p class="hint" style="margin:0">None attached.</p>'}</section>
       <section class="card sec prof-wide"><h2 class="sub-h">Payout methods</h2>${S.payouts.length ? `<div class="pm-list">${S.payouts.map((p, i) => `<div class="pm"><div class="pm-h"><b>${p.id === S.primary ? 'Primary payout method' : esc(p.name || 'Payout method ' + (i + 1))}</b><span class="tag info">${p.type === 'bank' ? 'Bank Account' : 'E-Wallet'}</span>${p.id === S.primary ? '<span class="tag ok">Primary</span>' : ''}</div>${dl((p.id !== S.primary && p.name ? `<dt>Method name</dt><dd>${esc(p.name)}</dd>` : '') + (p.type === 'bank' ? `<dt>Bank name</dt><dd>${esc(p.bank)}</dd><dt>Branch</dt><dd>${esc(p.branch)}</dd><dt>Account holder</dt><dd>${esc(p.holder)}</dd><dt>Account number</dt><dd dir="ltr" class="num">${esc(p.acct)}</dd>` : `<dt>Wallet provider</dt><dd>${esc(p.provider)}</dd><dt>Mobile number</dt><dd dir="ltr" class="num">${esc(p.mobile)}</dd><dt>Wallet holder</dt><dd>${esc(p.wholder)}</dd>`))}</div>`).join('')}</div>` : '<p class="hint" style="margin:0">None added.</p>'}</section></div>`;
@@ -1400,7 +1562,9 @@
     S.terminals = name === 'ready' ? '3' : '';
     S.websites = ['www.deltapharma.eg'];
     S.docs['National ID'] = { 'Front side': 'national-id-front.jpg', 'Back side': 'national-id-back.jpg' };
+    S.legal = { ownerName: 'Nourhan Adel Mostafa', ownerIdNo: '28703120101234' }; S.legalSrc = { ownerName: 'National ID', ownerIdNo: 'National ID' };
     if (name === 'ready') {
+      Object.assign(S.legal, { legalForm: 'LLC', addr1: '14 El Hegaz St, Heliopolis', city: 'CAIRO', taxNo: '412378965', crNo: '184522' }); S.legalSrc = {};
       S.svc['POS Card'].lines[0].rates['intl-EGP'] = { rate: '2.7', fee: '3' };
       S.storeImage = 'storefront-heliopolis.jpg';
       S.docs['Commercial Registration (CR)'] = { File: 'cr-delta-pharma.pdf' };
@@ -1441,6 +1605,8 @@
     editGeneral: () => { openEditGeneral(); return false; },
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
     openUpd: d => { const u = updById(d.id); u && openUpdCase(u); return false; },
+    caseRef: d => { openCaseRef(d.c); return false; },
+    legalEdit: () => { if (isUW() && uwCanAct()) openLegalEdit(null); return false; },
     editLive: d => { if (canEditLive() && S.svc[d.id]) openEditLive(d.id, openUpdOf(d.id)); return false; },
     kycApprove: d => { const k = kycById(d.id); k && kycApprove(k); },
     kycReject: d => { const k = kycById(d.id); k && kycReject(k); return false; },
@@ -1465,7 +1631,7 @@
     rmSvc: d => removeService(d.id),
     addLink: () => { S.websites.push(''); setTimeout(() => document.getElementById('ws' + (S.websites.length - 1))?.focus()); },
     rmLink: d => S.websites.splice(+d.i, 1),
-    upDoc: d => { S.docs[d.n] = S.docs[d.n] || {}; S.docs[d.n][d.sl] = fake(d.n) + (d.sl === 'File' ? '' : '-' + fake(d.sl)) + '.pdf'; log(`uploaded document: ${d.n}${d.sl === 'File' ? '' : ' (' + d.sl + ')'}`, 'upload'); },
+    upDoc: d => { S.docs[d.n] = S.docs[d.n] || {}; S.docs[d.n][d.sl] = fake(d.n) + (d.sl === 'File' ? '' : '-' + fake(d.sl)) + '.pdf'; log(`uploaded document: ${d.n}${d.sl === 'File' ? '' : ' (' + d.sl + ')'}`, 'upload'); readDoc(d.n); },
     rmDoc: d => { delete S.docs[d.n][d.sl]; if (d.n === TAX_DOC) S.taxInvoice = false; },
     upStore: () => { S.storeImage = 'storefront.jpg'; log('uploaded Store Image', 'upload'); },
     rmStore: () => { S.storeImage = ''; },
@@ -1484,6 +1650,7 @@
     watch: () => { S.watch[ME.key] = !S.watch[ME.key]; toast(S.watch[ME.key] ? 'Watching: you will be emailed about every change to this application' : 'Stopped watching this application'); }
   };
   const CHG = {
+    legal: el => { LG()[el.dataset.k] = el.value; S.visited['lg_' + el.dataset.k] = true; if (S.legalSrc) delete S.legalSrc[el.dataset.k]; },
     industry: el => { const v = el.value; if (v && !S.activities.includes(v)) S.activities.unshift(v); log(`changed Industry from ${S.industry || 'none'} to ${v || 'none'}`); S.industry = v; reprice("activities'"); },
     model: el => { const c = S.svc[el.dataset.id]; c.model = el.value; if (el.value === 'PF') c.currencies = ['EGP']; c.lines.forEach(l => { if (!l.rule) l.rates = {}; }); log(`changed Model of ${label(el.dataset.id)} to ${el.value}`); reprice('model'); },
     bank: el => { const c = S.svc[el.dataset.id], l = c.lines[+el.dataset.li]; l.bank = el.value; if (l.rule) { l.rule = null; l.custom = Object.keys(l.rates).length > 0; } },
@@ -1500,7 +1667,7 @@
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'legalEdit', 'caseRef', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
@@ -1508,7 +1675,7 @@
     });
     document.addEventListener('input', e => {
       const el = e.target, d = el.dataset || {};
-      if (d.path) setPath(d.path, el.value);
+      if (d.path) { setPath(d.path, el.value); if (d.path.startsWith('legal.') && S.legalSrc && S.legalSrc[d.path.slice(6)]) { delete S.legalSrc[d.path.slice(6)]; const h = el.parentNode.querySelector('.lg-src'); h && h.remove(); } }
       else if (d.rate) { const [id, li, key, part] = d.rate.split('|'); const line = S.svc[id].lines[+li]; line.rates[key] = line.rates[key] || { rate: '', fee: '' }; line.rates[key][part] = el.value.replace(',', '.'); if (line.rule) line.custom = true; }
       else if (d.web != null) S.websites[+d.web] = el.value;
       else if (d.note) S.svc[d.note].notes = el.value;
@@ -1523,6 +1690,7 @@
       const el = e.target, d = el.dataset || {};
       if (rendering || !el.isConnected) return;
       if (d.path && d.path.startsWith('merchant.')) { S.visited.merchant = true; setTimeout(() => rerender()); }
+      else if (d.path && d.path.startsWith('legal.')) { S.visited['lg_' + d.path.slice(6)] = true; setTimeout(() => rerender()); }
       else if (d.rate || d.web != null || d.term != null || d.pay) { if (d.pay) S.visited['p' + d.pay] = true; setTimeout(() => { const a = document.activeElement; if (!a || !a.closest || !a.closest('.modal,.drawer:not([data-sa]),.pop')) rerender(); }); }
     });
   }
@@ -1617,7 +1785,7 @@
     get S() { return S; }, reload: load, mount, navIcon, rerender, soft, toast, icon, esc, fmtN, label, chOf, nmOf, isCard, needsBank, multiBank,
     CHANNELS, SVC_NAMES, SVC_HINT, SERVICES, BANKS, tiersFor, verdict, verdictHTML, flagged, pubText, rateText, sortedRules, bestRule, applyRule, ruleRate,
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
-    commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
+    commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, legalFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
     openServiceSetup, beginSetup, cancelSetup, stepperHTML, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, openCaseIn, statusBtn, statusMenu, get ME() { return ME; }
   };
