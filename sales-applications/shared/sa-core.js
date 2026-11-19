@@ -750,49 +750,15 @@
   /* Its own card on the submitted application: the merchant's official identity for the bank. Underwriting corrects it here. */
   function legalCard() {
     const x = legalOf(LG(), appO()), keys = LEGAL_KEYS.filter(k => !(k === 'legalForm' && x.ind) && !(k === 'taxNo' && !x.tax) && !(k === 'crNo' && !x.cr)), miss = keys.filter(k => !x.v(k)).length;
-    return `<section class="card sec prof-wide" id="legal-card"><div class="sub-hr"><h2 class="sub-h">Legal details ${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</h2>${isUW() && uwCanAct() ? `<button type="button" class="btn btn-outline btn-sm" data-act="legalEdit">${icon('pencil', 'ic')}Edit legal details</button>` : ''}</div>
-      <p class="hint" style="margin:0">Sent to the bank with every service, as on the merchant's documents.${isUW() ? '' : ' To change them, use Edit application details.'}</p><dl class="dl dl-s">${legalDl()}</dl></section>`;
+    return `<section class="card sec prof-wide" id="legal-card"><div class="sub-hr"><h2 class="sub-h">Legal details ${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</h2></div>
+      <p class="hint" style="margin:0">Sent to the bank with every service, as on the merchant's documents.${isUW() ? ' Only Sales can change them, through a KYC update.' : ' To change them, use Edit application details.'}</p><dl class="dl dl-s">${legalDl()}</dl></section>`;
   }
   function bankSheetHTML(id) {
-    const rows = bankSheet(id), miss = rows.filter(r => !r[2]).length, canEdit = isUW() && uwCanAct();
-    return `<section class="cd-s"><div class="cd-sh"><h3 class="sub-h">Bank onboarding data</h3>${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}<span class="sp"></span>${canEdit ? `<button type="button" class="btn btn-outline btn-sm" data-cd="legal">${icon('pencil', 'ic')}Edit legal details</button>` : ''}</div>
+    const rows = bankSheet(id), miss = rows.filter(r => !r[2]).length;
+    return `<section class="cd-s"><div class="cd-sh"><h3 class="sub-h">Bank onboarding data</h3>${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</div>
       <p class="hint" style="margin:0">The values for the bank's ${esc(chOf(id))} sheet, filled in by Sales on the application.</p>
       <dl class="dl">${rows.map(r => `<dt>${esc(r[0])}${r[1] ? `<span class="ar"><bdi lang="ar">${esc(r[1])}</bdi></span>` : ''}</dt><dd>${r[2] ? `<span dir="auto">${esc(r[2])}</span>` : '<span class="tag req">Missing</span>'}</dd>`).join('')}</dl></section>`;
   }
-  /* Underwriting corrects the legal details straight on the application; each change is logged. */
-  function openLegalEdit(id) {
-    const D = JSON.parse(JSON.stringify(LG())), o = appO(); let tried = false;
-    const was = k => String(LG()[k] || '').trim();
-    const curTxt = k => String(D[k] || '').trim() !== was(k) ? `Current: ${esc(was(k) || 'Not set')}` : '';
-    drawer({ size: 'md', title: 'Edit legal details', sub: esc(S.merchant.name), render(api) {
-      const draw = () => {
-        const e = k => tried || String(D[k] || '').trim() ? legalCheck(k, D, o) : '', ind = o.entity === 'Individual Seller';
-        const cur = k => `<span class="hint" data-cur="${k}">${curTxt(k)}</span>`;
-        const inp = (k, lbl, ex = '') => `<div class="fld"><label for="le-${k}">${esc(lbl)}</label><input class="inp ${e(k) ? 'err' : ''}" id="le-${k}" data-le="${k}" value="${esc(D[k] || '')}" ${ex}>${cur(k)}${fieldErr(e(k), e(k))}</div>`;
-        const sel = (k, lbl, opts) => `<div class="fld"><label for="le-${k}">${esc(lbl)}</label><select class="sel ${D[k] ? '' : 'is-empty'} ${e(k) ? 'err' : ''}" id="le-${k}" data-le="${k}"><option value="">Select</option>${opts.map(x => `<option ${D[k] === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>${cur(k)}${fieldErr(e(k), e(k))}</div>`;
-        const x = legalOf(D, o);
-        api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>Changes apply to the application right away and are logged. Sales see them on the application.</p></div>
-          ${inp('ownerName', 'Owner full name')}${ind ? '' : sel('legalForm', 'Legal form', LEGAL_FORMS)}${inp('addr1', 'Business address')}${sel('city', 'City', BANK_CITIES)}
-          ${inp('ownerIdNo', idLabel(o), 'dir="ltr"')}${x.tax ? inp('taxNo', 'Tax card number', 'dir="ltr" inputmode="numeric"') : ''}${x.cr ? inp('crNo', 'Commercial registration number', 'dir="ltr" inputmode="numeric"') : ''}`;
-        api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-primary" data-y>Save changes</button>`;
-        api.foot.querySelector('[data-n]').onclick = () => api.close();
-        api.foot.querySelector('[data-y]').onclick = () => {
-          tried = true; if (LEGAL_KEYS.some(k => legalCheck(k, D, o))) { draw(); return; }
-          const L = LG(), ch = LEGAL_KEYS.filter(k => String(L[k] || '').trim() !== String(D[k] || '').trim());
-          if (!ch.length) { api.close(); toast('Nothing changed'); return; }
-          log('updated the legal details', 'pencil', chgLog(ch.map(k => ({ label: k === 'ownerIdNo' ? idLabel(o) : LEGAL_LBL[k], from: L[k] || '', to: String(D[k] || '').trim() }))), id);
-          ch.forEach(k => { L[k] = String(D[k] || '').trim(); if (S.legalSrc) delete S.legalSrc[k]; });
-          api.close(); rerender(); if (caseDr && caseDr.draw) caseDr.draw(); toast('Legal details updated');
-        };
-      };
-      api.body.addEventListener('input', ev => { const k = ev.target.dataset.le; if (k && ev.target.tagName !== 'SELECT') { D[k] = ev.target.value; const h = api.body.querySelector(`[data-cur="${k}"]`); if (h) h.innerHTML = curTxt(k); } });
-      api.body.addEventListener('change', ev => { const k = ev.target.dataset.le; if (k) { D[k] = ev.target.value; draw(); } });
-      draw();
-    } });
-  }
-  /* Every change request shows each field's current value next to the requested one. */
-  const chgTable = (ch, newH = 'Requested') => `<div class="rscroll" style="display:block"><table class="rtbl ro-svc chg-t"><thead><tr><th>Field</th><th>Current</th><th>${newH}</th></tr></thead><tbody>${ch.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from == null || c.from === '' ? 'Not set' : c.from)}</td><td><b>${esc(c.to == null || c.to === '' ? 'Not set' : c.to)}</b></td></tr>`).join('')}</tbody></table></div>`;
-  const chgLog = ch => ch.map(c => `${c.label}: ${c.from == null || c.from === '' ? 'Not set' : c.from} → ${c.to == null || c.to === '' ? 'Not set' : c.to}`).join('; ');
   function fieldErr(cond, msg) { return cond ? `<span class="ferr">${icon('warn', 'ic-14')}${msg}</span>` : ''; }
   function merchantFields(o = {}) {
     const m = S.merchant, t = S.visited.merchant;
@@ -1060,7 +1026,7 @@ ${docNo(n)}
   function profileHead(sub) {
     const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
-      ${sub ? `<button type="button" class="btn btn-outline prof-edit" data-act="editGeneral" ${kycOpen() ? 'disabled title="A KYC update is already open in Cases"' : ''}>${icon('pencil', 'ic')}Edit</button>` : ''}
+      ${sub && canEditApp() ? `<button type="button" class="btn btn-outline prof-edit" data-act="editGeneral" ${kycOpen() ? 'disabled title="A KYC update is already open in Cases"' : ''}>${icon('pencil', 'ic')}Edit</button>` : ''}
       <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}${sub && S.mid ? ` <span class="mid" title="Account MID">${esc(S.mid)}</span>` : ''} ${appChip()}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
         <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div></section>`;
   }
@@ -1200,7 +1166,6 @@ ${docNo(n)}
       const b = caseDr.api.body;
       const cb = b.querySelector('[data-cd=cancel]'), rb = b.querySelector('[data-cd=reopen]');
       if (cb) cb.onclick = () => openCancel(id); if (rb) rb.onclick = () => openReopen(id);
-      const lb = b.querySelector('[data-cd=legal]'); if (lb) lb.onclick = () => openLegalEdit(id);
       b.querySelectorAll('[data-cd-ok]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdOk); if (f) { decide(f, 'approved'); rerender(); toast(`Rate approved: ${label(f.id)}`); } }; });
       b.querySelectorAll('[data-cd-rej]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdRej); if (f) openReject(f); }; });
       const fb = b.querySelector('[data-cd=fix]'); if (fb) fb.onclick = () => { caseDr.api.close(true); S.fixing = true; rerender(); scrollTo(0, 0); };
@@ -1235,6 +1200,8 @@ ${docNo(n)}
     if (P.legal) { S.legal = Object.assign({}, LG(), P.legal); S.legalSrc = {}; }
   }
   const isUW = () => ME.key === 'uw';
+  /* Underwriting reviews and decides (status, approve, reject) but never edits the application's data or its active services. */
+  const canEditApp = () => !isUW() && !hostRO;
   function kycApprove(k) { applyKyc(k); k.status = 'Approved'; k.decision = { by: ME.name, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('approved the KYC update', 'check', 'The changes are now on the application', k.key); toast(`${k.caseId} approved. The changes are applied.`); }
   function kycReject(k) {
     modal({ title: 'Reject this KYC update?', sub: `${esc(k.caseId)} · ${k.changes.length} requested change${k.changes.length === 1 ? '' : 's'}.`,
@@ -1291,7 +1258,7 @@ ${docNo(n)}
   const updById = key => (S.updates || []).find(u => u.key === key);
   const updOpen = u => ['Underwriting Review', 'Rejected'].includes(u.status);
   const openUpdOf = id => (S.updates || []).find(u => u.service === id && updOpen(u));
-  const canEditLive = () => !isUW();
+  const canEditLive = () => canEditApp();
   const rateTxt = r => r && r.rate !== '' && r.rate != null ? `${fmtN(r.rate)}% + ${fmtN(r.fee)} EGP` : 'Not set';
   /* Case IDs run across every application in the prototype, so a new case takes the next free number. */
   function nextCaseId() {
@@ -1520,7 +1487,7 @@ ${docNo(n)}
     const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a">${canEditLive() ? `<button type="button" class="btn btn-outline btn-sm" data-act="editLive" data-id="${esc(id)}" aria-label="Edit ${esc(label(id))}">${icon('pencil', 'ic')}Edit service</button>` : ''}<button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
     const noPend = !pending.length && !kycPending.length && !updPending.length, noOther = !canceled.length && !kycDone.length && !updDone.length;
     const casesMsg = !S.order.length && !S.kyc.length ? 'No cases yet.' : noPend && noOther ? 'No pending cases. Every case is live.' : noPend ? 'No pending cases.' : '';
-    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div><button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
+    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div>${canEditApp() ? `<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button>` : ''}</div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
     const frow = (lbl, file, thumb) => `<div class="frow"><div class="fi-w">${thumb ? `<span class="fthumb" aria-hidden="true">${icon('photo', 'ic-24')}</span>` : ''}<div class="fi"><b>${esc(lbl)}</b><span class="muted">${esc(file)}</span></div></div><div class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(file)}" data-l="${esc(lbl)}">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(file)}">${icon('download', 'ic')}Download</button></div></div>`;
@@ -1602,11 +1569,10 @@ ${docNo(n)}
     dlFile: d => { toast(`Downloading ${d.f}`); return false; },
     svcLogs: d => { const id = d.id; drawer({ size: 'md', title: 'Activity log', sub: `${esc(label(id))} · ${esc((S.cases[id] || {}).caseId || '')}`, render(api) { api.body.innerHTML = caseLogHTML(id); } }); return false; },
     dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
-    editGeneral: () => { openEditGeneral(); return false; },
+    editGeneral: () => { if (canEditApp()) openEditGeneral(); return false; },
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
     openUpd: d => { const u = updById(d.id); u && openUpdCase(u); return false; },
     caseRef: d => { openCaseRef(d.c); return false; },
-    legalEdit: () => { if (isUW() && uwCanAct()) openLegalEdit(null); return false; },
     editLive: d => { if (canEditLive() && S.svc[d.id]) openEditLive(d.id, openUpdOf(d.id)); return false; },
     kycApprove: d => { const k = kycById(d.id); k && kycApprove(k); },
     kycReject: d => { const k = kycById(d.id); k && kycReject(k); return false; },
@@ -1667,7 +1633,7 @@ ${docNo(n)}
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'legalEdit', 'caseRef', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'caseRef', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
@@ -1785,7 +1751,7 @@ ${docNo(n)}
     get S() { return S; }, reload: load, mount, navIcon, rerender, soft, toast, icon, esc, fmtN, label, chOf, nmOf, isCard, needsBank, multiBank,
     CHANNELS, SVC_NAMES, SVC_HINT, SERVICES, BANKS, tiersFor, verdict, verdictHTML, flagged, pubText, rateText, sortedRules, bestRule, applyRule, ruleRate,
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
-    commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, merchantFields, legalFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
+    commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, canEditApp, merchantFields, legalFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
     openServiceSetup, beginSetup, cancelSetup, stepperHTML, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, openCaseIn, statusBtn, statusMenu, get ME() { return ME; }
   };

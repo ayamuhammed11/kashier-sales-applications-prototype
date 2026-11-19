@@ -348,7 +348,7 @@
     reset() { SA.S.step = 0; },
     act: {
       checklist: (d, el) => { SA.popover(el, `<div class="pop-b hub-pop">${SA.checklistHTML()}</div>`, p => p.querySelector('button')?.focus(), { width: 420 }); return false; },
-      addSvc: () => { openSvcDrawer('add', null, SA.submitted()); return false; },
+      addSvc: () => { if (SA.canEditApp()) openSvcDrawer('add', null, SA.submitted()); return false; },
       editSvc: d => { openSvcDrawer('edit', d.id, !!d.flow); return false; },
       dCh: d => { dr.ch = d.v; },
       dPick: d => { SA.addService(d.id); dr.id = d.id; dr.sel = {}; dr.adv = {}; dr.showRules = {}; setTimeout(() => dr && dr.api.el.querySelector('#dm')?.focus()); },
