@@ -218,7 +218,7 @@
   function verdictHTML(id, li, t, compact) {
     const line = S.svc[id].lines[li], v = verdict(id, line, t);
     const fk = { key: `${id}::${line.bank}::${t.key}`, sel: line.rates[t.key] }, d = decisionOf(fk);
-    if (d && d.decision === 'rejected') return `<span class="flag h">${icon('xcircle', 'ic-14')}${compact ? 'Rejected' : `Rejected by ${esc(d.by)} (${esc(d.role)})${d.comment ? ': ' + esc(d.comment) : ''} Change this rate.`}</span>`;
+    if (d && d.decision === 'rejected') return `<span class="flag h">${icon('xcircle', 'ic-14')}${compact ? 'Rejected' : `Rejected by ${esc(d.by)} (${esc(d.role)})${d.comment ? ': ' + linkCases(d.comment) : ''} Change this rate.`}</span>`;
     if (d && d.decision === 'approved') return `<span class="flag ok">${icon('check', 'ic-14')}${compact ? 'Approved' : `Approved by ${esc(d.by)} (${esc(d.role)})`}</span>`;
     if (!v.tier) return compact ? '' : `<span class="flag mute">Published ${pubText(v.p)}</span>`;
     if (v.tier === 'auto') return `<span class="flag ok">${icon('check', 'ic-14')}${compact ? 'OK' : 'At or above published'}</span>`;
@@ -669,7 +669,7 @@
     const cs = S.order.filter(id => caseStatus(id) === 'Rejected'); if (!cs.length || !S.fixing) return '';
     return `<div class="banner rj-banner">${icon('xcircle', 'ic-20')}<div><b>Returned to you: ${cs.length} case${cs.length > 1 ? 's' : ''}</b>
       <ul class="rj">${cs.map(id => { const r = (S.cases[id] || {}).reject || {}, uw = r.source === 'uw', rj = flagged().filter(f => f.id === id && rejectedStill(f));
-        return `<li><b>${esc(label(id))}</b> · ${uw ? 'Rejected by the Underwriting team' : `Rejected by ${esc(r.by)} (${esc(r.role)})`}${r.comment ? `<br><span>${esc(r.comment)}</span>` : ''}
+        return `<li><b>${esc(label(id))}</b> · ${uw ? 'Rejected by the Underwriting team' : `Rejected by ${esc(r.by)} (${esc(r.role)})`}${r.comment ? `<br><span>${linkCases(r.comment)}</span>` : ''}
           ${uw ? ' <button type="button" class="link-btn" data-act="goto" data-t="documents">Go to documents</button>' : (rj.map(f => `<br><span class="num">${esc(f.t.label)}: ${rateText(f.sel)}</span> <button type="button" class="link-btn" data-act="goto" data-t="svc:${esc(f.id)}">Change rate</button>`).join('') || '<br><span>Every rejected rate is changed.</span>')}</li>`; }).join('')}</ul>
       <p>Resubmit when you are ready. Only the returned cases are sent again; changed rates that are still below published go back for approval.</p><button type="button" class="link-btn" data-act="stopFix">Back to the profile</button></div></div>`;
   }
@@ -927,7 +927,7 @@ ${docNo(n)}
         <div class="ap-what"><span class="tag info">${chOf(f.id)}</span><b>${esc(nmOf(f.id))}${f.line.bank ? ' · ' + esc(f.line.bank) : ''}</b><span class="muted">${f.t.label}</span></div>
         <div class="ap-rate"><span><span class="k">Requested</span><b class="num">${rateText(f.sel)}</b></span><span><span class="k">Published</span><span class="num">${pubText(f.p)}</span></span><span><span class="k">Approver</span><span>${f.approver}</span></span></div>
         <p class="ap-why">${icon('pencil', 'ic-14')}<span>${S.just[f.key] ? esc(S.just[f.key]) : '<span class="muted">No justification</span>'}</span></p>
-        <div class="ap-act">${d ? `<span class="flag ${d.decision === 'approved' ? 'ok' : 'h'}">${icon(d.decision === 'approved' ? 'check' : 'xcircle', 'ic-14')}${d.decision === 'approved' ? 'Approved' : 'Rejected'} by ${esc(d.by)}${d.comment ? ' · ' + esc(d.comment) : ''}</span>` : m ? `<button type="button" class="btn btn-outline-danger btn-sm" data-act="reject" data-k="${esc(f.key)}">Reject</button><button type="button" class="btn btn-outline btn-sm" data-act="approve" data-k="${esc(f.key)}">${icon('tick', 'ic', 2)}Approve</button>` : `<span class="hint">Waiting for the ${f.approver}</span>`}</div></div>`; }).join('');
+        <div class="ap-act">${d ? `<span class="flag ${d.decision === 'approved' ? 'ok' : 'h'}">${icon(d.decision === 'approved' ? 'check' : 'xcircle', 'ic-14')}${d.decision === 'approved' ? 'Approved' : 'Rejected'} by ${esc(d.by)}${d.comment ? ' · ' + linkCases(d.comment) : ''}</span>` : m ? `<button type="button" class="btn btn-outline-danger btn-sm" data-act="reject" data-k="${esc(f.key)}">Reject</button><button type="button" class="btn btn-outline btn-sm" data-act="approve" data-k="${esc(f.key)}">${icon('tick', 'ic', 2)}Approve</button>` : `<span class="hint">Waiting for the ${f.approver}</span>`}</div></div>`; }).join('');
     return `<section class="card sec" id="approval" aria-labelledby="apH"><div class="sec-h"><div class="tt"><h2 id="apH">Rates waiting for your approval</h2><p>${mineLeft ? `${mineLeft} rate${mineLeft > 1 ? 's' : ''} need${mineLeft > 1 ? '' : 's'} your decision.` : 'You have decided every rate assigned to you.'}${S.submitComment ? ` Salesperson's note: “${esc(S.submitComment)}”` : ''}</p></div></div><div class="ap-list">${rows}</div></section>`;
   }
   /* Request a new service on a submitted application (FIN-30790): it becomes a new, independent case; existing cases stay read-only and unchanged. */
@@ -1036,7 +1036,7 @@ ${docNo(n)}
   /* Who rejected a case and why: the Sales Manager / Head of Sales (a rate) or the Underwriting team. */
   function rejectBox(id) {
     const r = (S.cases[id] || {}).reject || {}, uw = r.source === 'uw';
-    return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by ${uw ? 'the Underwriting team' : `${esc(r.by)} (${esc(r.role)})`}</b>${r.comment ? `<p>${esc(r.comment)}</p>` : ''}<p class="rj-h">${uw ? 'Fix what the Underwriting team asked for, then resubmit this case.' : 'Change the rejected rate, then resubmit this case.'}</p></div></div>`;
+    return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by ${uw ? 'the Underwriting team' : `${esc(r.by)} (${esc(r.role)})`}</b>${r.comment ? `<p>${linkCases(r.comment)}</p>` : ''}<p class="rj-h">${uw ? 'Fix what the Underwriting team asked for, then resubmit this case.' : 'Change the rejected rate, then resubmit this case.'}</p></div></div>`;
   }
   /* The bank is waiting for the merchant (recorded by the Underwriting team): what it asked for. */
   function waitBox(id) {
@@ -1075,7 +1075,7 @@ ${docNo(n)}
     const rows = svc.lines.map(l => tiersFor(id, l).map(t => {
       const sel = l.rates[t.key] || {}, f = fl.find(x => x.key === `${id}::${l.bank}::${t.key}`), d = f && decisionOf(f), p = pubFor(id, l, t);
       const appr = !f ? '<span class="hint">No approval needed</span>'
-        : d ? `<span class="sc ${d.decision === 'approved' ? 'ok' : 'bad'}">${d.decision}</span> <span class="hint">${esc(d.by)} (${esc(d.role)})${d.comment ? ' · ' + esc(d.comment) : ''}</span>`
+        : d ? `<span class="sc ${d.decision === 'approved' ? 'ok' : 'bad'}">${d.decision}</span> <span class="hint">${esc(d.by)} (${esc(d.role)})${d.comment ? ' · ' + linkCases(d.comment) : ''}</span>`
         : past ? '<span class="sc ok">approved</span>'
         // the approver of this rate decides it right here, in the case
         : f.approver === ME.tier && caseStatus(id) === 'Waiting Rate Approval' ? `<span class="cd-ra"><button type="button" class="btn btn-outline-danger btn-sm" data-cd-rej="${esc(f.key)}">Reject</button><button type="button" class="btn btn-outline btn-sm" data-cd-ok="${esc(f.key)}">${icon('tick', 'ic', 2)}Approve</button></span>`
@@ -1252,7 +1252,7 @@ ${docNo(n)}
   }
   function kycRejectBox(k) {
     const r = k.reject || {};
-    return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${r.comment ? `<p>${esc(r.comment)}</p>` : ''}<p class="rj-h">Edit the details and resubmit, or cancel the update.</p></div></div>`;
+    return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${r.comment ? `<p>${linkCases(r.comment)}</p>` : ''}<p class="rj-h">Edit the details and resubmit, or cancel the update.</p></div></div>`;
   }
   function kycRow(k) {
     const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected';
@@ -1308,7 +1308,7 @@ ${docNo(n)}
         <td><div class="eu-in"><label class="sr-only" for="eur-${k}">${esc(t.label)} rate</label><input class="inp num" id="eur-${k}" inputmode="decimal" data-eu="${k}" data-p="rate" value="${esc(v.rate == null ? '' : v.rate)}"><span>% +</span><label class="sr-only" for="euf-${k}">${esc(t.label)} fee</label><input class="inp num" id="euf-${k}" inputmode="decimal" data-eu="${k}" data-p="fee" value="${esc(v.fee == null ? '' : v.fee)}"><span>EGP</span></div></td></tr>`; }).join('')).join('');
     drawer({ size: 'xl', title: prev && prev.reject ? 'Edit and resubmit the update' : 'Edit active service', sub: `${esc(label(id))} · ${esc(S.merchant.name)}`, render(api) {
       api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>The service stays live with its current setup. ${prev ? `Your changes update the pending <b>${esc(prev.caseId)}</b> case for the Underwriting team, and apply only once it is approved.` : 'Your changes become a pending <b>Service Update</b> case for the Underwriting team, and apply only once it is approved.'}</p></div>
-        ${prev && prev.reject ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${prev.reject.comment ? `<p>${esc(prev.reject.comment)}</p>` : ''}</div></div>` : ''}
+        ${prev && prev.reject ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${prev.reject.comment ? `<p>${linkCases(prev.reject.comment)}</p>` : ''}</div></div>` : ''}
         <section class="cd-s"><h3 class="sub-h">Rates</h3><div class="rscroll" style="display:block"><table class="rtbl eu-t"><thead><tr><th>Rate type</th><th>Current</th><th>New</th></tr></thead><tbody>${rows}</tbody></table></div></section>
         ${card ? `<section class="cd-s"><h3 class="sub-h">Advanced operations</h3><div class="opt-l">${OPS[chOf(id)].map(o => `<label class="cbx"><input type="checkbox" data-euop value="${esc(o)}" ${opsNow.includes(o) ? 'checked' : ''}>${esc(o)}</label>`).join('')}</div></section>` : ''}
         <section class="cd-s"><div class="fld"><label for="eun">Notes <span class="opt">(optional)</span></label><textarea class="inp" id="eun" placeholder="Any comment about this setup">${esc(notesNow != null ? notesNow : (svc.notes || ''))}</textarea></div>
@@ -1347,7 +1347,7 @@ ${docNo(n)}
   }
   function updRow(u) {
     const rej = u.status === 'Rejected';
-    return `<div class="crow ${u.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><b>${esc(nmOf(u.service))} · Service update</b>${chipOf(u.status, u)}</div>${rej ? `<div class="crow-n">Returned by the Underwriting team${u.reject && u.reject.comment ? ': ' + esc(u.reject.comment) : ''}</div>` : ''}</div>
+    return `<div class="crow ${u.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><b>${esc(nmOf(u.service))} · Service update</b>${chipOf(u.status, u)}</div>${rej ? `<div class="crow-n">Returned by the Underwriting team${u.reject && u.reject.comment ? ': ' + linkCases(u.reject.comment) : ''}</div>` : ''}</div>
       <div class="crow-a"><button type="button" class="btn btn-outline btn-sm" data-act="openUpd" data-id="${esc(u.key)}">View case${icon('right', 'ic mirror')}</button></div></div>`;
   }
   /* The Service Update case: the same drawer as every other case, with each role's actions in its top row. */
@@ -1360,7 +1360,7 @@ ${docNo(n)}
       const acts = uw ? (uc && uc.ustatus === 'Underwriting Review' ? uwDecide(!uwCanAct()) : '') : (open || rej) ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="ucancel">Cancel update</button>' : '';
       caseDr.api.setTitle(`${esc(label(u.service))} · Service update`, `${esc(u.caseId)} · ${esc(S.merchant.name)}`);
       const tab = caseDr.tab;
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : chipOf(u.status, u)}<span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${u.reject && u.reject.comment ? `<p>${esc(u.reject.comment)}</p>` : ''}<p class="rj-h">Edit the changes and resubmit, or cancel the update.</p></div></div>${uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="ufix">Edit and resubmit</button></div>'}` : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : chipOf(u.status, u)}<span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${u.reject && u.reject.comment ? `<p>${linkCases(u.reject.comment)}</p>` : ''}<p class="rj-h">Edit the changes and resubmit, or cancel the update.</p></div></div>${uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="ufix">Edit and resubmit</button></div>'}` : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
         ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3>${chgTable(u.changes)}</section>
         <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(u.caseId)}</dd><dt>Type</dt><dd>Service Update</dd><dt>Service</dt><dd>${esc(label(u.service))}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(u.by)} (${esc(u.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(u.at))}</dd>${u.comment ? `<dt>Reason</dt><dd>${esc(u.comment)}</dd>` : ''}${uc ? `<dt>Assigned to</dt><dd>${esc(uc.assignee || 'Not assigned')}</dd>` : ''}${u.decision ? `<dt>Approved by</dt><dd>${esc(u.decision.by)} · ${esc(whenStr(u.decision.at))}</dd>` : ''}</dl></section>`}`;
@@ -1500,7 +1500,7 @@ ${docNo(n)}
   const linkCases = t => esc(t).replace(/\bCASE-\d{1,6}\b/gi, m => { const f = findCase(m); return f ? `<button type="button" class="cm-case" data-act="caseRef" data-c="${esc(m.toUpperCase())}" title="${f.local ? 'Open this case' : 'Open this case on ' + esc(f.biz)}">${esc(m.toUpperCase())}</button>` : m; });
   function openCaseRef(cid) {
     const f = findCase(cid); if (!f) { toast(`${cid} was not found`); return; }
-    if (f.local) { openFromQuery(f.local); return; }
+    if (f.local) { if (caseDr && caseDr.api) caseDr.api.close(true); setTimeout(() => openFromQuery(f.local)); return; }
     location.href = `application.html?app=${encodeURIComponent(f.app)}&case=${encodeURIComponent(f.key)}&as=${encodeURIComponent(ME.key)}`;
   }
   function commentsSection() {
@@ -1663,7 +1663,7 @@ ${docNo(n)}
   function bindStatic() {
     if (bound) return; bound = true;
     document.addEventListener('click', e => {
-      const b = e.target.closest('[data-act]'); if (!b || b.disabled || !b.closest('#page,.pop,.drawer[data-sa]')) return;
+      const b = e.target.closest('[data-act]'); if (!b || b.disabled || !(b.closest('#page,.pop,.drawer[data-sa]') || b.classList.contains('cm-case'))) return;
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
