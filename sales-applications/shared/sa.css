@@ -573,3 +573,4 @@ body.locked { overflow: hidden; }
 .cm-case:hover { color: var(--primary-hover); }
 .cm-case:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: 2px; }
 .nowrap { white-space: nowrap; }
+.wf-end { margin: 4px 0 0; }

@@ -1074,7 +1074,7 @@ ${docNo(n)}
   const statusBtn = (c, disabled) => `<button type="button" class="stbtn ${stCls(c.ustatus)}" data-stbtn aria-haspopup="menu" aria-expanded="false" ${disabled ? 'disabled title="Only the assignee or an Underwriting Manager can change the status"' : ''}>${esc(c.ustatus)}${icon('chevron', 'ic-16')}</button>`;
   function statusMenu(btn, c, run) {
     const ts = UW.transitions(c);
-    const html = `<div class="tmenu" role="menu" aria-label="Change the status of ${esc(c.caseId)}">${ts.length ? ts.map((t, i) => `<button type="button" role="menuitem" class="tm-row" data-ti="${i}"><span class="tm-n">${esc(t.name)}</span>${icon('arrowR', 'ic-16 tm-a mirror')}${stChip(t.to)}</button>`).join('') : '<p class="tm-none">No moves from this status.</p>'}
+    const html = `<div class="tmenu" role="menu" aria-label="Change the status of ${esc(c.caseId)}">${ts.length ? ts.map((t, i) => `<button type="button" role="menuitem" class="tm-row" data-ti="${i}"><span class="tm-n">${esc(t.name)}</span>${icon('arrowR', 'ic-16 tm-a mirror')}${stChip(t.to)}</button>`).join('') : `<p class="tm-none">${esc(UW.endNote(c))}</p>`}
       <hr class="tm-sep"><button type="button" role="menuitem" class="tm-row tm-plain" data-wf>View workflow</button></div>`;
     popover(btn, html, el => {
       el.addEventListener('keydown', e => { if (e.key === 'Escape') e.stopPropagation(); });
@@ -1100,11 +1100,11 @@ ${docNo(n)}
     const f = UW.flowOf(c);
     drawer({ title: 'Case workflow', sub: esc(c.type === 'service' ? 'Service activation request' : c.caseType) + ' · ' + esc(c.caseId), render(api) {
       api.body.innerHTML = `<ol class="wf">${Object.keys(f).map(st => `<li class="${st === c.ustatus ? 'now' : ''}"><div class="wf-h">${stChip(st)}${st === c.ustatus ? '<span class="hint">Current status</span>' : ''}</div>
-        <ul>${f[st].map(([n, to]) => `<li><span>${esc(n)}</span>${icon('arrowR', 'ic-16 mirror')}${stChip(to)}</li>`).join('')}</ul></li>`).join('')}</ol>`;
+        ${f[st].length ? `<ul>${f[st].map(([n, to]) => `<li><span>${esc(n)}</span>${icon('arrowR', 'ic-16 mirror')}${stChip(to)}</li>`).join('')}</ul>` : `<p class="hint wf-end">${esc(UW.endNote({ ustatus: st, type: c.type, id: '' }) || '')}</p>`}</li>`).join('')}</ol>`;
     } });
   }
   /* Approve / Reject for a case in Underwriting Review, in the drawer's top row (the same moves as in the status menu). */
-  const UW_OK = { name: 'Approve', to: 'UW Approved', bank: '' }, UW_REJ = { name: 'Return to Sales', to: 'Pending Sales Action', bank: '' };
+  const UW_OK = { name: 'Approve', to: 'UW Approved', bank: '' }, UW_REJ = { name: 'Reject', to: 'Pending Sales Action', bank: '' };
   const uwDecide = off => `<button type="button" class="btn btn-outline-danger btn-sm" data-cd-uwrej ${off ? 'disabled' : ''}>Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd-uwok ${off ? 'disabled' : ''}>${icon('tick', 'ic', 2)}Approve</button>`;
   /* A move from the application's drawer: the Cases module records it, then the drawer shows the case again. */
   function uwMove(id, t, comment) {
