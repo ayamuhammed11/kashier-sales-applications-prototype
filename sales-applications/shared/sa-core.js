@@ -625,7 +625,9 @@
           sent.forEach(id => setCase(id, caseRoute(id), { reject: null })); S.fixing = false;
           sent.forEach(id => log(`${re ? 'resubmitted' : 'submitted'} the ${label(id)} case`, 'send', `${S.cases[id].caseId} · ${S.cases[id].status}`, id));
           log(re ? 'resubmitted the returned cases with revised rates' : 'submitted the application', 'send', `Application ID ${S.appId} · ${sent.length} case${sent.length === 1 ? '' : 's'}: ${sent.map(label).join(', ')}${S.submitComment ? ' · Comment: ' + S.submitComment : ''}`);
-          api.close(); scrollTo(0, 0); rerender(); toast(re ? 'Application resubmitted' : 'Application submitted');
+          if (!re) { addKybCase(); addPayoutCase(); }
+          if (!re && S.payouts.length && !PC()) sendPayoutLink(false);
+          api.close(); scrollTo(0, 0); rerender(); toast(re ? 'Application resubmitted' : S.payouts.length ? 'Application submitted. The merchant got a link to confirm the payout details.' : 'Application submitted');
         };
       } });
   }
@@ -753,6 +755,17 @@
     return `<section class="card sec prof-wide" id="legal-card"><div class="sub-hr"><h2 class="sub-h">Legal details ${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</h2></div>
       <p class="hint" style="margin:0">Sent to the bank with every service, as on the merchant's documents.${isUW() ? ' Only Sales can change them, through a KYC update.' : ' To change them, use Edit application details.'}</p><dl class="dl dl-s">${legalDl()}</dl></section>`;
   }
+  /* The bank's data sheet for a service, ready to send: one row with the bank's own column names. Available to Underwriting from UW Approved on. */
+  const EXPORT_FROM = ['UW Approved', 'Sent to Bank', 'Pending Onboarding Configurations', 'Active', 'Rejected by Bank'];
+  function exportSheet(id) {
+    const rows = bankSheet(id), c = S.cases[id] || {}, cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const csv = '\ufeff' + [rows.map(r => cell(r[1] || r[0])).join(','), rows.map(r => cell(r[0] === 'Company type' ? (String(r[2]).split(' · ')[1] || r[2]) : r[2])).join(',')].join('\r\n');
+    const name = `${c.caseId || 'case'}-${chOf(id)}-bank-data-sheet.csv`, a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    const miss = rows.filter(r => !r[2]).map(r => r[0]);
+    log(`exported the ${label(id)} data sheet`, 'download', name + (miss.length ? ` · Missing: ${miss.join(', ')}` : ''), id); save();
+    toast(miss.length ? `${name} downloaded. ${miss.length} value${miss.length > 1 ? 's are' : ' is'} missing: ${miss.join(', ')}.` : `${name} downloaded`);
+  }
   function bankSheetHTML(id) {
     const rows = bankSheet(id), miss = rows.filter(r => !r[2]).length;
     return `<section class="cd-s"><div class="cd-sh"><h3 class="sub-h">Bank onboarding data</h3>${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</div>
@@ -760,7 +773,8 @@
       <dl class="dl">${rows.map(r => `<dt>${esc(r[0])}${r[1] ? `<span class="ar"><bdi lang="ar">${esc(r[1])}</bdi></span>` : ''}</dt><dd>${r[2] ? `<span dir="auto">${esc(r[2])}</span>` : '<span class="tag req">Missing</span>'}</dd>`).join('')}</dl></section>`;
   }
   /* Every change request shows each field's current value next to the requested one. */
-  const chgTable = (ch, newH = 'Requested') => `<div class="rscroll" style="display:block"><table class="rtbl ro-svc chg-t"><thead><tr><th>Field</th><th>Current</th><th>${newH}</th></tr></thead><tbody>${ch.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from == null || c.from === '' ? 'Not set' : c.from)}</td><td><b>${esc(c.to == null || c.to === '' ? 'Not set' : c.to)}</b></td></tr>`).join('')}</tbody></table></div>`;
+  const chgTable = (ch, newH = 'Requested', isNew = false) => { const v = x => x == null || x === '' ? 'Not set' : x;
+    return `<div class="rscroll" style="display:block"><table class="rtbl ro-svc chg-t"><thead><tr><th>Field</th>${isNew ? '' : '<th>Current</th>'}<th>${newH}</th></tr></thead><tbody>${ch.map(c => `<tr><td>${esc(c.label)}</td>${isNew ? '' : `<td><span class="chg-old">${esc(v(c.from))}</span></td>`}<td><span class="chg-new">${esc(v(c.to))}</span></td></tr>`).join('')}</tbody></table></div>`; };
   const chgLog = ch => ch.map(c => `${c.label}: ${c.from == null || c.from === '' ? 'Not set' : c.from} → ${c.to == null || c.to === '' ? 'Not set' : c.to}`).join('; ');
   function fieldErr(cond, msg) { return cond ? `<span class="ferr">${icon('warn', 'ic-14')}${msg}</span>` : ''; }
   function merchantFields(o = {}) {
@@ -818,7 +832,58 @@ ${docNo(n)}
   }
   const fileChip = (name, act, data) => `<span class="file">${icon('check', 'ic-14')}<span title="${esc(name)}">${esc(name)}</span><button type="button" data-act="${act}" ${Object.entries(data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')} aria-label="Remove ${esc(name)}">${icon('x', 'ic-14')}</button></span>`;
 
+  /* Payout methods are entered once, by Sales, with the application, and can't be changed after it is submitted. On submission the merchant
+     gets a link (email and SMS) to a Kashier page with the details, and confirms them with a one-time code sent to their phone. */
+  const payLocked = () => submitted();
+  const isPayCase = k => !!k && k.isNew && (k.part === 'payout' || (k.changes || []).every(c => /^(Payout method|Primary payout)/.test(c.label)));
+  const payFull = p => (p.type === 'bank' ? `Bank account · ${p.bank} · ${p.branch} · ${p.holder} · ${p.acct}` : `E-wallet · ${p.provider} · ${p.mobile} · ${p.wholder}`) + (p.id === S.primary ? ' (primary)' : '');
+  /* On the first submission only: the payout methods go to Underwriting as one "Add payout method" case. */
+  /* The business details as submitted, as "changes" with no earlier values. */
+  function kybSnapshot() {
+    const L = LG(), o = appO(), x = legalOf(L, o), rows = [['Business name', S.merchant.name], ['Merchant type', S.entity], ['Industry', S.industry], ['Activities', S.activities.join(', ')], ['Contact email', S.merchant.email], ['Contact phone', S.merchant.phone],
+      ['Owner nationality', S.owner], ['Website / social media', S.websites.filter(w => w.trim()).join(', ')], ['Owner full name', x.v('ownerName')], ['Legal form', x.ind ? 'Sole proprietorship' : x.v('legalForm')], ['Business address', [x.v('addr1'), x.v('city')].filter(Boolean).join(', ')],
+      [idLabel(o), x.v('ownerIdNo')]].concat(x.tax ? [['Tax card number', x.v('taxNo')]] : []).concat(x.cr ? [['Commercial registration number', x.v('crNo')]] : []);
+    return rows.filter(r => r[1]).map(r => ({ label: r[0], from: '', to: r[1] }));
+  }
+  const kybProposal = () => ({ name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.filter(w => w.trim()), storeImage: S.storeImage,
+    payouts: JSON.parse(JSON.stringify(S.payouts)), primary: S.primary, nextPayout: S.nextPayout, legal: JSON.parse(JSON.stringify(LG())) });
+  function addKybCase() {
+    if (S.kyc.some(k => k.isNew && !isPayCase(k))) return;
+    const n = S.kyc.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+    const k = { n, key: 'kyc:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status: 'Underwriting Review', isNew: true, part: 'kyb', changes: kybSnapshot(), proposed: kybProposal(),
+      by: ME.name, role: ME.role, at: nowStr(), since: new Date(CLOCK).toISOString() };
+    S.kyc.push(k); log('submitted the business details for review', 'send', `${k.caseId} · Change KYB/KYC`, k.key);
+  }
+  function addPayoutCase() {
+    if (!S.payouts.length || S.kyc.some(isPayCase)) return;
+    const n = S.kyc.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+    const k = { n, key: 'kyc:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status: 'Underwriting Review', isNew: true, part: 'payout', changes: S.payouts.map(p => ({ label: 'Payout method', from: '', to: payFull(p) })),
+      proposed: null, by: ME.name, role: ME.role, at: nowStr(), since: new Date(CLOCK).toISOString() };
+    S.kyc.push(k); log('submitted the payout method for review', 'send', chgLog(k.changes), k.key);
+  }
+  const PC = () => S.payoutConfirm || null;
+  const payList = () => { const dl = r => `<dl class="dl dl-s">${r}</dl>`; return `<div class="pm-list">${S.payouts.map((p, i) => `<div class="pm"><div class="pm-h"><b>${p.id === S.primary ? 'Primary payout method' : esc(p.name || 'Payout method ' + (i + 1))}</b><span class="tag info">${p.type === 'bank' ? 'Bank Account' : 'E-Wallet'}</span>${p.id === S.primary ? '<span class="tag ok">Primary</span>' : ''}</div>${dl((p.id !== S.primary && p.name ? `<dt>Method name</dt><dd>${esc(p.name)}</dd>` : '') + (p.type === 'bank' ? `<dt>Bank name</dt><dd>${esc(p.bank)}</dd><dt>Branch</dt><dd>${esc(p.branch)}</dd><dt>Account holder</dt><dd>${esc(p.holder)}</dd><dt>Account number</dt><dd dir="ltr" class="num">${esc(p.acct)}</dd>` : `<dt>Wallet provider</dt><dd>${esc(p.provider)}</dd><dt>Mobile number</dt><dd dir="ltr" class="num">${esc(p.mobile)}</dd><dt>Wallet holder</dt><dd>${esc(p.wholder)}</dd>`))}</div>`).join('')}</div>`; };
+  const maskPhone = ph => { const m = String(ph || '').trim().match(/^(\+\d{1,3})?.*?(\d{4})$/); return m ? (m[1] ? m[1] + ' ' : '') + '••• ' + m[2] : String(ph || ''); };
+  function sendPayoutLink(resend) {
+    if (!S.payouts.length) return;
+    const tok = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 8);
+    S.payoutConfirm = { status: 'pending', token: tok, otp: String(Math.floor(100000 + Math.random() * 900000)), sentAt: nowStr(), sentBy: ME.name, email: S.merchant.email, phone: S.merchant.phone, ids: S.payouts.map(p => p.id) };
+    log(`${resend ? 'resent' : 'sent'} the payout confirmation link to the merchant`, 'send', `Email ${S.merchant.email} · SMS ${S.merchant.phone}`);
+  }
+  const payLinkUrl = () => PC() ? `${SAD}payout-confirm.html?app=${encodeURIComponent(S.appId)}&t=${encodeURIComponent(PC().token)}` : '';
+  const payTag = () => !S.payouts.length ? '' : !PC() ? '<span class="tag">Not confirmed</span>' : PC().status === 'confirmed' ? '<span class="tag ok">Confirmed by the merchant</span>' : '<span class="tag req">Waiting for the merchant</span>';
+  function payConfirmHTML() {
+    if (!S.payouts.length) return '';
+    const c = PC(), sales = canEditApp();
+    const txt = !c ? 'The merchant hasn\'t been asked to confirm these details yet.'
+      : c.status === 'confirmed' ? `The merchant confirmed these details on ${esc(c.at)} with the one-time code sent to ${esc(maskPhone(c.phone))}.`
+      : `A confirmation link was sent on ${esc(c.sentAt)} to ${esc(c.email)} and by SMS to ${esc(maskPhone(c.phone))}. The merchant opens it and confirms with a one-time code sent to their phone.`;
+    const acts = c && c.status === 'confirmed' ? '' : `${sales ? `<button type="button" class="btn btn-outline btn-sm" data-act="sendPayLink">${icon('send', 'ic')}${c ? 'Resend link' : 'Send confirmation link'}</button>` : ''}${c ? `<a class="link-btn" href="${esc(payLinkUrl())}" target="_blank" rel="noopener">Open the merchant's page${icon('ext', 'ic-14')}</a>` : ''}`;
+    return `<p class="hint" style="margin:0">${txt} Entered once by Sales; payout methods can't be changed after the application is submitted.</p>${acts ? `<div class="row-acts">${acts}</div>` : ''}`;
+  }
   function payoutSection() {
+    // Once submitted, the payout methods are fixed: the merchant confirms them as they were entered.
+    if (payLocked()) return !S.payouts.length ? '<div class="empty-line">No payout method was added with the application. Payout methods are added only with the first submission.</div>' : `<div class="note">${icon('info', 'ic')}<p>Payout methods are entered once, with the application, and can't be changed after it is submitted. ${PC() && PC().status === 'confirmed' ? 'The merchant confirmed them.' : 'The merchant confirms them through the link sent to them.'}</p></div>${payList()}`;
     const items = S.payouts.map((p, i) => {
       const prim = p.id === S.primary, t = S.visited['p' + p.id];
       const err = (cond, m) => t && cond ? `<span class="ferr">${icon('warn', 'ic-14')}${m}</span>` : '';
@@ -1025,7 +1090,7 @@ ${docNo(n)}
       ${note ? `<div class="crow-n">${note}</div>` : ''}${rej ? rejectBox(id) : ''}${st === 'Bank Submission' ? waitBox(id) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   /* The merchant identity card: a submitted application (sub) or a new one from the CRM lead. */
-  const kycOpen = () => S.kyc.some(k => ['Underwriting Review', 'Rejected'].includes(k.status));
+  const kycOpen = () => S.kyc.some(k => !isPayCase(k) && ['Underwriting Review', 'Rejected'].includes(k.status));
   function profileHead(sub) {
     const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
@@ -1050,9 +1115,11 @@ ${docNo(n)}
         : f.approver === ME.tier && caseStatus(id) === 'Waiting Rate Approval' ? `<span class="cd-ra"><button type="button" class="btn btn-outline-danger btn-sm" data-cd-rej="${esc(f.key)}">Reject</button><button type="button" class="btn btn-outline btn-sm" data-cd-ok="${esc(f.key)}">${icon('tick', 'ic', 2)}Approve</button></span>`
         : `<span class="sc warn">Pending</span> <span class="hint">${f.approver}</span>`;
       const why = f && S.just[f.key] ? `<div class="hint" style="margin-top:4px">Justification: ${esc(S.just[f.key])}</div>` : '';
+      // Underwriting reviews the rate the merchant will be charged, not how it compares with the published rate or who approved it.
+      if (isUW()) return `<tr><td>${l.bank ? `<div class="hint">${esc(l.bank)}</div>` : ''}${esc(t.label)}</td><td class="num"><b>${fmtN(sel.rate)}% + ${fmtN(sel.fee)} EGP</b></td></tr>`;
       return `<tr><td>${l.bank ? `<div class="hint">${esc(l.bank)}</div>` : ''}${esc(t.label)}</td><td class="num"><b>${fmtN(sel.rate)}% + ${fmtN(sel.fee)} EGP</b></td><td class="num">${pubText(p)}</td><td>${appr}${why}</td></tr>`;
     }).join('')).join('');
-    return `<div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Rate type</th><th>Requested</th><th>Published</th><th>Approval</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="rscroll" style="display:block"><table class="rtbl ro-svc"><thead><tr><th>Rate type</th><th>Requested${isUW() ? ' rate' : ''}</th>${isUW() ? '' : '<th>Published</th><th>Approval</th>'}</tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   let caseDr = null;
   /* One case drawer for every case and every role. The application opens it for its own cases; the Cases list opens it for a case of any
@@ -1159,7 +1226,7 @@ ${docNo(n)}
         : st === 'Rejected' ? 'Returned to the salesperson.' : uwAct && uwCanAct() ? 'With Underwriting. Change the status as the case moves on.' : `Submitted on ${esc(S.submittedAt)}. View only.`;
       const act = st === 'Live' || isUW() ? (uwAct && uc.ustatus === 'Underwriting Review' ? uwDecide(!uwCanAct()) : '') : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-cd="reopen">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="cancel">Cancel Case</button>`;
       caseDr.api.setTitle(`${esc(label(id))}`, `${esc(c.caseId || '')} · ${esc(S.merchant.name)}`);
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uwAct ? statusBtn(uc, !uwCanAct()) : caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}</div><p class="case-n">${note}</p>${st === 'Bank Submission' ? waitBox(id) : ''}${st === 'Rejected' ? rejectBox(id) + (isUW() ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>') : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uwAct ? statusBtn(uc, !uwCanAct()) : caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}${uwAct && EXPORT_FROM.includes(uc.ustatus) ? `<button type="button" class="btn btn-outline btn-sm" data-cd="export">${icon('download', 'ic')}Export data sheet</button>` : ''}</div><p class="case-n">${note}</p>${st === 'Bank Submission' ? waitBox(id) : ''}${st === 'Rejected' ? rejectBox(id) + (isUW() ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${caseDr.tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${caseDr.tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === id || !e.id).length}</span></button></div>
         ${caseDr.tab === 'log' ? `<section class="cd-s">${caseLogHTML(id)}</section>` : `${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
@@ -1167,11 +1234,12 @@ ${docNo(n)}
           ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
           ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''}</dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${appLink()}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}
           ${uc ? `<dt>Assigned to</dt><dd>${canPick ? `<select class="sel" data-cd-assign aria-label="Assigned to" style="max-width:240px">${Cases.TEAM.map(n => `<option ${n === uc.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : esc(uc.assignee || 'Not assigned')}</dd>` : ''}</dl></section>
-        <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>${bankSheetHTML(id)}${uc ? uwDocs(uc) : ''}`}`;
+        <section class="cd-s"><h3 class="sub-h">${isUW() ? 'Requested rates' : 'Rates and approvals'}</h3>${caseRates(id)}</section>${uc ? uwDocs(uc) : ''}`}`;
       caseDr.api.body.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); caseDr.api.body.scrollTop = 0; }; });
       const b = caseDr.api.body;
       const cb = b.querySelector('[data-cd=cancel]'), rb = b.querySelector('[data-cd=reopen]');
       if (cb) cb.onclick = () => openCancel(id); if (rb) rb.onclick = () => openReopen(id);
+      const xb = b.querySelector('[data-cd=export]'); if (xb) xb.onclick = () => exportSheet(id);
       b.querySelectorAll('[data-cd-ok]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdOk); if (f) { decide(f, 'approved'); rerender(); toast(`Rate approved: ${label(f.id)}`); } }; });
       b.querySelectorAll('[data-cd-rej]').forEach(x => { x.onclick = () => { const f = flagged().find(y => y.key === x.dataset.cdRej); if (f) openReject(f); }; });
       const fb = b.querySelector('[data-cd=fix]'); if (fb) fb.onclick = () => { caseDr.api.close(true); S.fixing = true; rerender(); scrollTo(0, 0); };
@@ -1195,6 +1263,7 @@ ${docNo(n)}
     if (P.primary !== S.primary) { const a = old.get(S.primary), b = nw.get(P.primary); ch.push({ label: 'Primary payout method', from: a ? full(a) : 'None', to: b ? full(b) : 'None' }); }
     return ch;
   }
+  const kycTitle = k => isPayCase(k) ? 'Add payout method' : 'Change KYB/KYC';
   const kycById = key => S.kyc.find(k => k.key === key);
   const kycChip = k => chipOf(k.status, k);
   const kycWaitH = k => k.status === 'Underwriting Review' && k.since ? Math.max(0, (CLOCK - Date.parse(k.since)) / 36e5) : null;
@@ -1208,7 +1277,7 @@ ${docNo(n)}
   const isUW = () => ME.key === 'uw';
   /* Underwriting reviews and decides (status, approve, reject) but never edits the application's data or its active services. */
   const canEditApp = () => !isUW() && !hostRO;
-  function kycApprove(k) { applyKyc(k); k.status = 'Approved'; k.decision = { by: ME.name, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('approved the KYC update', 'check', 'The changes are now on the application', k.key); toast(`${k.caseId} approved. The changes are applied.`); }
+  function kycApprove(k) { if (!k.isNew && k.proposed) applyKyc(k); k.status = 'Approved'; k.decision = { by: ME.name, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('approved the KYC update', 'check', 'The changes are now on the application', k.key); toast(`${k.caseId} approved. The changes are applied.`); }
   function kycReject(k) {
     modal({ title: 'Reject this KYC update?', sub: `${esc(k.caseId)} · ${k.changes.length} requested change${k.changes.length === 1 ? '' : 's'}.`,
       body: `<div class="fld"><label for="krc">Decision comment</label><textarea class="inp" id="krc" placeholder="What does the salesperson need to fix?"></textarea><span class="hint">The salesperson sees this when the case comes back to them.</span></div>`,
@@ -1231,7 +1300,7 @@ ${docNo(n)}
     const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected';
     const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openKyc" data-id="${esc(k.key)}">View case${icon('right', 'ic mirror')}</button>`;
     const acts = view;   // the list only opens the case; its actions are inside it
-    return `<div class="crow ${k.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span><b>Merchant information update</b>${kycChip(k)}${kycPill(k)}</div>${rej ? kycRejectBox(k) : ''}</div><div class="crow-a">${acts}</div></div>`;
+    return `<div class="crow ${k.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(k.caseId)}</span><span class="tag info">${isPayCase(k) ? 'Payout' : 'KYC'}</span><b>${kycTitle(k)}</b>${kycChip(k)}${kycPill(k)}</div>${rej ? kycRejectBox(k) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   function openKycCase(k0) {
     const key = k0.key;
@@ -1240,12 +1309,12 @@ ${docNo(n)}
       const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected', uc = uw ? uwCase(key) : null;
       const note = open ? 'Waiting for the Underwriting team. The changes are not on the application until they are approved.' : k.status === 'Approved' ? 'Approved by the Underwriting team. The changes are applied to the application.' : k.status === 'Canceled' ? 'Canceled. None of the changes were applied.' : 'Returned to the salesperson.';
       const acts = open && uw && uwCanAct() ? `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kreject">Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd="kapprove">${icon('tick', 'ic', 2)}Approve</button>` : (open || rej) && !uw ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="kcancel">Cancel update</button>' : '';
-      caseDr.api.setTitle('Merchant information update', `${esc(k.caseId)} · ${esc(S.merchant.name)}`);
+      caseDr.api.setTitle(kycTitle(k), `${esc(k.caseId)} · ${esc(S.merchant.name)}`);
       const tab = caseDr.tab;
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : kycChip(k)}<span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span>${kycPill(k)}<span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? kycRejectBox(k) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="kfix">Edit and resubmit</button></div>') : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : kycChip(k)}<span class="cid">${esc(k.caseId)}</span><span class="tag info">${isPayCase(k) ? 'Payout' : 'KYC'}</span>${kycPill(k)}<span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? kycRejectBox(k) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="kfix">Edit and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
-        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3>${chgTable(k.changes)}</section>
-        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(k.caseId)}</dd><dt>Type</dt><dd>Merchant KYC update</dd><dt>Application</dt><dd>${appLink()}</dd><dt>Requested by</dt><dd>${esc(k.by)} (${esc(k.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(k.at))}</dd>${k.decision ? `<dt>Approved by</dt><dd>${esc(k.decision.by)} · ${esc(whenStr(k.decision.at))}</dd>` : ''}</dl></section>`}`;
+        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">${k.isNew ? 'Submitted details' : 'Requested changes'}</h3>${k.isNew ? '<p class="hint" style="margin:0">First submission of the application: there are no earlier values.</p>' : ''}${chgTable(k.changes, k.isNew ? 'Submitted' : 'Requested', k.isNew)}</section>${isPayCase(k) ? `<section class="cd-s"><h3 class="sub-h">Merchant confirmation ${payTag()}</h3>${payConfirmHTML()}</section>` : ''}
+        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(k.caseId)}</dd><dt>Type</dt><dd>${kycTitle(k)}</dd><dt>Application</dt><dd>${appLink()}</dd><dt>Requested by</dt><dd>${esc(k.by)} (${esc(k.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(k.at))}</dd>${k.decision ? `<dt>Approved by</dt><dd>${esc(k.decision.by)} · ${esc(whenStr(k.decision.at))}</dd>` : ''}</dl></section>`}`;
       const b = caseDr.api.body;
       b.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); b.scrollTop = 0; }; });
       const on = (sel, fn) => { const x = b.querySelector(sel); if (x) x.onclick = fn; };
@@ -1352,6 +1421,7 @@ ${docNo(n)}
     const D = k ? clone(k.proposed) : { name: S.merchant.name, email: S.merchant.email, phone: S.merchant.phone, industry: S.industry, owner: S.owner, websites: S.websites.length ? S.websites.slice() : [''], storeImage: S.storeImage, payouts: clone(S.payouts), primary: S.primary, nextPayout: S.nextPayout, legal: clone(LG()) };
     if (!D.legal) D.legal = clone(LG());
     if (!D.websites.length) D.websites = [''];
+    const lockPay = payLocked() && !(isPayCase(k) && k.status === 'Rejected');
     const orig = JSON.stringify(D); let tried = false, saved = false, api;
     const payIssues = p => {
       const o = {};
@@ -1375,7 +1445,7 @@ ${docNo(n)}
       const filled = D.websites.map(x => x.trim()).filter(Boolean);
       D.websites.forEach((w, i) => { if (w.trim() && !urlOk(w)) e.web[i] = 'Enter a valid website or social media link'; });
       if (hasCh('Online') && !filled.length) e.webAny = 'Online services need at least one website or social media link';
-      if (!D.payouts.length) e.payAny = 'Add at least one payout method';
+      if (!lockPay && !D.payouts.length) e.payAny = 'Add at least one payout method';
       e.legal = {}; LEGAL_KEYS.forEach(k => { const m = legalCheck(k, D.legal, { entity: S.entity, owner: D.owner }); if (m) e.legal[k] = m; });
       D.payouts.forEach(p => { const x = payIssues(p); if (Object.keys(x).length) e.pay[p.id] = x; });
       e.any = !!(e.name || e.email || e.phone || e.webAny || e.payAny || Object.keys(e.web).length || Object.keys(e.pay).length || Object.keys(e.legal).length);
@@ -1407,7 +1477,7 @@ ${docNo(n)}
             + (x.cr ? input('eLcr', 'Commercial registration number', 'legal:crNo', L.crNo || '', e.legal.crNo, 'dir="ltr" inputmode="numeric"') : ''); })()}</div></section>
         <section class="cd-s"><h3 class="sub-h">Website and social media links</h3>${D.websites.map((w, i) => `<div class="eweb"><div class="fld" style="flex:1"><label class="sr-only" for="eW${i}">Link ${i + 1}</label><input class="inp ${e.web[i] ? 'err' : ''}" id="eW${i}" dir="ltr" data-e="web:${i}" value="${esc(w)}" placeholder="www.merchant.com">${fe(e.web[i])}</div>${D.websites.length > 1 ? `<button type="button" class="icon-btn" data-ea="rmLink" data-i="${i}" aria-label="Remove link ${i + 1}">${icon('x', 'ic')}</button>` : ''}</div>`).join('')}${fe(e.webAny)}<button type="button" class="link-btn" data-ea="addLink" style="align-self:flex-start">${icon('plus', 'ic')}Add another link</button></section>
         ${hasCh('POS') ? `<section class="cd-s"><h3 class="sub-h">Store image</h3><p class="hint" style="margin:0">Required for POS services. JPG, PNG · max 5 MB.</p><div class="st-row">${D.storeImage ? `<span class="muted">${esc(D.storeImage)}</span>` : ''}<button type="button" class="btn btn-outline btn-sm" data-ea="store">${icon('upload', 'ic')}${D.storeImage ? 'Replace image' : 'Upload image'}</button></div></section>` : ''}
-        <section class="cd-s"><h3 class="sub-h">Payout methods</h3>${fe(e.payAny)}<div class="items">${pay}</div><div class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="bank">${icon('plus', 'ic')}Add bank account</button><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="wallet">${icon('plus', 'ic')}Add e-wallet</button></div></section>
+        ${lockPay ? `<section class="cd-s"><h3 class="sub-h">Payout methods ${payTag()}</h3><p class="hint" style="margin:0">${S.payouts.length ? 'Added with the first submission. They can\'t be changed.' : 'No payout method was added with the application. Payout methods are added only with the first submission.'}</p>${S.payouts.length ? payList() : ''}</section>` : `<section class="cd-s"><h3 class="sub-h">Payout methods</h3>${fe(e.payAny)}<div class="items">${pay}</div><div class="row-acts"><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="bank">${icon('plus', 'ic')}Add bank account</button><button type="button" class="btn btn-outline btn-sm" data-ea="addPay" data-t="wallet">${icon('plus', 'ic')}Add e-wallet</button></div></section>`}
         <section class="cd-s"><h3 class="sub-h">Your changes</h3><div data-sum>${summary()}</div></section>`;
     };
     const draw = () => {
@@ -1425,6 +1495,11 @@ ${docNo(n)}
     const save = () => {
       tried = true; if (errs().any) { draw(); const bad = api.body.querySelector('.err, .ferr'); bad && bad.scrollIntoView({ block: 'center' }); return; }
       const P = buildP();
+      if (k && k.isNew && !isPayCase(k)) {
+        saved = true; api.close(true); applyKyc({ proposed: P });
+        Object.assign(k, { status: 'Underwriting Review', changes: kybSnapshot(), proposed: kybProposal(), reject: null, since: new Date(CLOCK).toISOString() });
+        log('resubmitted the business details to Underwriting', 'send', `${k.caseId} · Change KYB/KYC`, k.key); rerender(); toast(`${k.caseId} sent back to Underwriting`); return;
+      }
       const changes = kycChanges(P);
       saved = true; api.close(true);
       if (!changes.length) { toast('Nothing to send: the details are the same as the application'); return; }
@@ -1433,7 +1508,7 @@ ${docNo(n)}
       else { const n = S.kyc.reduce((m, x) => Math.max(m, x.n), 0) + 1; k = { n, key: 'kyc:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status: 'Underwriting Review', changes, proposed: P, by: ME.name, role: ME.role, at: nowStr(), since: iso }; S.kyc.push(k); log('sent a KYC update to Underwriting', 'send', chgLog(changes), k.key); }
       rerender(); toast(`Sent to Underwriting as ${k.caseId}`);
     };
-    drawer({ size: 'xl', title: k ? 'Edit and resubmit the KYC update' : 'Edit application details', sub: esc(S.merchant.name),
+    drawer({ size: 'xl', title: k ? (k.isNew ? 'Edit and resubmit the business details' : 'Edit and resubmit the KYC update') : 'Edit application details', sub: esc(S.merchant.name),
       beforeClose(a) {
         if (saved || JSON.stringify(D) === orig) return true;
         confirmBox({ title: 'Discard changes?', body: 'Your changes to the application details won\'t be saved.', ok: 'Discard', danger: true }).then(ok => { if (ok) a.close(true); });
@@ -1506,12 +1581,12 @@ ${docNo(n)}
       ${legalCard()}
       <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Documents</h2>${docRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="docs" data-n="${docRows.length}">${icon('download', 'ic')}Download all (${docRows.length})</button>` : ''}</div>${docRows.length ? `<div class="frows">${docRows.join('')}</div>` : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
       <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Contracts</h2>${conRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="contracts" data-n="${conRows.length}">${icon('download', 'ic')}Download all (${conRows.length})</button>` : ''}</div>${conRows.length ? `<div class="frows">${conRows.join('')}</div>` : '<p class="hint" style="margin:0">None attached.</p>'}</section>
-      <section class="card sec prof-wide"><h2 class="sub-h">Payout methods</h2>${S.payouts.length ? `<div class="pm-list">${S.payouts.map((p, i) => `<div class="pm"><div class="pm-h"><b>${p.id === S.primary ? 'Primary payout method' : esc(p.name || 'Payout method ' + (i + 1))}</b><span class="tag info">${p.type === 'bank' ? 'Bank Account' : 'E-Wallet'}</span>${p.id === S.primary ? '<span class="tag ok">Primary</span>' : ''}</div>${dl((p.id !== S.primary && p.name ? `<dt>Method name</dt><dd>${esc(p.name)}</dd>` : '') + (p.type === 'bank' ? `<dt>Bank name</dt><dd>${esc(p.bank)}</dd><dt>Branch</dt><dd>${esc(p.branch)}</dd><dt>Account holder</dt><dd>${esc(p.holder)}</dd><dt>Account number</dt><dd dir="ltr" class="num">${esc(p.acct)}</dd>` : `<dt>Wallet provider</dt><dd>${esc(p.provider)}</dd><dt>Mobile number</dt><dd dir="ltr" class="num">${esc(p.mobile)}</dd><dt>Wallet holder</dt><dd>${esc(p.wholder)}</dd>`))}</div>`).join('')}</div>` : '<p class="hint" style="margin:0">None added.</p>'}</section></div>`;
+      <section class="card sec prof-wide" id="payout-card"><div class="sub-hr"><h2 class="sub-h">Payout methods ${payTag()}</h2></div>${payConfirmHTML()}${S.payouts.length ? payList() : '<p class="hint" style="margin:0">None added.</p>'}</section></div>`;
     return `${head}${banner}<div class="prof-g"><div class="prof-main">${approvalCard()}${info}${commentsSection()}</div><aside class="prof-side">${activeSvc}${cases}</aside></div>`;
   }
 
   /* ---------- Presets (prototype only) ---------- */
-  function submitDemo() { if (!S.comments.length) S.comments = [{ id: 1, who: 'Aya Muhammed', role: 'Salesperson', init: 'AM', t: '09/06/2026, 05:22:00 PM', text: 'The merchant wants to go live before Black Friday. Rates are justified in the submission.' }, { id: 2, who: 'Nadia Salah', role: 'Sales Manager', init: 'NS', t: '09/07/2026, 10:05:00 AM', text: 'Approved the card rates. Waiting on the wallet decision from the Head of Sales.' }]; if (!S.mid) S.mid = (new URLSearchParams(location.search).get('mid')) || 'MID-10200-100'; S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
+  function submitDemo() { if (S.payouts.length && !S.payoutConfirm) sendPayoutLink(false); setTimeout(() => { if (S.appId) { addKybCase(); addPayoutCase(); save(); rerender(); } }); if (!S.comments.length) S.comments = [{ id: 1, who: 'Aya Muhammed', role: 'Salesperson', init: 'AM', t: '09/06/2026, 05:22:00 PM', text: 'The merchant wants to go live before Black Friday. Rates are justified in the submission.' }, { id: 2, who: 'Nadia Salah', role: 'Sales Manager', init: 'NS', t: '09/07/2026, 10:05:00 AM', text: 'Approved the card rates. Waiting on the wallet decision from the Head of Sales.' }]; if (!S.mid) S.mid = (new URLSearchParams(location.search).get('mid')) || 'MID-10200-100'; S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
   function rejectDemo(target) {
     const fl = flagged(), wid = (fl.find(f => f.id === (target || 'Online Wallet')) || fl[0]).id, ws = fl.filter(f => f.id === wid), b = target ? null : fl.find(f => f.id !== wid);
     if (b) S.decisions[b.key] = { decision: 'approved', by: 'Nadia Salah', role: 'Sales Manager', comment: '', rate: b.sel.rate, fee: b.sel.fee, at: '09/07/2026, 10:02:00 AM' };
@@ -1575,6 +1650,7 @@ ${docNo(n)}
     dlFile: d => { toast(`Downloading ${d.f}`); return false; },
     svcLogs: d => { const id = d.id; drawer({ size: 'md', title: 'Activity log', sub: `${esc(label(id))} · ${esc((S.cases[id] || {}).caseId || '')}`, render(api) { api.body.innerHTML = caseLogHTML(id); } }); return false; },
     dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
+    sendPayLink: () => { if (!canEditApp() || !S.payouts.length) return false; const again = !!PC(); sendPayoutLink(again); rerender(); toast(again ? 'Link sent again to the merchant' : 'Confirmation link sent to the merchant'); return false; },
     editGeneral: () => { if (canEditApp()) openEditGeneral(); return false; },
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
     openUpd: d => { const u = updById(d.id); u && openUpdCase(u); return false; },
@@ -1639,7 +1715,7 @@ ${docNo(n)}
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'caseRef', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'caseRef', 'sendPayLink', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;

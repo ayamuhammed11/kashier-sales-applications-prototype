@@ -43,10 +43,10 @@ window.UW = (function () {
     : raw === 'Bank Submission' ? ({ uwOk: 'UW Approved', bankOk: 'Pending Onboarding Configurations', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
   const SHOWN = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved', 'Rejected'];
   /* The four case types. Service Activation Request: a newly requested service (pricing, website, documents, contract). Service Update: a change to
-     a service that is already active. Change KYB/KYC: the business details (name, industry, contact...), with their supporting documents. Change Payout
-     Method: the payout account, with the bank account proof. A first submission of the business details or payout method is the same type, shown
-     without old values. */
-  const TYPE = { activation: 'Service Activation Request', update: 'Service Update', kyb: 'Change KYB/KYC', payout: 'Change Payout Method' };
+     a service that is already active. Change KYB/KYC: the business details (name, industry, contact...), with their supporting documents. Add Payout
+     Method: the payout methods entered with the first submission (they can't be changed afterwards). A first submission of the business details
+     is shown without old values. */
+  const TYPE = { activation: 'Service Activation Request', update: 'Service Update', kyb: 'Change KYB/KYC', payout: 'Add Payout Method' };
   const isPayLabel = l => /^(Payout method|Primary payout)/.test(l);
   const kycKind = x => (x.changes || []).length && x.changes.every(ch => isPayLabel(ch.label)) ? 'payout' : 'kyb';
   const docsForKyb = c => { const set = [], add = d => { if (set.indexOf(d) < 0) set.push(d); };
@@ -147,8 +147,6 @@ window.UW = (function () {
     });
   }
   const pay = p => (p.name ? p.name + ': ' : '') + 'Bank account · ' + p.bank + ' · ' + p.branch + ' · ' + p.holder + ' · ' + p.acct;
-  const bankChange = (bk, br, acct) => ({ label: 'Payout method changed', from: a => pay(a.payouts[0]), to: a => pay(Object.assign({}, a.payouts[0], { bank: bk, branch: br, acct: acct })), set: P => { P.payouts[0].bank = bk; P.payouts[0].branch = br; P.payouts[0].acct = acct; } });
-  const walletAdd = { label: 'Payout method added', from: 'None', to: a => 'E-wallet · Vodafone Cash · 01012345678 · ' + a.merchant.name, set: P => { P.payouts.push({ id: 2, type: 'wallet', name: '', provider: 'Vodafone Cash', mobile: '01012345678', wholder: P.name }); P.nextPayout = 3; } };
   const DOCS_ON = ['Brand Authorization Letter'], DOCS_POS = ['Store Lease / Location Proof'], DOCS_BM = ['BM PSP Agreement Annex'];
   const DEMO = [
     { name: 'Cairo Fresh Market', industry: 'Retail & E-commerce', email: 'youssef@cairofresh.com', phone: '+20 100 123 4567', by: 'Mostafa Khaled', at: '28 Sept 2026', web: ['www.cairofresh.com', 'instagram.com/cairofresh', 'facebook.com/cairofreshmarket'], store: 'storefront-cairo.jpg', docs: DOCS_ON.concat(DOCS_POS),
@@ -164,10 +162,10 @@ window.UW = (function () {
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Live', h: 300 }, { id: 'Online Bank Installments', model: 'PSP', bank: 'Bank Misr', st: 'Bank Submission', h: 80, stage: 'config', rates: { selling: rate(1.4, 1.5) } }] },
     { name: 'Zayed Real Estate', industry: 'Real Estate', email: 'yasmin@zayedre.com', phone: '+20 111 909 3030', by: 'Mostafa Khaled', at: '15 Oct 2026', web: 'www.zayedre.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'CIB', st: 'Underwriting Review', h: 4 }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 40 }],
-      kyc: [{ st: 'Underwriting Review', h: 15, changes: [bankChange('CIB', 'Smart Village', '1003998877665')] }] },
+    },
     { name: 'Garden City Florist', industry: 'Retail & E-commerce', email: 'heba@gcflorist.com', phone: '+20 100 612 9090', by: 'Nour Hamdy', at: '22 Sept 2026', web: 'www.gcflorist.com', docs: DOCS_ON,
       svc: [{ id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 140, sell: 0.8 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 33, sell: 0.5, contract: false }, { id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Rejected', from: 'bank', h: 200, why: 'NBE asked for a recent utility bill for the business address.' }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 90 }],
-      kyc: [{ st: 'Underwriting Review', h: 10, changes: [walletAdd] }] },
+    },
     { name: 'Ismailia Kids Academy', industry: 'Education', email: 'rasha@ismailiakids.edu', phone: '+20 122 777 0101', by: 'Aya Muhammed', at: '05 Oct 2026', web: 'www.ismailiakids.edu', docs: DOCS_ON,
       upd: [{ svc: 'Online Card', st: 'Underwriting Review', h: 70, ch: [{ type: 'rate', li: 0, key: 'intl-EGP', rate: '2.30', fee: '2.80' }, { type: 'notes', notes: 'Seasonal campaign for school fees in September.' }] }],
       svc: [{ id: 'Online Card', model: 'PF', bank: 'QNB Alahli', st: 'Live', h: 180 }, { id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Bank Submission', h: 70, prep: 'ready' }],
@@ -213,7 +211,7 @@ window.UW = (function () {
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 18;
+  const DEMO_VER = 19;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -290,7 +288,7 @@ window.UW = (function () {
     seedDemo(); autoAssign();
     return [].concat.apply([], states().map(s => s.order.filter(id => s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1).map(id => build(s, id))
       .concat((s.kyc || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildKyc(s, x)))
-      .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x))))).filter(canSee).filter(received);
+      .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x))))).filter(canSee);
   }
   /* any: the application's own case drawer for Underwriting, which acts on every case of the application that is with Underwriting,
      including one still missing information and one assigned to another agent. */
@@ -301,10 +299,10 @@ window.UW = (function () {
     if (String(id).indexOf('upd:') === 0) { const x = (s.updates || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildUpdate(s, x) : null; }
     else if (String(id).indexOf('kyc:') === 0) { const x = (s.kyc || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildKyc(s, x) : null; }
     else c = s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1 ? build(s, id) : null;
-    return c && (any || (canSee(c) && received(c))) ? c : null;
+    return c && (any || canSee(c)) ? c : null;
   }
-  /* A case is only received by Underwriting when it is complete: one with a required document or link missing never reaches the queue. */
-  const received = c => !(c.ustatus === 'Underwriting Review' && checks(c).some(x => x.missing));
+  /* Every submitted case reaches Underwriting, each on its own. A required document or link that is missing shows as a flagged item in the case,
+     so Underwriting can return it to Sales. */
   const state = () => states().length > 0;
 
   /* ── Review checklist ── */
