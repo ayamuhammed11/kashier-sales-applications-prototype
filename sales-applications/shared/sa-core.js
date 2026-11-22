@@ -749,16 +749,6 @@
     toast(`Read from the ${n}: ${filled.map(k => (k === 'ownerIdNo' ? idLabel(appO()) : LEGAL_LBL[k]).toLowerCase()).join(', ')}. Check ${filled.length > 1 ? 'them' : 'it'} in Legal details.`);
   }
   /* The values of the bank onboarding sheets for a service, as the bank writes them. */
-  function bankSheet(id) {
-    const L = LG(), x = legalOf(L, appO()), ph = String(S.merchant.phone || '').replace(/\D/g, '').replace(/^20/, '').replace(/^0/, '');
-    const form = x.ind ? 'Sole proprietorship' : x.v('legalForm');
-    const rows = [['Owner name', 'اسم التاجر', x.v('ownerName')], ['Commercial name', 'الاسم التجاري', S.merchant.name], ['Address', 'عنوان التاجر', x.v('addr1')], ['City', 'المحافظة', x.v('city')],
-      ['Company type', '', form ? `${form}${LEGAL_AR[form] ? ' · ' + LEGAL_AR[form] : ''}` : ''], ['Tax card number', 'رقم البطاقة الضريبية', x.tax ? x.v('taxNo') : 'NA'], ['Commercial registration number', 'رقم السجل التجارى', x.cr ? x.v('crNo') : 'NA'],
-      [idLabel(appO()), 'رقم بطاقة الرقم القومي', x.v('ownerIdNo')], ['Mobile', 'الموبايل', ph]];
-    if (chOf(id) === 'Online') rows.push(['Website / app', 'الموقع / التطبيق', S.websites.map(w => w.trim()).filter(Boolean)[0] || '']);
-    rows.push(['Email', 'البريد الالكتروني', S.merchant.email]);
-    return rows;
-  }
   function legalDl() {
     const L = LG(), x = legalOf(L, appO()), t = k => esc(x.v(k) || '—');
     return `<dt>Owner full name</dt><dd>${t('ownerName')}</dd><dt>Legal form</dt><dd>${x.ind ? 'Sole proprietorship' : t('legalForm')}</dd><dt>Business address</dt><dd>${t('addr1')}${x.v('city') ? ', ' + esc(x.v('city')) : ''}</dd>
@@ -772,12 +762,15 @@
   /* The bank's data sheet for a service, ready to send: one row with the bank's own column names. Available to Underwriting from UW Approved on. */
   const EXPORT_FROM = ['UW Approved', 'Sent to Bank', 'Pending Onboarding Configurations', 'Active', 'Rejected by Bank'];
   function exportSheet(id) {
-    const rows = bankSheet(id), c = S.cases[id] || {}, cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    const csv = '\ufeff' + [rows.map(r => cell(r[1] || r[0])).join(','), rows.map(r => cell(r[0] === 'Company type' ? (String(r[2]).split(' · ')[1] || r[2]) : r[2])).join(',')].join('\r\n');
-    const name = `${c.caseId || 'case'}-${chOf(id)}-bank-data-sheet.csv`, a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    log(`exported the ${label(id)} data sheet`, 'download', name, id); save();
-    toast(`${name} downloaded`);
+    if (!window.BankSheet) { toast('The data sheet could not be built'); return; }
+    const L = LG(), x = legalOf(L, appO()), c = S.cases[id] || {}, b = c.bank || {}, web = S.websites.map(w => w.trim()).filter(Boolean)[0] || '';
+    const model = { 'Payment link': 'Payment Link', 'Merchant website': 'Merchant Website', 'Merchant app': 'Merchant App' }[b.intModel] || (web ? 'Merchant Website' : 'Payment Link');
+    const r = window.BankSheet.build({ channel: chOf(id), caseId: c.caseId, brand: S.merchant.name, legalName: L.legalName, ownerName: x.v('ownerName'), legalForm: x.v('legalForm'), ind: x.ind, tax: x.tax, cr: x.cr, taxNo: x.v('taxNo'), crNo: x.v('crNo'),
+      ownerIdNo: x.v('ownerIdNo'), address: [x.v('addr1'), x.v('addr2')].filter(Boolean).join(' '), city: x.v('city'), gov: L.gov, mobile: S.merchant.phone, email: S.merchant.email, website: web, industry: S.industry, activityAr: '',
+      mid: S.mid, ticket: (b.avgTicket || '1000') + ' EGP', intModel: model, intType: b.intType || '2.5P', mcc: b.mcc, discount: b.bmDiscountCode });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(r.blob); a.download = r.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    log(`exported the ${label(id)} data sheet`, 'download', r.name, id); save();
+    toast(`${r.name} downloaded`);
   }
   /* Every change request shows each field's current value next to the requested one. */
   const chgTable = (ch, newH = 'Requested', isNew = false) => { const v = x => x == null || x === '' ? 'Not set' : x;

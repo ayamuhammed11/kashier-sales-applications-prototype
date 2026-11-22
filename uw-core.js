@@ -131,7 +131,7 @@ window.UW = (function () {
     if (!level) return;
     const n = parseInt(app.appId.slice(-2), 10), pad = (x, len) => String(x).padStart(len, '0');
     app.legal = { legalName: m.name + ' Co.', taxNo: '2' + pad(n * 7919, 8), ownerName: ['Youssef Adel', 'Omar Khalil', 'Salma Hany', 'Mona Adel', 'Laila Mansour', 'Yasmin Farouk'][n % 6] };
-    if (level === 'full') Object.assign(app.legal, { activityAr: '\u062a\u062c\u0627\u0631\u0629 \u0627\u0644\u062a\u062c\u0632\u0626\u0629 \u0648\u0627\u0644\u0645\u0633\u062a\u0644\u0632\u0645\u0627\u062a', legalForm: 'LLC', crNo: '10' + pad(n * 104729, 7), ownerIdType: 'National ID', ownerIdNo: '290' + pad(n * 9973, 11), ownerNat: 'Egyptian', activity: m.industry + ' merchant, sells to retail customers', addr1: n + ' Main Street', gov: 'Cairo', city: 'Nasr City', country: 'Egypt' });
+    if (level === 'full') Object.assign(app.legal, { activityAr: '\u062a\u062c\u0627\u0631\u0629 \u0627\u0644\u062a\u062c\u0632\u0626\u0629 \u0648\u0627\u0644\u0645\u0633\u062a\u0644\u0632\u0645\u0627\u062a', legalForm: 'LLC', crNo: '10' + pad(n * 104729, 7), ownerIdType: 'National ID', ownerIdNo: '290' + pad(n * 9973, 11), ownerNat: 'Egyptian', activity: m.industry + ' merchant, sells to retail customers', addr1: n + ' Main Street', gov: 'Cairo', city: 'CAIRO', country: 'Egypt' });
     if (level !== 'full') return;
     app.order.forEach(id => {
       const cs = app.cases[id], b = cs.bank = { avgTicket: '1500', intModel: 'Merchant website', intType: '3P', signatory: app.legal.ownerName, bmCity: 'CAIRO', bmDiscountCode: 'M17', posTid: 'KA00' + pad(n * 211, 4), ownerTitle: 'MR', nbeBranch: 'Zamalek', outlet: m.name + ' main outlet', outletCity: 'Cairo', outletAddr: app.legal.addr1 + ', Cairo', delName: app.legal.ownerName, delIdNo: app.legal.ownerIdNo, delNat: 'Egyptian' };
@@ -212,7 +212,7 @@ window.UW = (function () {
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 20;
+  const DEMO_VER = 21;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
