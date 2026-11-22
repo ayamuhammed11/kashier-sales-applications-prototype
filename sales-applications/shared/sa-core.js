@@ -1231,7 +1231,9 @@ ${docNo(n)}
   const closedDr = () => { caseDr = null; if (ext) ext.done(); };
   /* Opened from the Cases list, the case links to its full application (same role, view only for an agent who can't act on it). */
   const appUrl = () => `${SAD}application.html?app=${encodeURIComponent(S.appId)}&as=${encodeURIComponent(ME.key)}${ext && !ext.canAct ? '&ro=1' : ''}`;
-  const appLink = () => ext ? `<a class="link-btn" style="padding:0" href="${esc(appUrl())}">${esc(S.appId)} · ${esc(S.merchant.name)}${icon('right', 'ic-14 mirror')}</a>` : `${esc(S.appId)} · ${esc(S.merchant.name)}`;
+  /* The Application row of a case drawer always leads to the application: from another page it opens it; on the application itself it closes the drawer and shows the application. */
+  const appLink = () => { const t = `${esc(S.appId)} · ${esc(S.merchant.name)}${icon('right', 'ic-14 mirror')}`;
+    return ext ? `<a class="link-btn" style="padding:0" href="${esc(appUrl())}">${t}</a>` : `<button type="button" class="link-btn app-nav" style="padding:0" data-act="appNav">${t}</button>`; };
   function openCase(id) {
     const draw = () => {
       if (!S.svc[id]) { caseDr.api.close(true); return; }
@@ -1674,6 +1676,7 @@ ${docNo(n)}
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
     openUpd: d => { const u = updById(d.id); u && openUpdCase(u); return false; },
     caseRef: d => { openCaseRef(d.c); return false; },
+    appNav: () => { if (caseDr && caseDr.api) caseDr.api.close(true); try { const q = new URLSearchParams(location.search); q.delete('case'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '')); } catch (e) { /* no history */ } scrollTo(0, 0); return false; },
     editLive: d => { if (canEditLive() && S.svc[d.id]) openEditLive(d.id, openUpdOf(d.id)); return false; },
     kycApprove: d => { const k = kycById(d.id); k && kycApprove(k); },
     kycReject: d => { const k = kycById(d.id); k && kycReject(k); return false; },
@@ -1730,7 +1733,7 @@ ${docNo(n)}
   function bindStatic() {
     if (bound) return; bound = true;
     document.addEventListener('click', e => {
-      const b = e.target.closest('[data-act]'); if (!b || b.disabled || !(b.closest('#page,.pop,.drawer[data-sa]') || b.classList.contains('cm-case'))) return;
+      const b = e.target.closest('[data-act]'); if (!b || b.disabled || !(b.closest('#page,.pop,.drawer[data-sa]') || (b.classList.contains('cm-case') || b.classList.contains('app-nav')))) return;
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
