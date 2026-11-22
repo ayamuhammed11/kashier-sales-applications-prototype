@@ -210,6 +210,9 @@ textarea.inp { height: auto; min-height: 72px; padding: 10px 12px; resize: verti
 .drawer.md { max-width: 480px; } .drawer.xl { max-width: 880px; } .drawer.full { max-width: none; }
 /* Case details: a side drawer over the page, never most of the screen (about half the window, 480 to 680px). */
 .drawer.case { max-width: clamp(480px, 48vw, 680px); }
+/* The case drawer stays a side drawer on tablets and zoomed-in laptop windows; only a phone-width window gets the bottom sheet. */
+@media (max-width: 767px) { .drawer.case { inset-block: 0; max-width: min(560px, 85vw); max-height: none; border-inline-start: 1px solid var(--border); border-radius: 0; } }
+@media (max-width: 599px) { .drawer.case { inset-block: auto 0; max-width: none; max-height: 92vh; border-inline-start: 0; border-start-start-radius: 12px; border-start-end-radius: 12px; } }
 .dh { display: flex; align-items: flex-start; gap: 8px; padding: 20px 24px 16px; border-block-end: 1px solid var(--border-subtle); }
 .dh .tt { flex: 1; min-width: 0; }
 .dh h2 { font-size: 20px; }
@@ -220,7 +223,7 @@ textarea.inp { height: auto; min-height: 72px; padding: 10px 12px; resize: verti
 .df .sp { flex: 1; }
 body.locked { overflow: hidden; }
 @media (max-width: 767px) {
-  .drawer, .drawer.md, .drawer.xl, .drawer.case { inset-block: auto 0; max-width: none; max-height: 92vh; border-inline-start: 0; border-start-start-radius: 12px; border-start-end-radius: 12px; }
+  .drawer, .drawer.md, .drawer.xl { inset-block: auto 0; max-width: none; max-height: 92vh; border-inline-start: 0; border-start-start-radius: 12px; border-start-end-radius: 12px; }
   .dh { padding: 16px; } .db { padding: 16px; } .df { padding: 12px 16px; flex-wrap: wrap; }
   .df .btn { flex: 1; } .df .sp { display: none; }
   .dh .expand { display: none; }
