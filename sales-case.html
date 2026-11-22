@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="components/filter-bar.css">
 <link rel="stylesheet" href="uw-case-view.css">
 <style>.wrap { max-width: 960px; margin-inline: auto; } .modal { max-width: 420px; } .modal .mh { padding: 16px 20px 4px; } .modal h2 { font-size: 18px; } .modal .mb { padding: 4px 20px 8px; gap: 8px; } .modal .mf { padding: 8px 20px 16px; } .modal textarea.inp { min-height: 64px; } .modal .hint { font-size: 12px; }</style>
+<link rel="icon" type="image/svg+xml" href="img/kashier-favicon.svg">
 </head>
 <body>
 <script src="components/filter-bar.js"></script>
@@ -20,10 +21,8 @@
 <script src="rate-decisions.js"></script>
 <script src="cases-core.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="void 0"></script>
-<script src="nbe-defaults.js" onerror="void 0"></script>
-<script src="nbe-export.js" onerror="void 0"></script>
-<script src="bm-defaults.js" onerror="void 0"></script>
-<script src="bm-export.js" onerror="void 0"></script>
+<script>/* The bank export files are not part of the public prototype: load them only where they exist, so the public site makes no failing requests. */
+if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'nbe-export', 'bm-defaults', 'bm-export'].map(f => '<script src="' + f + '.js"><\/script>').join(''));</script>
 <script src="uw-core.js"></script>
 <script src="uw-bm.js"></script>
 <script src="uw-case-view.js"></script>
