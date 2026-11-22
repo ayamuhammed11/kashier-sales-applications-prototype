@@ -759,6 +759,9 @@
       <p class="hint" style="margin:0">The values for the bank's ${esc(chOf(id))} sheet, filled in by Sales on the application.</p>
       <dl class="dl">${rows.map(r => `<dt>${esc(r[0])}${r[1] ? `<span class="ar"><bdi lang="ar">${esc(r[1])}</bdi></span>` : ''}</dt><dd>${r[2] ? `<span dir="auto">${esc(r[2])}</span>` : '<span class="tag req">Missing</span>'}</dd>`).join('')}</dl></section>`;
   }
+  /* Every change request shows each field's current value next to the requested one. */
+  const chgTable = (ch, newH = 'Requested') => `<div class="rscroll" style="display:block"><table class="rtbl ro-svc chg-t"><thead><tr><th>Field</th><th>Current</th><th>${newH}</th></tr></thead><tbody>${ch.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from == null || c.from === '' ? 'Not set' : c.from)}</td><td><b>${esc(c.to == null || c.to === '' ? 'Not set' : c.to)}</b></td></tr>`).join('')}</tbody></table></div>`;
+  const chgLog = ch => ch.map(c => `${c.label}: ${c.from == null || c.from === '' ? 'Not set' : c.from} → ${c.to == null || c.to === '' ? 'Not set' : c.to}`).join('; ');
   function fieldErr(cond, msg) { return cond ? `<span class="ferr">${icon('warn', 'ic-14')}${msg}</span>` : ''; }
   function merchantFields(o = {}) {
     const m = S.merchant, t = S.visited.merchant;
@@ -1142,6 +1145,9 @@ ${docNo(n)}
     return true;
   }
   const closedDr = () => { caseDr = null; if (ext) ext.done(); };
+  /* Opened from the Cases list, the case links to its full application (same role, view only for an agent who can't act on it). */
+  const appUrl = () => `${SAD}application.html?app=${encodeURIComponent(S.appId)}&as=${encodeURIComponent(ME.key)}${ext && !ext.canAct ? '&ro=1' : ''}`;
+  const appLink = () => ext ? `<a class="link-btn" style="padding:0" href="${esc(appUrl())}">${esc(S.appId)} · ${esc(S.merchant.name)}${icon('right', 'ic-14 mirror')}</a>` : `${esc(S.appId)} · ${esc(S.merchant.name)}`;
   function openCase(id) {
     const draw = () => {
       if (!S.svc[id]) { caseDr.api.close(true); return; }
@@ -1159,7 +1165,7 @@ ${docNo(n)}
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
           ${needsBank(id) ? `<dt>Financial institution</dt><dd>${banks.length ? banks.map(esc).join(', ') : 'Not chosen'}</dd>` : ''}${chOf(id) === 'POS' ? `<dt>POS terminals</dt><dd>${esc(S.terminals || 'Not set')}</dd>` : ''}
           ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
-          ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''}</dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}
+          ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''}</dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${appLink()}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}
           ${uc ? `<dt>Assigned to</dt><dd>${canPick ? `<select class="sel" data-cd-assign aria-label="Assigned to" style="max-width:240px">${Cases.TEAM.map(n => `<option ${n === uc.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : esc(uc.assignee || 'Not assigned')}</dd>` : ''}</dl></section>
         <section class="cd-s"><h3 class="sub-h">Rates and approvals</h3>${caseRates(id)}</section>${bankSheetHTML(id)}${uc ? uwDocs(uc) : ''}`}`;
       caseDr.api.body.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); caseDr.api.body.scrollTop = 0; }; });
@@ -1239,7 +1245,7 @@ ${docNo(n)}
       caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : kycChip(k)}<span class="cid">${esc(k.caseId)}</span><span class="tag info">KYC</span>${kycPill(k)}<span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? kycRejectBox(k) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="kfix">Edit and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
         ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3>${chgTable(k.changes)}</section>
-        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(k.caseId)}</dd><dt>Type</dt><dd>Merchant KYC update</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(k.by)} (${esc(k.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(k.at))}</dd>${k.decision ? `<dt>Approved by</dt><dd>${esc(k.decision.by)} · ${esc(whenStr(k.decision.at))}</dd>` : ''}</dl></section>`}`;
+        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(k.caseId)}</dd><dt>Type</dt><dd>Merchant KYC update</dd><dt>Application</dt><dd>${appLink()}</dd><dt>Requested by</dt><dd>${esc(k.by)} (${esc(k.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(k.at))}</dd>${k.decision ? `<dt>Approved by</dt><dd>${esc(k.decision.by)} · ${esc(whenStr(k.decision.at))}</dd>` : ''}</dl></section>`}`;
       const b = caseDr.api.body;
       b.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); b.scrollTop = 0; }; });
       const on = (sel, fn) => { const x = b.querySelector(sel); if (x) x.onclick = fn; };
@@ -1330,7 +1336,7 @@ ${docNo(n)}
       caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uc ? statusBtn(uc, !uwCanAct()) : chipOf(u.status, u)}<span class="cid">${esc(u.caseId)}</span><span class="tag info">${chOf(u.service)}</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${u.reject && u.reject.comment ? `<p>${linkCases(u.reject.comment)}</p>` : ''}<p class="rj-h">Edit the changes and resubmit, or cancel the update.</p></div></div>${uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="ufix">Edit and resubmit</button></div>'}` : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
         ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Requested changes</h3>${chgTable(u.changes)}</section>
-        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(u.caseId)}</dd><dt>Type</dt><dd>Service Update</dd><dt>Service</dt><dd>${esc(label(u.service))}</dd><dt>Application</dt><dd>${esc(S.appId)} · ${esc(S.merchant.name)}</dd><dt>Requested by</dt><dd>${esc(u.by)} (${esc(u.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(u.at))}</dd>${u.comment ? `<dt>Reason</dt><dd>${esc(u.comment)}</dd>` : ''}${uc ? `<dt>Assigned to</dt><dd>${esc(uc.assignee || 'Not assigned')}</dd>` : ''}${u.decision ? `<dt>Approved by</dt><dd>${esc(u.decision.by)} · ${esc(whenStr(u.decision.at))}</dd>` : ''}</dl></section>`}`;
+        <section class="cd-s"><h3 class="sub-h">Case details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(u.caseId)}</dd><dt>Type</dt><dd>Service Update</dd><dt>Service</dt><dd>${esc(label(u.service))}</dd><dt>Application</dt><dd>${appLink()}</dd><dt>Requested by</dt><dd>${esc(u.by)} (${esc(u.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(u.at))}</dd>${u.comment ? `<dt>Reason</dt><dd>${esc(u.comment)}</dd>` : ''}${uc ? `<dt>Assigned to</dt><dd>${esc(uc.assignee || 'Not assigned')}</dd>` : ''}${u.decision ? `<dt>Approved by</dt><dd>${esc(u.decision.by)} · ${esc(whenStr(u.decision.at))}</dd>` : ''}</dl></section>`}`;
       const b = caseDr.api.body;
       b.querySelectorAll('[data-cdt]').forEach(t => { t.onclick = () => { caseDr.tab = t.dataset.cdt; draw(); b.scrollTop = 0; }; });
       const on = (sel, fn) => { const x = b.querySelector(sel); if (x) x.onclick = fn; };
@@ -1468,7 +1474,7 @@ ${docNo(n)}
   function openCaseRef(cid) {
     const f = findCase(cid); if (!f) { toast(`${cid} was not found`); return; }
     if (f.local) { if (caseDr && caseDr.api) caseDr.api.close(true); setTimeout(() => openFromQuery(f.local)); return; }
-    location.href = `application.html?app=${encodeURIComponent(f.app)}&case=${encodeURIComponent(f.key)}&as=${encodeURIComponent(ME.key)}`;
+    location.href = `${SAD}application.html?app=${encodeURIComponent(f.app)}&case=${encodeURIComponent(f.key)}&as=${encodeURIComponent(ME.key)}`;
   }
   function commentsSection() {
     if (!submitted()) return '';   // available only after the first submission
