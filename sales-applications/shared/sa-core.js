@@ -1243,7 +1243,7 @@ ${docNo(n)}
         : st === 'Rejected' ? 'Returned to the salesperson.' : uwAct && uwCanAct() ? 'With Underwriting. Change the status as the case moves on.' : `Submitted on ${esc(S.submittedAt)}. View only.`;
       const act = st === 'Live' || isUW() ? (uwAct && uc.ustatus === 'Underwriting Review' ? uwDecide(!uwCanAct()) : '') : st === 'Canceled' ? `<button type="button" class="btn btn-outline btn-sm" data-cd="reopen">${icon('arrows', 'ic')}Reopen Case</button>` : `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="cancel">Cancel Case</button>`;
       caseDr.api.setTitle(`${esc(label(id))}`, `${esc(c.caseId || '')} · ${esc(S.merchant.name)}`);
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uwAct ? statusBtn(uc, !uwCanAct()) : caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}${uwAct && EXPORT_FROM.includes(uc.ustatus) ? `<button type="button" class="btn btn-outline btn-sm" data-cd="export">${icon('download', 'ic')}Export data sheet</button>` : ''}</div><p class="case-n">${note}</p>${st === 'Bank Submission' ? waitBox(id) : ''}${st === 'Rejected' ? rejectBox(id) + (isUW() ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>') : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${uwAct ? statusBtn(uc, !uwCanAct()) : caseChip(id)}<span class="cid">${esc(c.caseId || '')}</span><span class="tag info">${chOf(id)}</span><span class="sp"></span>${act}${uwAct && EXPORT_FROM.includes(uc.ustatus) && !isBnplId(id) ? `<button type="button" class="btn btn-outline btn-sm" data-cd="export">${icon('download', 'ic')}Export data sheet</button>` : ''}</div><p class="case-n">${note}</p>${st === 'Bank Submission' ? waitBox(id) : ''}${st === 'Rejected' ? rejectBox(id) + (isUW() ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="fix">Review and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${caseDr.tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${caseDr.tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === id || !e.id).length}</span></button></div>
         ${caseDr.tab === 'log' ? `<section class="cd-s">${caseLogHTML(id)}</section>` : `${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
@@ -1263,7 +1263,7 @@ ${docNo(n)}
       if (uc) bindUw(b, id);
     };
     caseDr = { draw, tab: 'details' };
-    drawer({ size: 'xl', title: esc(label(id)), sub: '', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
+    drawer({ size: 'case', title: esc(label(id)), sub: '', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
   }
   /* KYC cases: an edit of the merchant's general information is not applied directly. It becomes a case for the Underwriting team,
      related to the merchant KYC, and is applied only when Underwriting approves it. */
@@ -1340,7 +1340,7 @@ ${docNo(n)}
       if (uc) bindUw(b, key);
     };
     caseDr = { draw, tab: 'details' };
-    drawer({ size: 'xl', title: 'Merchant information update', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
+    drawer({ size: 'case', title: 'Merchant information update', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
   }
   /* Edit the general information of a submitted application: business info, website / social links, store image (POS) and payout methods.
      Pricing and the cases are not touched. Changes are made on a copy and only applied on Save. */
@@ -1431,7 +1431,7 @@ ${docNo(n)}
       if (uc) bindUw(b, key);
     };
     caseDr = { draw, tab: 'details' };
-    drawer({ size: 'xl', title: 'Service update', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
+    drawer({ size: 'case', title: 'Service update', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
   }
   function openEditGeneral(k) {
     const clone = o => JSON.parse(JSON.stringify(o));
