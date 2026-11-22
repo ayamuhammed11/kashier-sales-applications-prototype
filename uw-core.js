@@ -77,7 +77,8 @@ window.UW = (function () {
     };
     app.docs['National ID'] = { 'Front side': 'national-id-front.jpg', 'Back side': 'national-id-back.jpg' };
     app.docs['Commercial Registration (CR)'] = { File: 'cr-' + n + '.pdf' };
-    if (m.name !== 'Zayed Real Estate') app.docs['Bank Account Letter / IBAN proof'] = { File: 'iban-proof-' + n + '.pdf' };
+    app.docs['Bank Account Letter / IBAN proof'] = { File: 'iban-proof-' + n + '.pdf' };
+    app.docs['Tax Identification Card'] = { File: 'tax-card-' + n + '.pdf' };
     (m.docs || []).forEach(d => { app.docs[d] = { File: d.toLowerCase().replace(/[^a-z]+/g, '-') + '-' + n + '.pdf' }; });
     let c = 100 + n * 10;
     (m.svc || []).forEach(sv => {
@@ -120,7 +121,7 @@ window.UW = (function () {
       app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'sent a KYC update to Underwriting', ic: 'send', detail: changes.map(x => x.label + ': ' + (x.from == null || x.from === '' ? 'Not set' : x.from) + ' → ' + (x.to == null || x.to === '' ? 'Not set' : x.to)).join('; '), id: key });
     });
     app.nextCase = c + 1;
-    fillDemo(app, m, READY[m.name]);
+    fillDemo(app, m, 'full');   // every application is complete: all the merchant and legal details and documents are on it
     return app;
   }
   /* Demo: 'full' applications have everything the banks need; 'partial' ones only a few merchant details, so the gate has something to block. */
@@ -211,7 +212,7 @@ window.UW = (function () {
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 19;
+  const DEMO_VER = 20;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -301,8 +302,7 @@ window.UW = (function () {
     else c = s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1 ? build(s, id) : null;
     return c && (any || canSee(c)) ? c : null;
   }
-  /* Every submitted case reaches Underwriting, each on its own. A required document or link that is missing shows as a flagged item in the case,
-     so Underwriting can return it to Sales. */
+  /* Every submitted case reaches Underwriting, each on its own, and arrives complete. */
   const state = () => states().length > 0;
 
   /* ── Review checklist ── */
@@ -314,7 +314,8 @@ window.UW = (function () {
     const add = (key, lbl, tab, extra) => out.push(Object.assign({ key: key, label: lbl, tab: tab, state: (r[key] || {}).state || 'todo', reason: (r[key] || {}).reason || '' }, extra || {}));
     const names = d => Object.keys(s.docs[d] || {}).map(f => s.docs[d][f]).filter(Boolean), files = d => names(d).join(', ');
     // A required document that was never uploaded blocks approval: the case has to go back to Sales.
-    const flagMissing = () => out.forEach(x => { if (x.files) { x.files = x.files.filter(Boolean); if (!x.files.length) { x.state = 'flag'; x.missing = true; x.reason = x.key === 'web' ? 'No website or social media link was provided' : 'Required item was not uploaded'; } } });
+    // Every case arrives complete: nothing is detected or flagged as missing here.
+    const flagMissing = () => out.forEach(x => { if (x.files) x.files = x.files.filter(Boolean); });
     if (c.type === 'update') {                       // Service Update: every change to the service, current beside requested
       c.changes.forEach((x, i) => add('chg:' + i, x.label, 'changes', { from: x.from, to: x.to }));
       return out;

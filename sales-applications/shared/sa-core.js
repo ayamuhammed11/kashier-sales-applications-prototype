@@ -760,14 +760,13 @@
     return rows;
   }
   function legalDl() {
-    const L = LG(), x = legalOf(L, appO()), v = k => x.v(k) || '<span class="tag req">Missing</span>', t = k => x.v(k) ? esc(x.v(k)) : v(k);
+    const L = LG(), x = legalOf(L, appO()), t = k => esc(x.v(k) || '—');
     return `<dt>Owner full name</dt><dd>${t('ownerName')}</dd><dt>Legal form</dt><dd>${x.ind ? 'Sole proprietorship' : t('legalForm')}</dd><dt>Business address</dt><dd>${t('addr1')}${x.v('city') ? ', ' + esc(x.v('city')) : ''}</dd>
       <dt>${idLabel(appO())}</dt><dd dir="ltr">${t('ownerIdNo')}</dd>${x.tax ? `<dt>Tax card number</dt><dd>${t('taxNo')}</dd>` : ''}${x.cr ? `<dt>Commercial registration number</dt><dd>${t('crNo')}</dd>` : ''}`;
   }
   /* Its own card on the submitted application: the merchant's official identity for the bank. Underwriting corrects it here. */
   function legalCard() {
-    const x = legalOf(LG(), appO()), keys = LEGAL_KEYS.filter(k => !(k === 'legalForm' && x.ind) && !(k === 'taxNo' && !x.tax) && !(k === 'crNo' && !x.cr)), miss = keys.filter(k => !x.v(k)).length;
-    return `<section class="card sec prof-wide" id="legal-card"><div class="sub-hr"><h2 class="sub-h">Legal details ${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</h2></div>
+    return `<section class="card sec prof-wide" id="legal-card"><div class="sub-hr"><h2 class="sub-h">Legal details</h2></div>
       <p class="hint" style="margin:0">Sent to the bank with every service, as on the merchant's documents.${isUW() ? ' Only Sales can change them, through a KYC update.' : ' To change them, use Edit application details.'}</p><dl class="dl dl-s">${legalDl()}</dl></section>`;
   }
   /* The bank's data sheet for a service, ready to send: one row with the bank's own column names. Available to Underwriting from UW Approved on. */
@@ -777,15 +776,8 @@
     const csv = '\ufeff' + [rows.map(r => cell(r[1] || r[0])).join(','), rows.map(r => cell(r[0] === 'Company type' ? (String(r[2]).split(' · ')[1] || r[2]) : r[2])).join(',')].join('\r\n');
     const name = `${c.caseId || 'case'}-${chOf(id)}-bank-data-sheet.csv`, a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    const miss = rows.filter(r => !r[2]).map(r => r[0]);
-    log(`exported the ${label(id)} data sheet`, 'download', name + (miss.length ? ` · Missing: ${miss.join(', ')}` : ''), id); save();
-    toast(miss.length ? `${name} downloaded. ${miss.length} value${miss.length > 1 ? 's are' : ' is'} missing: ${miss.join(', ')}.` : `${name} downloaded`);
-  }
-  function bankSheetHTML(id) {
-    const rows = bankSheet(id), miss = rows.filter(r => !r[2]).length;
-    return `<section class="cd-s"><div class="cd-sh"><h3 class="sub-h">Bank onboarding data</h3>${miss ? `<span class="tag req">${miss} missing</span>` : '<span class="tag ok">Complete</span>'}</div>
-      <p class="hint" style="margin:0">The values for the bank's ${esc(chOf(id))} sheet, filled in by Sales on the application.</p>
-      <dl class="dl">${rows.map(r => `<dt>${esc(r[0])}${r[1] ? `<span class="ar"><bdi lang="ar">${esc(r[1])}</bdi></span>` : ''}</dt><dd>${r[2] ? `<span dir="auto">${esc(r[2])}</span>` : '<span class="tag req">Missing</span>'}</dd>`).join('')}</dl></section>`;
+    log(`exported the ${label(id)} data sheet`, 'download', name, id); save();
+    toast(`${name} downloaded`);
   }
   /* Every change request shows each field's current value next to the requested one. */
   const chgTable = (ch, newH = 'Requested', isNew = false) => { const v = x => x == null || x === '' ? 'Not set' : x;
