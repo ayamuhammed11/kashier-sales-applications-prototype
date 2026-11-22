@@ -223,13 +223,18 @@
     chg: { size: el => { st.size = +el.value; st.page = 1; } },
     act: { prev: () => { st.page--; refresh(); return false; }, next: () => { st.page++; refresh(); return false; } }
   };
-  /* A case opens in a drawer on the right, over the list: the same case view as on its application, with the Underwriting actions.
-     An agent acts only on the cases assigned to them; the others open view only. The drawer links to the full application. */
+  /* A case opens inside its application: the page goes to the application, which opens the case's drawer straight away, as if the user had
+     opened the application and then the case. The Underwriting user gets the Underwriting actions there; an agent acts only on the cases
+     assigned to them (ro=1 for the others). */
+  function caseUrl(id) {
+    const c = U.get(id); if (!c) return '';
+    const me = Cases.user(), i = id.indexOf('::');
+    return 'sales-applications/application.html?app=' + encodeURIComponent(id.slice(0, i)) + '&case=' + encodeURIComponent(id.slice(i + 2)) + '&as=uw' + (me.canReassign || c.assignee === me.name ? '' : '&ro=1');
+  }
   function openCase(href) {
     const m = /^sales-case\.html\?id=(.+)$/.exec(href || ''); if (!m) return false;
-    const id = decodeURIComponent(m[1]), c = U.get(id); if (!c) return false;
-    const me = Cases.user(), i = id.indexOf('::');
-    return SA.openCaseIn(U.stateFor(id.slice(0, i)), id.slice(i + 2), { role: 'uw', canAct: !!(me.canReassign || c.assignee === me.name), onClose: () => { loadRows(); SA.rerender(); } });
+    const url = caseUrl(decodeURIComponent(m[1])); if (!url) return false;
+    location.href = url; return true;
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-bmopen]')) { UWBM.open(() => SA.rerender()); return; } const tb = e.target.closest('[data-tab]'); if (tb) { st.tab = tb.dataset.tab; st.filters = {}; st.page = 1; SA.rerender(); return; } const tr = e.target.closest('tr[data-href], a.rc[href]'); if (tr) { const h = tr.dataset.href || tr.getAttribute('href'); if (openCase(h)) e.preventDefault(); else if (tr.dataset.href) location.href = h; } });
   document.addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[data-href]'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (!openCase(tr.dataset.href)) location.href = tr.dataset.href; } });
