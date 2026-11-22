@@ -327,9 +327,10 @@
   }
   function servicesIssues() {
     const out = [];
-    if (!S.order.length) out.push({ m: 'Add at least one service', target: 'services' });
-    S.order.forEach(id => svcIssues(id).forEach(m => out.push({ m: `${label(id)}: ${m.charAt(0).toLowerCase() + m.slice(1)}`, target: 'svc:' + id })));
-    flagged().filter(f => rejectedStill(f) && caseStatus(f.id) === 'Rejected').forEach(f => out.push({ m: `${label(f.id)}: change the rejected rate (${f.t.label})`, target: 'svc:' + f.id }));
+    const ids = S.adding ? newIds() : S.order;
+    if (!ids.length) out.push({ m: S.adding ? 'Add at least one new service' : 'Add at least one service', target: 'services' });
+    ids.forEach(id => svcIssues(id).forEach(m => out.push({ m: `${label(id)}: ${m.charAt(0).toLowerCase() + m.slice(1)}`, target: 'svc:' + id })));
+    flagged().filter(f => rejectedStill(f) && caseStatus(f.id) === 'Rejected' && !S.adding).forEach(f => out.push({ m: `${label(f.id)}: change the rejected rate (${f.t.label})`, target: 'svc:' + f.id }));
     if (hasCh('POS') && !(parseInt(S.terminals, 10) >= 1 && /^\d+$/.test(String(S.terminals).trim()))) out.push({ m: 'Enter the number of POS terminals (1 or more)', target: 'terminals' });
     return out;
   }
@@ -388,7 +389,7 @@
     const mIss = [!m.name.trim() && 'business name', !emailOk(m.email) && 'a valid email', !phoneOk(m.phone) && 'a phone with country code'].filter(Boolean);
     const lIss = ['ownerName', 'legalForm', 'city', 'addr1'].map(legalErr).filter(Boolean);
     const svc = servicesIssues(), docs = documentsIssues(), pay = payoutsIssues(), con = contractsIssues(), jus = justIssues();
-    return [
+    const all = [
       { k: 'merchant', label: 'Merchant details: business name, email and phone', done: !mIss.length, hint: mIss.length ? 'Enter ' + mIss.join(', ') : '', target: 'merchant' },
       { k: 'legal', label: 'Legal details: owner name, legal form, city and address', done: !lIss.length, hint: lIss[0] ? lIss[0] + (lIss.length > 1 ? ` (+${lIss.length - 1} more)` : '') : '', target: 'legal' },
       { k: 'type', label: 'Merchant type and industry', done: !!(S.entity && S.industry), hint: !S.entity ? 'Pick the merchant type' : !S.industry ? 'Pick the industry' : '', target: 'criteria' },
@@ -400,6 +401,8 @@
       { k: 'contracts', label: 'Service setup: Contracts', done: !con.length && S.order.length > 0, hint: S.order.length ? (con[0] || '') : 'Add a service first', target: 'contracts' },
       { k: 'just', label: 'Add a justification for every rate needing approval', done: !jus.length, hint: jus.length ? `${jus.length} rate${jus.length > 1 ? 's' : ''} below published need${jus.length > 1 ? '' : 's'} a justification` : '', target: 'justify' }
     ];
+    if (!S.adding) return all;
+    return all.filter(i => ['svc1', 'pricing', 'docs', 'payout', 'contracts', 'just'].includes(i.k)).map(i => i.k === 'svc1' ? Object.assign({}, i, { label: 'At least one new service selected', done: newIds().length > 0 }) : i);
   }
   const openItems = () => checklist().filter(i => !i.done);
 
@@ -609,8 +612,8 @@
   }
   function openSubmit() {
     if (openItems().length) return;
-    const re = hasRejectedCase();
-    modal({ title: re ? 'Resubmit application' : 'Submit application', body: `<p class="hint" style="margin:0 0 12px">${re ? 'Only the returned cases are resubmitted. The other cases are not affected.' : 'Each service becomes its own case with its own status.'}</p><div class="fld"><label for="sc">Comment <span class="opt">(optional)</span></label><textarea class="inp" id="sc" placeholder="Anything the reviewers should know?"></textarea><span class="hint">It is shown with the application to the approvers and the Onboarding team.</span></div>`,
+    const add = !!S.adding, re = !add && hasRejectedCase();
+    modal({ title: add ? 'Submit service request' : re ? 'Resubmit application' : 'Submit application', body: `<p class="hint" style="margin:0 0 12px">${add ? `${newIds().map(label).map(esc).join(', ')} ${newIds().length > 1 ? 'are submitted, each as its own case' : 'is submitted as its own case'}. The services already on the application are not affected.` : re ? 'Only the returned cases are resubmitted. The other cases are not affected.' : 'Each service becomes its own case with its own status.'}</p><div class="fld"><label for="sc">Comment <span class="opt">(optional)</span></label><textarea class="inp" id="sc" placeholder="Anything the reviewers should know?"></textarea><span class="hint">It is shown with the application to the approvers and the Onboarding team.</span></div>`,
       foot: `<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-primary" data-y>${re ? 'Resubmit' : 'Submit'}</button>`,
       bind(api) {
         api.el.querySelector('[data-n]').onclick = api.close;
@@ -621,13 +624,14 @@
           if (!S.appId) S.appId = 'APP-' + String(Math.floor(10000000 + Math.random() * 89999999));
           S.submittedBy = ME.name;
           S.submittedAt = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-          const sent = S.order.filter(id => ['New', 'Rejected'].includes(caseStatus(id)));
+          const sent = S.order.filter(id => (add ? ['New'] : ['New', 'Rejected']).includes(caseStatus(id)));
           sent.forEach(id => setCase(id, caseRoute(id), { reject: null })); S.fixing = false;
           sent.forEach(id => log(`${re ? 'resubmitted' : 'submitted'} the ${label(id)} case`, 'send', `${S.cases[id].caseId} · ${S.cases[id].status}`, id));
-          log(re ? 'resubmitted the returned cases with revised rates' : 'submitted the application', 'send', `Application ID ${S.appId} · ${sent.length} case${sent.length === 1 ? '' : 's'}: ${sent.map(label).join(', ')}${S.submitComment ? ' · Comment: ' + S.submitComment : ''}`);
-          if (!re) { addKybCase(); addPayoutCase(); }
-          if (!re && S.payouts.length && !PC()) sendPayoutLink(false);
-          api.close(); scrollTo(0, 0); rerender(); toast(re ? 'Application resubmitted' : S.payouts.length ? 'Application submitted. The merchant got a link to confirm the payout details.' : 'Application submitted');
+          log(add ? 'requested new services' : re ? 'resubmitted the returned cases with revised rates' : 'submitted the application', 'send', `Application ID ${S.appId} · ${sent.length} case${sent.length === 1 ? '' : 's'}: ${sent.map(label).join(', ')}${S.submitComment ? ' · Comment: ' + S.submitComment : ''}`);
+          if (!re && !add) { addKybCase(); addPayoutCase(); }
+          if (!re && !add && S.payouts.length && !PC()) sendPayoutLink(false);
+          if (add) { S.adding = false; delete S.addSnap; S.step = 0; }
+          api.close(); scrollTo(0, 0); rerender(); toast(add ? `${sent.length} service${sent.length === 1 ? '' : 's'} requested` : re ? 'Application resubmitted' : S.payouts.length ? 'Application submitted. The merchant got a link to confirm the payout details.' : 'Application submitted');
         };
       } });
   }
@@ -649,23 +653,34 @@
   const caseChip = id => chipOf(caseStatus(id), S.cases[id] || {});
   const isEditable = s => s === 'New' || s === 'Rejected';
   /* The form is open until the first submit, and again when the salesperson chooses to fix a returned case. */
-  const isEdit = () => !submitted() || (!!S.fixing && hasRejectedCase());
+  const isEdit = () => !submitted() || !!S.adding || (!!S.fixing && hasRejectedCase());
+  /* Request new service (after the first submission): the same Service Setup step as the first time, for the new services only.
+     The services already submitted are not shown or changed; submitting sends only the new ones, each as its own case. */
+  const newIds = () => S.order.filter(id => caseStatus(id) === 'New');
+  function startAdding() {
+    S.addSnap = JSON.stringify({ svc: S.svc, order: S.order, docs: S.docs, reqContracts: S.reqContracts, contracts: S.contracts, just: S.just, terminals: S.terminals, websites: S.websites, storeImage: S.storeImage, logN: S.log.length });
+    S.adding = true; S.step = 0;
+  }
+  function cancelAdding() {
+    if (S.addSnap) { const o = JSON.parse(S.addSnap); ['svc', 'order', 'docs', 'reqContracts', 'contracts', 'just', 'terminals', 'websites', 'storeImage'].forEach(k => { S[k] = o[k]; }); S.log.splice(0, Math.max(0, S.log.length - o.logN)); }
+    S.adding = false; delete S.addSnap; S.step = 0;
+  }
   const whenStr = t => { const d = new Date(t); return isNaN(d) ? t : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
   /* Page header, as the agent portal on staging (document-types): no bar, no border. Breadcrumb, title and
      description on the start side, the profile on the end side, 32px before the content. The page action is
      its own end-aligned row at the start of the content (like Export CSV / Add Document Type there). */
   const chevR = '<svg class="ic-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' + (window.AGENT_ICONS ? AGENT_ICONS['chevron-right'] : '') + '</svg>';
   function headTop() {
-    const last = S.log[0], title = isEdit() ? 'Complete Onboarding Application' : 'Onboarding Application';
+    const last = S.log[0], title = S.adding ? 'Request New Service' : isEdit() ? 'Complete Onboarding Application' : 'Onboarding Application';
     return `<header class="hdr"><div class="hdr-l">
-        <nav class="crumb" aria-label="Breadcrumb"><a href="#">My Applications</a>${chevR}<span aria-current="page">${isEdit() ? title : esc(S.merchant.name)}</span></nav>
+        <nav class="crumb" aria-label="Breadcrumb"><a href="#">My Applications</a>${chevR}<span aria-current="page">${S.adding ? esc(S.merchant.name) : isEdit() ? title : esc(S.merchant.name)}</span></nav>
         <h1>${title}</h1>
-        <p class="desc">${isEdit() && submitted() ? 'One or more cases were returned to you. Change the rejected rates and resubmit. The other cases carry on unchanged.' : isEdit() ? 'Finish onboarding this lead into a live merchant. Capture their business criteria and services below. The required documents checklist updates automatically as you go, exactly like the merchant will see it.' : 'Everything about this merchant in one place. Open a case to see its full details and logs.'}</p>
-        <div class="ph-meta">${isEdit() && submitted() ? appChip() : ''}${submitted() ? `<span class="mi"><b>${esc(S.appId)}</b></span>` : ''}<span class="mi">${icon('link', 'ic-14')}<span>Zoho CRM record <a href="#" target="_blank" rel="noopener">ZOHO-00002 ${icon('ext', 'ic-14')}</a></span></span>${last ? `<span class="mi">${icon('clock', 'ic-14')}<span>Last activity ${esc(whenStr(last.t))} by ${esc(last.who)} · <button type="button" class="link-btn" data-act="logs">View logs</button></span></span>` : ''}</div>
+        <p class="desc">${S.adding ? 'Add the services this merchant needs, then the documents and contracts they require. Each new service is submitted as its own case; the services already on the application are not changed.' : isEdit() && submitted() ? 'One or more cases were returned to you. Change the rejected rates and resubmit. The other cases carry on unchanged.' : isEdit() ? 'Finish onboarding this lead into a live merchant. Capture their business criteria and services below. The required documents checklist updates automatically as you go, exactly like the merchant will see it.' : 'Everything about this merchant in one place. Open a case to see its full details and logs.'}</p>
+        <div class="ph-meta">${isEdit() && submitted() && !S.adding ? appChip() : ''}${submitted() ? `<span class="mi"><b>${esc(S.appId)}</b></span>` : ''}<span class="mi">${icon('link', 'ic-14')}<span>Zoho CRM record <a href="#" target="_blank" rel="noopener">ZOHO-00002 ${icon('ext', 'ic-14')}</a></span></span>${last ? `<span class="mi">${icon('clock', 'ic-14')}<span>Last activity ${esc(whenStr(last.t))} by ${esc(last.who)} · <button type="button" class="link-btn" data-act="logs">View logs</button></span></span>` : ''}</div>
       </div><button type="button" class="profile" aria-label="Account: ${ME.name}"><span class="pav">${ME.init}</span><span class="pdata"><span class="pname">${ME.name}</span><span class="pmail">${ME.email}</span></span>${icon('chevron', 'ic-16')}</button></header>`;
   }
   /* Page actions row: Watch / Unwatch for approvers (FIN-28612). Cancel and Reopen live on each case (FIN-28567, FIN-30327). */
-  const headActions = () => isApprover() && submitted() && S.order.some(id => !['Live', 'Canceled'].includes(caseStatus(id))) ? `<button type="button" class="btn btn-outline" data-act="watch" aria-pressed="${!!S.watch[ME.key]}">${icon('bell', 'ic')}${S.watch[ME.key] ? 'Unwatch' : 'Watch'}</button>` : '';
+  const headActions = () => isApprover() && !isUW() && submitted() && S.order.some(id => !['Live', 'Canceled'].includes(caseStatus(id))) ? `<button type="button" class="btn btn-outline" data-act="watch" aria-pressed="${!!S.watch[ME.key]}">${icon('bell', 'ic')}${S.watch[ME.key] ? 'Unwatch' : 'Watch'}</button>` : '';
   /* Returned to the salesperson: what was rejected, by whom, and why (FIN-28405 rejected rates). */
   function returnedBanner() {
     const cs = S.order.filter(id => caseStatus(id) === 'Rejected'); if (!cs.length || !S.fixing) return '';
@@ -974,12 +989,14 @@ ${docNo(n)}
   }
   const liveOf = id => (S.cases[id] && S.cases[id].liveSince) || S.liveSince || '';
   const banksOf = id => S.svc[id].lines.map(l => l.bank).filter(Boolean);
+  const isBnplId = id => !!(window.UW && UW.BNPL ? UW.BNPL : ['Valu', 'OCTO', 'Souhoola', 'Contact', 'Mogo', 'Tru', 'Forsa']).includes(nmOf(id));
   function trackOf(id) {
     const st = caseStatus(id), fl = flagged().filter(f => f.id === id);
     const reviewed = fl.filter(f => decisionOf(f)).length, approvedN = fl.filter(approvedOk).length;
     if (st === 'Canceled' || st === 'New') return '';
     /* The steps are the case statuses of the Cases module, in order, so the tracker and the status chip always say the same thing. */
-    const steps = (fl.length ? ['Submitted', 'Rate Approval'] : ['Submitted']).concat(['Underwriting Review', 'UW Approved', 'Sent to Bank', 'Pending Onboarding Configurations', 'Active']);
+    // BNPL services are not sent to a bank: UW Approved is followed by Pending Onboarding Configurations.
+    const steps = (fl.length ? ['Submitted', 'Rate Approval'] : ['Submitted']).concat(['Underwriting Review', 'UW Approved'], isBnplId(id) ? [] : ['Sent to Bank'], ['Pending Onboarding Configurations', 'Active']);
     const u = uwStatus(st, S.cases[id] || {}), now = u ? u.text : '';
     // Off the main path: returned to Sales stops at the step it was returned from; rejected by the bank stops at Sent to Bank.
     const r = (S.cases[id] || {}).reject || {}, off = now === 'Pending Sales Action' ? (r.from === 'bank' ? 'Sent to Bank' : r.source === 'approver' && fl.length ? 'Rate Approval' : 'Underwriting Review') : now === 'Rejected by Bank' ? 'Sent to Bank' : '';
@@ -1094,7 +1111,7 @@ ${docNo(n)}
   function profileHead(sub) {
     const initials = S.merchant.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return `<section class="card prof-h"><span class="prof-av" aria-hidden="true">${esc(initials)}</span>
-      ${sub && canEditApp() ? `<button type="button" class="btn btn-outline prof-edit" data-act="editGeneral" ${kycOpen() ? 'disabled title="A KYC update is already open in Cases"' : ''}>${icon('pencil', 'ic')}Edit</button>` : ''}
+      ${sub && canEditApp() ? `<div class="prof-acts"><button type="button" class="btn btn-outline prof-edit" data-act="editGeneral" ${kycOpen() ? 'disabled title="A KYC update is already open in Cases"' : ''}>${icon('pencil', 'ic')}Edit</button><button type="button" class="btn btn-outline" data-act="reqSvc">${icon('plus', 'ic')}Request new service</button></div>` : ''}
       <div class="prof-id"><h2>${esc(S.merchant.name || 'New merchant')}${sub && S.mid ? ` <span class="mid" title="Account MID">${esc(S.mid)}</span>` : ''} ${appChip()}</h2><p>${esc(S.industry)} · ${esc(S.entity)}${S.owner ? ' · ' + esc(S.owner) : ''}</p>
         <div class="prof-meta"><span class="mi">${icon('user', 'ic-14')}<a href="mailto:${esc(S.merchant.email)}">${esc(S.merchant.email)}</a></span><span class="mi" dir="ltr">${esc(S.merchant.phone)}</span>${sub ? `<span class="mi">${icon('link', 'ic-14')}<span>${esc(S.appId)}</span></span><span class="mi">${icon('send', 'ic-14')}<span>Submitted ${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</span></span>` : ''}</div></div></section>`;
   }
@@ -1568,7 +1585,7 @@ ${docNo(n)}
     const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a">${canEditLive() ? `<button type="button" class="btn btn-outline btn-sm" data-act="editLive" data-id="${esc(id)}" aria-label="Edit ${esc(label(id))}">${icon('pencil', 'ic')}Edit service</button>` : ''}<button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
     const noPend = !pending.length && !kycPending.length && !updPending.length, noOther = !canceled.length && !kycDone.length && !updDone.length;
     const casesMsg = !S.order.length && !S.kyc.length ? 'No cases yet.' : noPend && noOther ? 'No pending cases. Every case is live.' : noPend ? 'No pending cases.' : '';
-    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div>${canEditApp() ? `<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Request new service</button>` : ''}</div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
+    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
     const frow = (lbl, file, thumb) => `<div class="frow"><div class="fi-w">${thumb ? `<span class="fthumb" aria-hidden="true">${icon('photo', 'ic-24')}</span>` : ''}<div class="fi"><b>${esc(lbl)}</b><span class="muted">${esc(file)}</span></div></div><div class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(file)}" data-l="${esc(lbl)}">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(file)}">${icon('download', 'ic')}Download</button></div></div>`;
@@ -1650,6 +1667,8 @@ ${docNo(n)}
     dlFile: d => { toast(`Downloading ${d.f}`); return false; },
     svcLogs: d => { const id = d.id; drawer({ size: 'md', title: 'Activity log', sub: `${esc(label(id))} · ${esc((S.cases[id] || {}).caseId || '')}`, render(api) { api.body.innerHTML = caseLogHTML(id); } }); return false; },
     dlAll: d => { const f = d.k === 'docs' ? 'documents' : 'contracts'; toast(`Downloading ${d.n} file${+d.n === 1 ? '' : 's'} as ${f}-${S.appId.toLowerCase()}.zip`); return false; },
+    reqSvc: () => { if (!canEditApp() || !submitted()) return false; startAdding(); rerender(); scrollTo(0, 0); return false; },
+    cancelAdd: () => { confirmBox({ title: 'Cancel this service request?', body: newIds().length ? `${newIds().map(label).map(esc).join(', ')} won't be requested.` : 'Nothing is requested.', ok: 'Cancel request', danger: true }).then(ok => { if (ok) { cancelAdding(); rerender(); scrollTo(0, 0); } }); return false; },
     sendPayLink: () => { if (!canEditApp() || !S.payouts.length) return false; const again = !!PC(); sendPayoutLink(again); rerender(); toast(again ? 'Link sent again to the merchant' : 'Confirmation link sent to the merchant'); return false; },
     editGeneral: () => { if (canEditApp()) openEditGeneral(); return false; },
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
@@ -1715,7 +1734,7 @@ ${docNo(n)}
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'caseRef', 'sendPayLink', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'caseRef', 'sendPayLink', 'reqSvc', 'cancelAdd', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
@@ -1833,7 +1852,7 @@ ${docNo(n)}
     get S() { return S; }, reload: load, mount, navIcon, rerender, soft, toast, icon, esc, fmtN, label, chOf, nmOf, isCard, needsBank, multiBank,
     CHANNELS, SVC_NAMES, SVC_HINT, SERVICES, BANKS, tiersFor, verdict, verdictHTML, flagged, pubText, rateText, sortedRules, bestRule, applyRule, ruleRate,
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
-    commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, canEditApp, merchantFields, legalFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
+    commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, canEditApp, newIds, startAdding, merchantFields, legalFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
     openServiceSetup, beginSetup, cancelSetup, stepperHTML, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, openCaseIn, statusBtn, statusMenu, get ME() { return ME; }
   };

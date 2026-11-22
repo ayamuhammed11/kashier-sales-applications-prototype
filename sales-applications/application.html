@@ -192,12 +192,13 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
     const src = c.lines.every(l => l.rule && !l.custom) ? 'From published pricing' : c.lines.some(l => l.custom || (!l.rule && Object.keys(l.rates).length)) ? 'Custom pricing' : '';
     return `${lines}${src ? `<span class="muted">${src}${SA.isCard(id) ? ' · ' + esc(SA.optsSummary(id)) : ''}</span>` : SA.isCard(id) ? `<span class="muted">${esc(SA.optsSummary(id))}</span>` : ''}`;
   }
+  const shownIds = () => SA.S.adding ? SA.newIds() : SA.S.order;
   function servicesView() {
     const S = SA.S;
-    if (!S.order.length) return `<div class="empty-line" style="padding:32px 16px;display:flex;flex-direction:column;align-items:center;gap:12px">No services yet. Add the services this merchant needs; each one is set up with its published pricing.<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Add service</button></div>`;
+    if (!shownIds().length) return `<div class="empty-line" style="padding:32px 16px;display:flex;flex-direction:column;align-items:center;gap:12px">${S.adding ? 'No new services yet. Add the services this merchant needs; each one is set up with its published pricing and submitted as its own case.' : 'No services yet. Add the services this merchant needs; each one is set up with its published pricing.'}<button type="button" class="btn btn-outline" data-act="addSvc">${icon('plus', 'ic')}Add service</button></div>`;
     const head = `<div class="sl-hd" aria-hidden="true"><span>Service</span><span>Model</span><span>Institution</span><span>Rates</span><span>Status</span><span></span></div>`;
     const groups = SA.CHANNELS.map(ch => {
-      const ids = S.order.filter(id => SA.chOf(id) === ch); if (!ids.length) return '';
+      const ids = shownIds().filter(id => SA.chOf(id) === ch); if (!ids.length) return '';
       const term = ch === 'POS' ? (/^\d+$/.test(String(S.terminals).trim()) && +S.terminals >= 1 ? `<span class="term">${icon('device', 'ic')}${esc(S.terminals)} terminal${+S.terminals === 1 ? '' : 's'}</span>` : `<span class="term miss">${icon('warn', 'ic-14')}Number of terminals missing</span>`) + `<button type="button" class="link-btn" data-act="terms">${/^\d+$/.test(String(S.terminals).trim()) ? 'Change' : 'Add'}</button>` : '';
       return `<div class="sl-gh"><b>${ch} services · ${ids.length}</b><span class="sp"></span>${term}</div>${head}${ids.map(id => {
         const c = S.svc[id], banks = c.lines.map(l => l.bank).filter(Boolean);
@@ -318,24 +319,33 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
     return `<span class="ring ${n ? '' : 'done'}" style="--p:${pct}" role="img" aria-label="${all.length - n} of ${all.length} done">${n ? `<span>${all.length - n}/${all.length}</span>` : SA.icon('tick', 'ic-16', 2.5)}</span>
       <span class="hub-t"><b>${n ? `${n} item${n > 1 ? 's' : ''} left to submit` : 'Ready to submit'}</b>${f ? `<span class="stwhy">Next: ${esc(f.hint || f.label)}</span>` : '<span class="stwhy">Every checklist item is done.</span>'}</span>
       <button type="button" class="btn btn-ghost hub-cl" data-act="checklist" aria-haspopup="dialog" aria-expanded="false">${SA.icon('chevron', 'ic hub-chev')}Checklist</button>
-      ${go || `<button type="button" class="btn btn-primary" data-act="submit" ${n ? 'disabled' : ''}>${re ? 'Resubmit Application' : 'Submit Merchant Application'}</button>`}`;
+      ${go || `<button type="button" class="btn btn-primary" data-act="submit" ${n ? 'disabled' : ''}>${SA.S.adding ? 'Submit Service Request' : re ? 'Resubmit Application' : 'Submit Merchant Application'}</button>`}`;
   }
 
+  function setupSec(i, title, extra = '') {
+    const S = SA.S;
+    return `<section class="card sec" id="s-setup" aria-labelledby="h3s"><div class="sec-h"><div class="tt"><h2 id="h3s">${title}</h2><p>Choose which services to activate and set up their institution, model and fees, then the documents it all requires, the merchant's payout methods, and any contracts already signed.</p></div>${extra}</div>
+          <div data-live="stp">${stepper()}</div>
+          <div class="step-h"><h3 id="stepH" tabindex="-1">Step ${i + 1} of 4: ${STEPS[i].t}</h3>${STEPS[i].opt ? '<span class="opt">(optional)</span>' : ''}${i === 0 && shownIds().length ? `<button type="button" class="btn btn-outline btn-sm" data-act="addSvc">${icon('plus', 'ic')}Add service</button>` : ''}</div>${HINT[i] ? `<p class="hint" style="margin:-12px 0 0">${HINT[i]}</p>` : ''}
+          ${stepBody(i)}
+          <div class="sfoot" data-live="sfoot">${footFor(i)}</div></section>`;
+  }
   const V = {
     key: 'final',
     render() {
       const page = document.getElementById('page');
       if (!SA.isEdit()) { page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.readOnlyView()}</div>`; return; }
       const i = cur(), S = SA.S;
+      if (S.adding) {   // Request new service: the Service Setup step alone, for the new services
+        page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}</div>${setupSec(i, 'Service Setup', '<button type="button" class="btn btn-outline btn-sm" data-act="cancelAdd">Cancel request</button>')}
+          <div class="c-status" data-live="status">${statusBar()}</div></div>`;
+        return;
+      }
       page.innerHTML = `<div class="wrap"><div class="ph">${SA.headTop()}<div class="ph-row">${SA.headActions()}</div></div>${SA.draftHead()}${SA.returnedBanner()}
         <div class="c-top"><section class="card sec" id="s-merchant" aria-labelledby="h1s"><div class="sec-h"><div class="tt"><h2 id="h1s">1. Merchant Details</h2><p>Basic information to create the application record.</p></div></div>${SA.merchantFields({ noLegal: true })}</section>
         <section class="card sec" id="s-criteria" aria-labelledby="h2s"><div class="sec-h"><div class="tt"><h2 id="h2s">2. Criteria</h2><p>Merchant type, industry and activities decide the pricing rules and documents.</p></div></div>${SA.criteriaFields()}</section></div>
         <section class="card sec" id="s-legal" aria-labelledby="hLs"><div class="sec-h"><div class="tt"><h2 id="hLs">3. Legal Details</h2><p>The merchant's official identity for the bank, in English as on their documents. The ID, tax and registration numbers are entered with their documents in Service Setup.</p></div></div>${SA.legalFields({ bare: true })}</section>
-        <section class="card sec" id="s-setup" aria-labelledby="h3s"><div class="sec-h"><div class="tt"><h2 id="h3s">4. Service Setup</h2><p>Choose which services to activate and set up their institution, model and fees, then the documents it all requires, the merchant's payout methods, and any contracts already signed.</p></div></div>
-          <div data-live="stp">${stepper()}</div>
-          <div class="step-h"><h3 id="stepH" tabindex="-1">Step ${i + 1} of 4: ${STEPS[i].t}</h3>${STEPS[i].opt ? '<span class="opt">(optional)</span>' : ''}${i === 0 && S.order.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="addSvc">${icon('plus', 'ic')}Add service</button>` : ''}</div>${HINT[i] ? `<p class="hint" style="margin:-12px 0 0">${HINT[i]}</p>` : ''}
-          ${stepBody(i)}
-          <div class="sfoot" data-live="sfoot">${footFor(i)}</div></section>
+        ${setupSec(i, '4. Service Setup')}
         ${SA.commentsSection()}
         <div class="c-status" data-live="status">${statusBar()}</div></div>`;
     },
@@ -347,7 +357,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
     reset() { SA.S.step = 0; },
     act: {
       checklist: (d, el) => { SA.popover(el, `<div class="pop-b hub-pop">${SA.checklistHTML()}</div>`, p => p.querySelector('button')?.focus(), { width: 420 }); return false; },
-      addSvc: () => { if (SA.canEditApp()) openSvcDrawer('add', null, SA.submitted()); return false; },
+      addSvc: () => { if (!SA.canEditApp()) return false; if (SA.submitted() && !SA.S.adding) { SA.startAdding(); SA.rerender(); scrollTo(0, 0); return false; } openSvcDrawer('add', null, false); return false; },
       editSvc: d => { openSvcDrawer('edit', d.id, !!d.flow); return false; },
       dCh: d => { dr.ch = d.v; },
       dPick: d => { SA.addService(d.id); dr.id = d.id; dr.sel = {}; dr.adv = {}; dr.showRules = {}; setTimeout(() => dr && dr.api.el.querySelector('#dm')?.focus()); },

@@ -577,5 +577,9 @@ body.locked { overflow: hidden; }
 
 /* Change requests: the current (old) value and the requested (new) value, each marked */
 .chg-old, .chg-new { display: inline-block; padding: 2px 8px; border-radius: 2px; overflow-wrap: anywhere; }
-.chg-old { background: var(--error-10); color: var(--destructive); text-decoration: line-through; text-decoration-thickness: 1px; }
+.chg-old { background: var(--error-10); color: var(--destructive); }
 .chg-new { background: var(--lemon-10); color: var(--lemon-80); font-weight: 600; }
+
+/* Profile actions: Edit and Request new service, side by side */
+.prof-acts { display: flex; gap: 8px; flex-wrap: wrap; align-self: flex-start; order: 3; }
+.prof-acts .prof-edit { order: 0; }

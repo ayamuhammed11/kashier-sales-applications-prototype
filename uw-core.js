@@ -431,7 +431,17 @@ window.UW = (function () {
   /* Why a status has no moves. */
   const END = { 'Pending Sales Action': 'Waiting for Sales to fix the case and resubmit it. It comes back to Underwriting Review.', 'Rejected by Bank': 'Final status: the bank rejected the merchant.',
     Active: 'Final status: the service is live.', 'UW Approved': 'Final status: the changes are applied.' };
-  const flowOf = c => FLOW[c.type === 'service' ? 'service' : 'change'];
+  /* BNPL and consumer-finance services are not sent to a bank: once Underwriting approves, the case goes straight to onboarding configurations. */
+  const BNPL = ['Valu', 'OCTO', 'Souhoola', 'Contact', 'Mogo', 'Tru', 'Forsa'];
+  const isBnpl = c => c.type === 'service' && BNPL.indexOf(nmOf(c.sid || '')) > -1;
+  FLOW.bnpl = {
+    'Underwriting Review': [['Approve', 'UW Approved'], ['Reject', 'Pending Sales Action']],
+    'UW Approved': [['Start onboarding configurations', 'Pending Onboarding Configurations']],
+    'Pending Onboarding Configurations': [['Configurations done', 'Active']],
+    'Pending Sales Action': [],
+    Active: []
+  };
+  const flowOf = c => FLOW[c.type === 'service' ? (isBnpl(c) ? 'bnpl' : 'service') : 'change'];
   /* Only the moves the workflow allows from the case's current status. */
   const transitions = c => (flowOf(c)[c.ustatus] || []).map(([name, to, bank]) => ({ name: name, to: to, bank: bank || '' }));
   const endNote = c => transitions(c).length ? '' : (END[c.ustatus] || 'No moves from this status.');
@@ -690,6 +700,6 @@ window.UW = (function () {
   }
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
-    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, setStatus: setStatus, FLOW: FLOW, flowOf: flowOf, transitions: transitions, endNote: endNote, transition: transition, needsComment: needsComment, stateFor: stateFor, saveState: save, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
+    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, setStatus: setStatus, FLOW: FLOW, flowOf: flowOf, transitions: transitions, endNote: endNote, BNPL: BNPL, isBnpl: isBnpl, transition: transition, needsComment: needsComment, stateFor: stateFor, saveState: save, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
     resetDemo: resetDemo, TYPE: TYPE, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();
