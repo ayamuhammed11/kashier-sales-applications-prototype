@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared/base.css?v=20261123c">
-<link rel="stylesheet" href="shared/sa.css?v=20261123c">
+<link rel="stylesheet" href="shared/base.css?v=20261123d">
+<link rel="stylesheet" href="shared/sa.css?v=20261123d">
 <style>
   /* Final: C's page structure; services are viewed on the page, added and edited in a drawer. */
   .wrap { max-width: 1600px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
@@ -144,20 +144,20 @@
   .hub-pop { padding: 16px 20px 12px; overflow-y: auto; max-height: 70vh; }
   @media (max-width: 767px) { .c-status { flex-wrap: wrap; } .c-status .btn-primary { flex-basis: 100%; } .hub-cl { margin-inline-start: auto; } }
 </style>
-<link rel="stylesheet" href="../uw-case-view.css?v=20261123c">
+<link rel="stylesheet" href="../uw-case-view.css?v=20261123d">
 <link rel="icon" type="image/svg+xml" href="../img/kashier-favicon.svg">
 </head>
 <body>
 <script src="shared/agent-icons.js"></script>
-<script src="shared/sa-core.js?v=20261123c"></script>
-<script src="../rate-decisions.js?v=20261123c"></script>
-<script src="../cases-core.js?v=20261123c"></script>
+<script src="shared/sa-core.js?v=20261123d"></script>
+<script src="../rate-decisions.js?v=20261123d"></script>
+<script src="../cases-core.js?v=20261123d"></script>
 <script>/* The bank export files are not part of the public prototype: load them only where they exist, so the public site makes no failing requests. */
 if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'nbe-export', 'bm-defaults', 'bm-export'].map(f => '<script src="../' + f + '.js"><\/script>').join(''));</script>
-<script src="shared/bank-sheet.js?v=20261123c"></script>
-<script src="../uw-core.js?v=20261123c"></script>
-<script src="../uw-bm.js?v=20261123c"></script>
-<script src="../uw-case-view.js?v=20261123c"></script>
+<script src="shared/bank-sheet.js?v=20261123d"></script>
+<script src="../uw-core.js?v=20261123d"></script>
+<script src="../uw-bm.js?v=20261123d"></script>
+<script src="../uw-case-view.js?v=20261123d"></script>
 <script>
 (function () {
   const VARIANTS = [{ key: 'final', href: 'application.html', label: 'Final · Application' }, { key: 'a', href: 'variant-a.html', label: 'A' }, { key: 'b', href: 'variant-b.html', label: 'B' }, { key: 'c', href: 'variant-c.html', label: 'C' }, { key: 'cmp', href: 'compare.html', label: 'Compare' }];

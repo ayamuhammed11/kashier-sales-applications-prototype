@@ -763,11 +763,9 @@
   const EXPORT_FROM = ['UW Approved', 'Sent to Bank', 'Pending Onboarding Configurations', 'Active', 'Rejected by Bank'];
   function exportSheet(id) {
     if (!window.BankSheet) { toast('The data sheet could not be built'); return; }
-    const L = LG(), x = legalOf(L, appO()), c = S.cases[id] || {}, b = c.bank || {}, web = S.websites.map(w => w.trim()).filter(Boolean)[0] || '';
-    const model = { 'Payment link': 'Payment Link', 'Merchant website': 'Merchant Website', 'Merchant app': 'Merchant App' }[b.intModel] || (web ? 'Merchant Website' : 'Payment Link');
-    const r = window.BankSheet.build({ channel: chOf(id), caseId: c.caseId, brand: S.merchant.name, legalName: L.legalName, ownerName: x.v('ownerName'), legalForm: x.v('legalForm'), ind: x.ind, tax: x.tax, cr: x.cr, taxNo: x.v('taxNo'), crNo: x.v('crNo'),
-      ownerIdNo: x.v('ownerIdNo'), address: [x.v('addr1'), x.v('addr2')].filter(Boolean).join(' '), city: x.v('city'), gov: L.gov, mobile: S.merchant.phone, email: S.merchant.email, website: web, industry: S.industry, activityAr: '',
-      mid: S.mid, ticket: (b.avgTicket || '1000') + ' EGP', intModel: model, intType: b.intType || '2.5P', mcc: b.mcc, discount: b.bmDiscountCode });
+    const L = LG(), x = legalOf(L, appO()), c = S.cases[id] || {}, web = S.websites.map(w => w.trim()).filter(Boolean)[0] || '';
+    const r = window.BankSheet.build({ channel: chOf(id), caseId: c.caseId, brand: S.merchant.name, ownerName: x.v('ownerName'), legalForm: x.v('legalForm'), ind: x.ind, tax: x.tax, cr: x.cr, taxNo: x.v('taxNo'), crNo: x.v('crNo'),
+      ownerIdNo: x.v('ownerIdNo'), address: [x.v('addr1'), x.v('addr2')].filter(Boolean).join(' '), city: x.v('city'), gov: L.gov, mobile: S.merchant.phone, email: S.merchant.email, website: web });
     const a = document.createElement('a'); a.href = URL.createObjectURL(r.blob); a.download = r.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     log(`exported the ${label(id)} data sheet`, 'download', r.name, id); save();
     toast(`${r.name} downloaded`);
