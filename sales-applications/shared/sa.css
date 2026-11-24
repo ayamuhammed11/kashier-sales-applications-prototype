@@ -209,9 +209,9 @@ textarea.inp { height: auto; min-height: 72px; padding: 10px 12px; resize: verti
 .drawer { position: fixed; inset-block: 0; inset-inline-end: 0; width: 100%; max-width: 620px; background: var(--white); z-index: 81; display: flex; flex-direction: column; border-inline-start: 1px solid var(--border); }
 .drawer.md { max-width: 480px; } .drawer.xl { max-width: 880px; } .drawer.full { max-width: none; }
 /* Case details: a side drawer over the page, never most of the screen (about half the window, 480 to 680px). */
-.drawer.case { max-width: clamp(480px, 48vw, 680px); }
+.drawer.case { max-width: clamp(560px, 60vw, 820px); }
 /* The case drawer stays a side drawer on tablets and zoomed-in laptop windows; only a phone-width window gets the bottom sheet. */
-@media (max-width: 767px) { .drawer.case { inset-block: 0; max-width: min(560px, 85vw); max-height: none; border-inline-start: 1px solid var(--border); border-radius: 0; } }
+@media (max-width: 767px) { .drawer.case { inset-block: 0; max-width: min(640px, 92vw); max-height: none; border-inline-start: 1px solid var(--border); border-radius: 0; } }
 @media (max-width: 599px) { .drawer.case { inset-block: auto 0; max-width: none; max-height: 92vh; border-inline-start: 0; border-start-start-radius: 12px; border-start-end-radius: 12px; } }
 .dh { display: flex; align-items: flex-start; gap: 8px; padding: 20px 24px 16px; border-block-end: 1px solid var(--border-subtle); }
 .dh .tt { flex: 1; min-width: 0; }
@@ -310,7 +310,9 @@ body.locked { overflow: hidden; }
 .cd-ra { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 .track li.bad .d { border-color: var(--destructive); color: var(--destructive); }
 .track li.bad b { color: var(--destructive); }
-@media (max-width: 767px) { .track { grid-auto-flow: row; } .track li { flex-direction: row; text-align: start; } .track li::before { display: none; } }
+@media (max-width: 599px) { .track { grid-auto-flow: row; gap: 0; } .track li { flex-direction: row; align-items: flex-start; text-align: start; gap: 12px; padding-block-end: 14px; }
+  .track li::before, .track li:first-child::before { display: block; top: 30px; bottom: 2px; inset-inline-start: 13px; inset-inline-end: auto; width: 2px; height: auto; background: var(--border); }
+  .track li:last-child::before { display: none; } .track li.done::before { background: var(--success); } .track li.now::before { background: var(--border); } }
 
 .skel-bar { display: block; height: 14px; border-radius: 2px; background: linear-gradient(90deg, var(--muted) 0%, #ECEEEE 50%, var(--muted) 100%); background-size: 200% 100%; animation: sk 1s linear infinite; }
 @keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }
@@ -589,11 +591,9 @@ body.locked { overflow: hidden; }
 .prof-acts { display: flex; gap: 8px; flex-wrap: wrap; align-self: flex-start; order: 3; }
 .prof-acts .prof-edit { order: 0; }
 
-/* In a narrow case drawer the progress steps stack, as on a phone, so nothing scrolls sideways. */
-.drawer.case .db { container-type: inline-size; }
-@container (max-width: 600px) {
-  .track { grid-auto-flow: row; gap: 4px; }
-  .track li { flex-direction: row; text-align: start; gap: 12px; }
-  .track li::before { display: none; }
-  .track li .hint { margin-inline-start: auto; }
-}
+/* The progress steps stay a timeline at every drawer width: smaller labels that wrap, never a stacked list. */
+.drawer.case .track { gap: 2px; }
+.drawer.case .track li { min-width: 0; }
+.drawer.case .track li b { font-size: 11.5px; line-height: 1.3; overflow-wrap: break-word; }
+.drawer.case .track li .hint { font-size: 11px; }
+

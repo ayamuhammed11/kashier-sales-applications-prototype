@@ -662,15 +662,8 @@ window.UW = (function () {
     addLog(s, c.sid, 'updated ' + f.l.charAt(0).toLowerCase() + f.l.slice(1), 'pencil', (old || 'Not set') + ' → ' + (nv || 'Not set')); save(s); return true;
   }
 
-  /* Each section carries its own decision. Once every section is decided the case settles: all approved moves it on
-     (to the bank, or the changes are applied); any rejected section returns the whole case to Sales with the reasons. */
-  function settle(id) {
-    const c = get(id); if (!c || c.status !== 'Underwriting Review') return null;
-    const p = progress(c); if (p.list.some(x => x.state === 'todo')) return null;
-    if (p.flagged.length) { reject(c, p.flagged.map(f => f.label + ': ' + f.reason).join('. ')); return 'rejected'; }
-    approve(c); return 'approved';
-  }
-
+  /* A case's status only changes by a decision of Underwriting: Approve, Reject or a move in the status menu. Marking sections or filling in
+     fields never approves or rejects it by itself. */
   /* The other cases on the same application, whatever their type (only a link; a case is never reviewed together with another). */
   function related(c) {
     const s = stateFor(c.appId); if (!s) return [];
@@ -701,6 +694,6 @@ window.UW = (function () {
   }
 
   return { C: C, STATUS: STATUS, SHOWN: SHOWN, DEMO_URL: DEMO_URL, chip: chip, all: all, get: get, state: state, checks: checks, progress: progress, setReview: setReview,
-    addNote: addNote, assign: assign, approve: approve, reject: reject, settle: settle, related: related, goLive: goLive, bankReply: bankReply, setStatus: setStatus, FLOW: FLOW, flowOf: flowOf, transitions: transitions, endNote: endNote, BNPL: BNPL, isBnpl: isBnpl, transition: transition, needsComment: needsComment, stateFor: stateFor, saveState: save, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
+    addNote: addNote, assign: assign, approve: approve, reject: reject, related: related, goLive: goLive, bankReply: bankReply, setStatus: setStatus, FLOW: FLOW, flowOf: flowOf, transitions: transitions, endNote: endNote, BNPL: BNPL, isBnpl: isBnpl, transition: transition, needsComment: needsComment, stateFor: stateFor, saveState: save, toBank: toBank, toConfig: toConfig, activate: activate, ORDER: ORDER, ustatus: ustatus, activity: activity, wait: wait, salesUrl: salesUrl, asCases: asCases, label: label,
     resetDemo: resetDemo, TYPE: TYPE, PHASE2: PHASE2, STEPPER: STEPPER, BANK_RESPONSE: BANK_RESPONSE, markReady: markReady, unmarkReady: unmarkReady, nbeInput: nbeInput, logExport: logExport, exported: exported, markSent: markSent, recordAnswer: recordAnswer, bmInput: bmInput, bmReady: bmReady, logBatchExport: logBatchExport, sendBatch: sendBatch, siblings: siblings, readiness: readiness, setField: setField, settings: settings, saveSettings: saveSettings, FIXED_LABEL: FIXED_LABEL, FIXED_HINT: FIXED_HINT, INDUSTRIES: Object.keys(MCC) };
 })();
