@@ -1208,10 +1208,11 @@ ${docNo(n)}
     o = o || {}; if (ext || !st) return false;
     const prev = { S, ME };
     S = Object.assign(blankState(), JSON.parse(JSON.stringify(st))); ME = ROLES[o.role] || ROLES.uw;
-    const isKyc = (S.kyc || []).some(k => k.key === lid), isUpd = (S.updates || []).some(u => u.key === lid);
-    if (!isKyc && !isUpd && !S.svc[lid]) { S = prev.S; ME = prev.ME; return false; }
+    const isKyc = (S.kyc || []).some(k => k.key === lid), isUpd = (S.updates || []).some(u => u.key === lid), isTerm = (S.terms || []).some(t => t.key === lid);
+    if (isTerm) ME = ROLES.ops;   // a terminals case is acted on by POS Operations
+    if (!isKyc && !isUpd && !isTerm && !S.svc[lid]) { S = prev.S; ME = prev.ME; return false; }
     ext = { canAct: o.canAct !== false, done() { S = prev.S; ME = prev.ME; ext = null; if (o.onClose) o.onClose(); } };
-    if (isKyc) openKycCase(kycById(lid)); else if (isUpd) openUpdCase(updById(lid)); else openCase(lid);
+    if (isTerm) openTermCase(termByKey(lid)); else if (isKyc) openKycCase(kycById(lid)); else if (isUpd) openUpdCase(updById(lid)); else openCase(lid);
     return true;
   }
   const closedDr = () => { caseDr = null; if (ext) ext.done(); };
@@ -1934,6 +1935,7 @@ ${docNo(n)}
   /* ?case=ID opens that case's drawer as soon as the application is shown, as if the user had opened it from the cases section. */
   function openFromQuery(cid) {
     if (S.kyc.some(k => k.key === cid)) { openKycCase(kycById(cid)); return; }
+    if (termByKey(cid)) { openTermCase(termByKey(cid)); return; }
     if (S.svc[cid] && S.cases[cid]) { openCase(cid); return; }
     const u = updById(cid); if (u) openUpdCase(u);
   }

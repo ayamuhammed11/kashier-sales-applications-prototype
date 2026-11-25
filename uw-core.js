@@ -30,23 +30,26 @@ window.UW = (function () {
   const STATUS = {
     'Underwriting Review': { tone: 'warning', sc: 'warn', label: 'Underwriting Review' },
     'UW Approved': { tone: 'positive', sc: 'ok', label: 'UW Approved' },
+    'Pending Review': { tone: 'warning', sc: 'warn', label: 'Pending Review' },
     'Pending Sales Action': { tone: 'warning', sc: 'warn', label: 'Pending Sales Action' },
     'Sent to Bank': { tone: 'neutral', sc: 'info', label: 'Sent to Bank' },
     'Pending Onboarding Configurations': { tone: 'neutral', sc: 'info', label: 'Pending Onboarding Configurations' },
     Active: { tone: 'positive', sc: 'ok', label: 'Active' },
     'Rejected by Bank': { tone: 'negative', sc: 'bad', label: 'Rejected by Bank' },
+    Approved: { tone: 'positive', sc: 'ok', label: 'Approved' },
+    Rejected: { tone: 'negative', sc: 'bad', label: 'Rejected' },
   };
   const ORDER = Object.keys(STATUS);
   /* The status a case shows, from the sales application's status and the little Underwriting adds (stage, and who rejected it). */
   const ustatus = (raw, x) => raw === 'Underwriting Review' ? 'Underwriting Review' : raw === 'Live' ? 'Active' : raw === 'Approved' ? 'UW Approved'
     : raw === 'Rejected' ? (x.reject && x.reject.from === 'bank' ? (x.reject.final ? 'Rejected by Bank' : 'Pending Sales Action') : 'Pending Sales Action')
     : raw === 'Bank Submission' ? ({ uwOk: 'UW Approved', bankOk: 'Pending Onboarding Configurations', config: 'Pending Onboarding Configurations' }[x.stage] || 'Sent to Bank') : raw;
-  const SHOWN = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved', 'Rejected'];
+  const SHOWN = ['Underwriting Review', 'Bank Submission', 'Rejected', 'Live'], KYC_SHOWN = ['Underwriting Review', 'Approved', 'Rejected'], TERM_SHOWN = ['Pending Review', 'Approved', 'Rejected'];
   /* The four case types. Service Activation Request: a newly requested service (pricing, website, documents, contract). Service Update: a change to
      a service that is already active. Change KYB/KYC: the business details (name, industry, contact...), with their supporting documents. Add Payout
      Method: the payout methods entered with the first submission (they can't be changed afterwards). A first submission of the business details
      is shown without old values. */
-  const TYPE = { activation: 'Service Activation Request', update: 'Service Update', kyb: 'Change KYB/KYC', payout: 'Add Payout Method' };
+  const TYPE = { activation: 'Service Activation Request', update: 'Service Update', kyb: 'Change KYB/KYC', payout: 'Add Payout Method', terminals: 'POS Terminals Request' };
   const isPayLabel = l => /^(Payout method|Primary payout)/.test(l);
   const kycKind = x => (x.changes || []).length && x.changes.every(ch => isPayLabel(ch.label)) ? 'payout' : 'kyb';
   const docsForKyb = c => { const set = [], add = d => { if (set.indexOf(d) < 0) set.push(d); };
@@ -73,7 +76,7 @@ window.UW = (function () {
       appId: 'APP-2408' + (1400 + n), mid: m.mid || midFor(m.name, n), merchant: { name: m.name, email: m.email, phone: m.phone }, entity: m.entity || 'Registered Business', industry: m.industry, owner: '',
       submittedBy: m.by, submittedAt: m.at, svc: {}, order: [], cases: {}, docs: {}, websites: m.web ? [].concat(m.web) : [''], storeImage: m.store || '', reqContracts: {},
       payouts: [{ id: 1, type: 'bank', name: '', bank: m.bank || 'National Bank of Egypt', branch: 'Main Branch', holder: m.name, acct: '10' + (20000000000 + n * 3917) }], primary: 1, nextPayout: 2,
-      kyc: [], updates: [], log: [], nextCase: 1, _src: 'demo'
+      kyc: [], updates: [], terms: [], log: [], nextCase: 1, _src: 'demo'
     };
     app.docs['National ID'] = { 'Front side': 'national-id-front.jpg', 'Back side': 'national-id-back.jpg' };
     app.docs['Commercial Registration (CR)'] = { File: 'cr-' + n + '.pdf' };
@@ -119,6 +122,13 @@ window.UW = (function () {
       app.kyc.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: k.st, isNew: !!k.isNew, changes: changes, proposed: P, by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(k.h || 20),
         reject: k.st === 'Rejected' ? { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: k.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: k.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
       app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'sent a KYC update to Underwriting', ic: 'send', detail: changes.map(x => x.label + ': ' + (x.from == null || x.from === '' ? 'Not set' : x.from) + ' → ' + (x.to == null || x.to === '' ? 'Not set' : x.to)).join('; '), id: key });
+    });
+    /* POS terminals are requested on their own: a separate case, reviewed by POS Operations. An application with a POS service has one. */
+    (m.terms || (app.order.some(id => chOf(id) === 'POS') ? [{ st: 'Approved', qty: 2, h: 90 }] : [])).forEach((t, i) => {
+      const key = 'term:' + (i + 1);
+      app.terms.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: t.st, qty: t.qty, type: t.type || 'Smart POS', note: t.note || '', by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(t.h || 20),
+        reject: t.st === 'Rejected' ? { by: 'Omar Nabil', role: 'POS Operations', comment: t.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: t.st === 'Approved' ? { by: 'Omar Nabil', at: '10/20/2026, 09:10:00 AM' } : undefined });
+      app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'requested ' + t.qty + ' POS terminals', ic: 'device', id: key });
     });
     app.nextCase = c + 1;
     fillDemo(app, m, 'full');   // every application is complete: all the merchant and legal details and documents are on it
@@ -193,26 +203,26 @@ window.UW = (function () {
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 5 }, { id: 'POS Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 9 }] },
     { name: 'Sharm Diving Center', industry: 'Travel & Tourism', email: 'hana@sharmdiving.com', phone: '+20 111 702 2020', by: 'Nour Hamdy', at: '23 Oct 2026', web: 'www.sharmdiving.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 14 }, { id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 28, sell: 1.0 }] },
-    { name: 'Port Said Electronics', industry: 'Retail & E-commerce', email: 'tarek@pselectronics.com', phone: '+20 122 703 3030', by: 'Mostafa Khaled', at: '24 Oct 2026', web: 'www.pselectronics.com', store: 'port.jpg', docs: DOCS_POS.concat(DOCS_ON).concat(DOCS_BM),
+    { name: 'Port Said Electronics', terms: [{ st: 'Pending Review', qty: 3, h: 30 }], industry: 'Retail & E-commerce', email: 'tarek@pselectronics.com', phone: '+20 122 703 3030', by: 'Mostafa Khaled', at: '24 Oct 2026', web: 'www.pselectronics.com', store: 'port.jpg', docs: DOCS_POS.concat(DOCS_ON).concat(DOCS_BM),
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 3 }, { id: 'POS Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 46 }] },
     { name: 'Mansoura Medical Supplies', industry: 'Healthcare / Pharmacy', email: 'dina@mansouramed.com', phone: '+20 100 704 4040', by: 'Karim Zaki', at: '24 Oct 2026', web: 'www.mansouramed.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 8 }, { id: 'Online Souhoola', model: 'PF', st: 'Underwriting Review', h: 60, sell: 1.0 }] },
     { name: 'Fayoum Organic Farms', industry: 'Food & Beverage', email: 'ali@fayoumorganic.com', phone: '+20 111 705 5050', by: 'Aya Muhammed', at: '25 Oct 2026', web: 'instagram.com/fayoumorganic', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 11 }, { id: 'Online Valu', model: 'PF', st: 'Underwriting Review', h: 72, sell: 1.0 }] },
-    { name: 'Hurghada Water Sports', industry: 'Entertainment & Media', email: 'nada@hurghadawater.com', phone: '+20 122 706 6060', by: 'Nour Hamdy', at: '25 Oct 2026', web: 'www.hurghadawater.com', store: 'hurghada.jpg', docs: DOCS_POS.concat(DOCS_ON),
+    { name: 'Hurghada Water Sports', terms: [{ st: 'Pending Review', qty: 2, h: 60 }], industry: 'Entertainment & Media', email: 'nada@hurghadawater.com', phone: '+20 122 706 6060', by: 'Nour Hamdy', at: '25 Oct 2026', web: 'www.hurghadawater.com', store: 'hurghada.jpg', docs: DOCS_POS.concat(DOCS_ON),
       svc: [{ id: 'POS Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 1 }, { id: 'Online Card', model: 'PF', bank: 'Bank Misr', st: 'Underwriting Review', h: 18 }] },
     { name: 'Suez Auto Parts', industry: 'Retail & E-commerce', email: 'sameh@suezauto.com', phone: '+20 100 707 7070', by: 'Mostafa Khaled', at: '26 Oct 2026', web: 'www.suezauto.com', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 26 }, { id: 'Online Basata', model: 'PF', st: 'Underwriting Review', h: 5, sell: 1.0 }] },
     { name: 'Qena Textile Trading', industry: 'Retail & E-commerce', email: 'hoda@qenatextile.com', phone: '+20 111 708 8080', by: 'Karim Zaki', at: '26 Oct 2026', web: 'facebook.com/qenatextile', docs: DOCS_ON.concat(DOCS_BM),
       svc: [{ id: 'Online Card', model: 'PSP', bank: 'Bank Misr', st: 'Underwriting Review', h: 33 }, { id: 'Online Wallet', model: 'PF', st: 'Underwriting Review', h: 7, sell: 1.0 }] },
-    { name: 'Damietta Furniture Mall', industry: 'Retail & E-commerce', email: 'amr@damiettafurniture.com', phone: '+20 122 709 9090', by: 'Aya Muhammed', at: '27 Oct 2026', web: 'www.damiettafurniture.com', store: 'damietta.jpg', docs: DOCS_POS.concat(DOCS_ON),
+    { name: 'Damietta Furniture Mall', terms: [{ st: 'Rejected', qty: 4, h: 20, why: 'The delivery branch is missing. Add where the terminals are delivered.' }], industry: 'Retail & E-commerce', email: 'amr@damiettafurniture.com', phone: '+20 122 709 9090', by: 'Aya Muhammed', at: '27 Oct 2026', web: 'www.damiettafurniture.com', store: 'damietta.jpg', docs: DOCS_POS.concat(DOCS_ON),
       svc: [{ id: 'POS Card', model: 'PF', bank: 'National Bank of Egypt', st: 'Underwriting Review', h: 4 }, { id: 'POS Wallet', model: 'PF', st: 'Underwriting Review', h: 12, sell: 1.0 }] },
     { name: 'Sohag Language School', industry: 'Education', email: 'mervat@sohagschool.edu', phone: '+20 100 710 1111', by: 'Nour Hamdy', at: '27 Oct 2026', web: 'www.sohagschool.edu', docs: DOCS_ON,
       svc: [{ id: 'Online Card', model: 'PF', bank: 'CIB', st: 'Underwriting Review', h: 2 }, { id: 'Online Instapay', model: 'PF', st: 'Underwriting Review', h: 38, sell: 1.0 }] },
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 21;
+  const DEMO_VER = 22;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -285,11 +295,27 @@ window.UW = (function () {
       changes: x.changes || [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt, terminals: s.terminals || '', submitComment: '', since: new Date(since).toISOString(), hours: hours,
       sla: open ? SLA['Underwriting Review'] : 0, late: open && hours > SLA['Underwriting Review'], reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
   }
+  /* A POS terminals request: the number of terminals for the merchant's POS services, reviewed by POS Operations. Approving prepares them for delivery. */
+  const TERM_SLA = 48;
+  function buildTerm(s, x) {
+    const k = keyOf(s, x.key), l = local(k), since = x.since ? Date.parse(x.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), open = x.status === 'Pending Review';
+    return { type: 'terminals', kind: 'terminals', caseType: TYPE.terminals, key: k, id: gid(s, x.key), sid: x.key, mid: midOf(s), caseId: x.caseId, status: x.status, ustatus: x.status, appId: s.appId, merchant: s.merchant, entity: s.entity, industry: s.industry,
+      service: 'POS terminals · ' + x.qty, channel: 'POS', qty: x.qty, termType: x.type || '', note: x.note || '', banks: [], changes: [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt,
+      since: new Date(since).toISOString(), hours: hours, sla: open ? TERM_SLA : 0, late: open && hours > TERM_SLA, reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
+  }
+  const termOf = (s, c) => (s.terms || []).filter(x => x.key === c.sid)[0];
+  function decideTerm(c, to, comment) {
+    const s = stateFor(c.appId), x = s && termOf(s, c); if (!x) return false;
+    if (to === 'Approved') { x.status = 'Approved'; x.decision = { by: C.user().name, at: nowStr() }; delete x.reject; addLog(s, x.key, 'approved the terminals request', 'check', x.qty + ' terminals will be prepared for delivery'); }
+    else { x.status = 'Rejected'; x.reject = { by: C.user().name, role: 'POS Operations', comment: comment, at: nowStr() }; delete x.decision; addLog(s, x.key, 'rejected the terminals request', 'xcircle', comment); }
+    x.since = new Date(CLOCK).toISOString(); save(s); return true;
+  }
   function all() {
     seedDemo(); autoAssign();
     return [].concat.apply([], states().map(s => s.order.filter(id => s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1).map(id => build(s, id))
       .concat((s.kyc || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildKyc(s, x)))
-      .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x))))).filter(canSee);
+      .concat((s.updates || []).filter(x => KYC_SHOWN.indexOf(x.status) > -1).map(x => buildUpdate(s, x)))
+      .concat((s.terms || []).filter(x => TERM_SHOWN.indexOf(x.status) > -1).map(x => buildTerm(s, x))))).filter(canSee);
   }
   /* any: the application's own case drawer for Underwriting, which acts on every case of the application that is with Underwriting,
      including one still missing information and one assigned to another agent. */
@@ -298,6 +324,7 @@ window.UW = (function () {
     const p = split(cid), s = p[0] ? stateFor(p[0]) : states()[0]; if (!s) return null;
     const id = p[1]; let c = null;
     if (String(id).indexOf('upd:') === 0) { const x = (s.updates || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildUpdate(s, x) : null; }
+    else if (String(id).indexOf('term:') === 0) { const x = (s.terms || []).filter(k => k.key === id)[0]; c = x && TERM_SHOWN.indexOf(x.status) > -1 ? buildTerm(s, x) : null; }
     else if (String(id).indexOf('kyc:') === 0) { const x = (s.kyc || []).filter(k => k.key === id)[0]; c = x && KYC_SHOWN.indexOf(x.status) > -1 ? buildKyc(s, x) : null; }
     else c = s.cases[id] && SHOWN.indexOf(s.cases[id].status) > -1 ? build(s, id) : null;
     return c && (any || canSee(c)) ? c : null;
@@ -390,10 +417,11 @@ window.UW = (function () {
     u.status = 'Rejected'; u.reject = { source: 'uw', by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() }; u.since = new Date(CLOCK).toISOString();
     addLog(s, u.key, 'rejected the service update', 'xcircle', comment); save(s); return true;
   }
-  const approve = c => c.type === 'update' ? approveUpdate(c) : c.type === 'application' ? approveKyc(c)
+  const approve = c => c.type === 'terminals' ? decideTerm(c, 'Approved') : c.type === 'update' ? approveUpdate(c) : c.type === 'application' ? approveKyc(c)
     : move(c, 'Bank Submission', { stage: 'uwOk' }, 'approved the ' + c.service + ' case', 'Underwriting review completed.');
   const toBank = c => c.ustatus === 'UW Approved' && c.type === 'service' && move(c, 'Bank Submission', {}, 'sent the ' + c.service + ' case to the bank', 'The case is waiting for the bank answer.');
   function reject(c, comment) {
+    if (c.type === 'terminals') return decideTerm(c, 'Rejected', comment);
     if (c.type === 'update') return rejectUpdate(c, comment);
     if (c.type === 'application') return rejectKyc(c, comment);
     return move(c, 'Rejected', { reject: { source: 'uw', by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() } },
@@ -429,8 +457,9 @@ window.UW = (function () {
       'Pending Sales Action': []
     }
   };
+  FLOW.terminals = { 'Pending Review': [['Approve', 'Approved'], ['Reject', 'Rejected']], Approved: [], Rejected: [] };
   /* Why a status has no moves. */
-  const END = { 'Pending Sales Action': 'Waiting for Sales to fix the case and resubmit it. It comes back to Underwriting Review.', 'Rejected by Bank': 'Final status: the bank rejected the merchant.',
+  const END = { Approved: 'Final status: the terminals are prepared for delivery.', Rejected: 'Waiting for Sales to change the request and resubmit it.', 'Pending Sales Action': 'Waiting for Sales to fix the case and resubmit it. It comes back to Underwriting Review.', 'Rejected by Bank': 'Final status: the bank rejected the merchant.',
     Active: 'Final status: the service is live.', 'UW Approved': 'Final status: the changes are applied.' };
   /* BNPL and consumer-finance services are not sent to a bank: once Underwriting approves, the case goes straight to onboarding configurations. */
   const BNPL = ['Valu', 'OCTO', 'Souhoola', 'Contact', 'Mogo', 'Tru', 'Forsa'];
@@ -442,20 +471,21 @@ window.UW = (function () {
     'Pending Sales Action': [],
     Active: []
   };
-  const flowOf = c => FLOW[c.type === 'service' ? (isBnpl(c) ? 'bnpl' : 'service') : 'change'];
+  const flowOf = c => c.type === 'terminals' ? FLOW.terminals : FLOW[c.type === 'service' ? (isBnpl(c) ? 'bnpl' : 'service') : 'change'];
   /* Only the moves the workflow allows from the case's current status. */
   /* From Underwriting Review the status is never a menu choice: UW Approved happens only when Underwriting clicks Approve, and Pending Sales Action only when it
      clicks Reject, and each button changes the status itself. The workflow diagram still shows both moves. */
-  const BUTTON_ONLY = ['UW Approved', 'Pending Sales Action'];
-  const transitions = c => (flowOf(c)[c.ustatus] || []).filter(([, to]) => !(c.ustatus === 'Underwriting Review' && BUTTON_ONLY.indexOf(to) > -1)).map(([name, to, bank]) => ({ name: name, to: to, bank: bank || '' }));
-  const endNote = c => transitions(c).length ? '' : (c.ustatus === 'Underwriting Review' ? 'Use the Approve or Reject button. The status changes when you click one.' : (END[c.ustatus] || 'No moves from this status.'));
+  const BUTTON_ONLY = ['UW Approved', 'Pending Sales Action', 'Approved', 'Rejected'];
+  const transitions = c => (flowOf(c)[c.ustatus] || []).filter(([, to]) => !((c.ustatus === 'Underwriting Review' || c.ustatus === 'Pending Review') && BUTTON_ONLY.indexOf(to) > -1)).map(([name, to, bank]) => ({ name: name, to: to, bank: bank || '' }));
+  const endNote = c => transitions(c).length ? '' : (c.ustatus === 'Underwriting Review' || c.ustatus === 'Pending Review' ? 'Use the Approve or Reject button. The status changes when you click one.' : (END[c.ustatus] || 'No moves from this status.'));
   /* Returning to Sales, a missing bank requirement and a bank rejection always say why. */
-  const needsComment = t => t.to === 'Pending Sales Action' || t.to === 'Rejected by Bank';
+  const needsComment = t => t.to === 'Pending Sales Action' || t.to === 'Rejected by Bank' || t.to === 'Rejected';
   function transition(c, t, comment) { return t.bank && c.ustatus === 'Sent to Bank' ? bankReply(c, t.bank, comment) : setStatus(c, t.to, comment); }
   /* Any status, at any time, in either direction. A status written here replaces the earlier decision (rejection, go-live date) rather than stacking on it. */
   function setStatus(c, to, comment) {
     const why = String(comment || '').trim(), svc = c.service || c.caseType, bank = (c.banks || [])[0] || 'The bank', back = 'moved the ' + svc + ' case to ' + to;
     if (to === c.ustatus) return false;
+    if (c.type === 'terminals') return (to === 'Approved' || to === 'Rejected') && c.ustatus === 'Pending Review' ? decideTerm(c, to, why) : false;
     if (c.type !== 'service') {
       const s = stateFor(c.appId), k = s && (c.type === 'update' ? updOf(s, c) : kycOf(s, c)); if (!k) return false;
       if (to === 'Pending Sales Action') return c.type === 'update' ? rejectUpdate(c, why) : rejectKyc(c, why);

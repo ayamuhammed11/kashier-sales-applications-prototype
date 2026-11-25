@@ -120,7 +120,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
   const { icon, esc } = SA, C = Cases, U = UW;
   const TODAY = '2026-10-21';
   const STATUSES = U.ORDER, chipOf = x => (U.STATUS[x] || {}).sc || 'neu';
-  const TYPES = ['Service Activation Request', 'Service Update', 'Change KYB/KYC', 'Change Payout Method'];
+  const TYPES = ['Service Activation Request', 'Service Update', 'Change KYB/KYC', 'Add Payout Method', 'POS Terminals Request'];
   const USERS = { agent: 'Rana Adel · Agent', agent2: 'Omar Hassan · Agent', agent3: 'Salma Nabil · Agent', manager: 'Layla Samir · Manager' };
   const me = C.user();
   const banksOf = c => [...new Set([].concat.apply([], (c.app.summary.serviceConfigs || []).map(sc => (sc.configs || []).map(x => x.bank))).filter(Boolean))];
@@ -135,7 +135,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
   ROWS = ALL.map(c => ({ stage: c.stage, prep: c.prep, prepKey: prepKey(c.prep), isNew: c.isNew, kind: c.kind, summary: c.summary || '', other: CNT[c.app.id] - 1,
     id: c.no, href: c.href || 'case-details.html?app=' + encodeURIComponent(c.app.id), biz: c.app.biz, mid: c.mid || '', industry: c.industry || '', service: c.service || '', channel: c.channel || '', sub: [c.mid, c.industry].filter(Boolean).join(' \u00b7 ') || 'MID pending',
     status: c.ustatus, type: c.caseType, banks: banksOf(c), actor: c.app.actor, assignee: c.assignee || '',
-    since: c.since, day: String(c.since).slice(0, 10), open: c.ustatus === 'Underwriting Review', raw: c }))
+    since: c.since, day: String(c.since).slice(0, 10), open: c.ustatus === 'Underwriting Review' || c.ustatus === 'Pending Review', raw: c }))
     // What needs a decision first (oldest waiting on top), then the rest, newest first.
     .sort((a, b) => (STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status)) || (a.open ? 1 : -1) * (new Date(a.since) - new Date(b.since)));
   }
@@ -146,7 +146,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
     st.tab === 'bank' ? { key: 'prepKey', type: 'multi', icon: 'clock', label: 'Bank preparation', hint: 'What is left to do before the case goes to the bank.', options: ['Missing information', 'Mark as ready', 'Send to the bank', 'In the next batch', 'Waiting for the bank', 'Waiting for the merchant'] }
       : { key: 'status', type: 'multi', icon: 'clock', label: 'Status', hint: 'The status of the case.', options: STATUSES },
     { key: 'channel', type: 'multi', icon: 'store', label: 'Channel', hint: 'Online or POS.', options: ['Online', 'POS'] },
-    { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'Service Activation Request, Service Update, Change KYB/KYC or Change Payout Method.', options: TYPES },
+    { key: 'type', type: 'multi', icon: 'store', label: 'Case type', hint: 'Service Activation Request, Service Update, Change KYB/KYC, Add Payout Method or POS Terminals Request.', options: TYPES },
     { key: 'bank', type: 'multi', icon: 'store', label: 'Financial institution', hint: 'The banks and vendors the case goes to.', options: [...new Set([].concat.apply([], ROWS.map(r => r.banks)))].sort() },
     { key: 'actor', type: 'multi', icon: 'user', label: 'Submitted by', hint: 'The salesperson who submitted it.', options: [...new Set(ROWS.map(r => r.actor))].sort() },
     ...(me.canReassign ? [{ key: 'assignee', type: 'multi', icon: 'user', label: 'Assignee', hint: 'The underwriting agent the case is assigned to.', options: [...new Set(ROWS.map(r => r.assignee).filter(Boolean))].sort() }] : []),
@@ -179,7 +179,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
       ${page.map(r => `<tr tabindex="0" data-href="${esc(r.href)}" aria-label="Open ${esc(r.id)}"><td class="two"><span class="p">${esc(r.id)}</span><span class="s">${esc(r.kind === 'activation' || r.kind === 'update' ? '' : r.summary)}${r.other ? ' · also ' + r.other + ' other case' + (r.other === 1 ? '' : 's') : ''}</span></td>
         <td>${esc(r.type)}${r.isNew ? '<span class="muted"> · first submission</span>' : ''}</td>
         <td><div class="mer"><span class="mav" aria-hidden="true">${init(r.biz)}</span><span class="two"><span class="p">${esc(r.biz)}</span><span class="s">${esc(r.sub)}</span></span></div></td>
-        <td>${r.service && (r.kind === 'activation' || r.kind === 'update') ? esc(r.service.replace(/ \(\w+\)$/, '')) : '<span class="muted">\u2014</span>'}</td><td>${r.channel ? esc(r.channel) : '<span class="muted">\u2014</span>'}</td>
+        <td>${r.service && (r.kind === 'activation' || r.kind === 'update' || r.kind === 'terminals') ? esc(r.service.replace(/ \(\w+\)$/, '')) : '<span class="muted">\u2014</span>'}</td><td>${r.channel ? esc(r.channel) : '<span class="muted">\u2014</span>'}</td>
         <td>${bank ? prepChip(r) : `<span class="sc ${chipOf(r.status)}">${esc(r.status)}</span>`}</td>
         <td>${r.assignee ? esc(r.assignee) : '<span class="muted">Unassigned</span>'}</td><td class="num">${when(r)}</td>
         <td class="two num"><span class="p" style="font-weight:400">${esc(C.fmtDate(r.since))}</span><span class="s">Submitted by ${esc(r.actor)}</span></td><td class="go">${icon('right', 'ic mirror')}</td></tr>`).join('')}</tbody></table></div>
@@ -228,7 +228,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
   function caseUrl(id) {
     const c = U.get(id); if (!c) return '';
     const me = Cases.user(), i = id.indexOf('::');
-    return 'sales-applications/application.html?app=' + encodeURIComponent(id.slice(0, i)) + '&case=' + encodeURIComponent(id.slice(i + 2)) + '&as=uw' + (me.canReassign || c.assignee === me.name ? '' : '&ro=1');
+    return 'sales-applications/application.html?app=' + encodeURIComponent(id.slice(0, i)) + '&case=' + encodeURIComponent(id.slice(i + 2)) + '&as=' + (c.type === 'terminals' ? 'ops' : 'uw') + (me.canReassign || c.assignee === me.name ? '' : '&ro=1');
   }
   function openCase(href) {
     const m = /^sales-case\.html\?id=(.+)$/.exec(href || ''); if (!m) return false;
