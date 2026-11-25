@@ -444,8 +444,11 @@ window.UW = (function () {
   };
   const flowOf = c => FLOW[c.type === 'service' ? (isBnpl(c) ? 'bnpl' : 'service') : 'change'];
   /* Only the moves the workflow allows from the case's current status. */
-  const transitions = c => (flowOf(c)[c.ustatus] || []).map(([name, to, bank]) => ({ name: name, to: to, bank: bank || '' }));
-  const endNote = c => transitions(c).length ? '' : (END[c.ustatus] || 'No moves from this status.');
+  /* From Underwriting Review the status is never a menu choice: UW Approved happens only when Underwriting clicks Approve, and Pending Sales Action only when it
+     clicks Reject, and each button changes the status itself. The workflow diagram still shows both moves. */
+  const BUTTON_ONLY = ['UW Approved', 'Pending Sales Action'];
+  const transitions = c => (flowOf(c)[c.ustatus] || []).filter(([, to]) => !(c.ustatus === 'Underwriting Review' && BUTTON_ONLY.indexOf(to) > -1)).map(([name, to, bank]) => ({ name: name, to: to, bank: bank || '' }));
+  const endNote = c => transitions(c).length ? '' : (c.ustatus === 'Underwriting Review' ? 'Use the Approve or Reject button. The status changes when you click one.' : (END[c.ustatus] || 'No moves from this status.'));
   /* Returning to Sales, a missing bank requirement and a bank rejection always say why. */
   const needsComment = t => t.to === 'Pending Sales Action' || t.to === 'Rejected by Bank';
   function transition(c, t, comment) { return t.bank && c.ustatus === 'Sent to Bank' ? bankReply(c, t.bank, comment) : setStatus(c, t.to, comment); }
