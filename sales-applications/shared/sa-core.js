@@ -139,7 +139,6 @@
   const ROLES = {
     sales: { key: 'sales', name: 'Aya Muhammed', email: 'aya@kashier.io', init: 'AM', role: 'Salesperson' },
     manager: { key: 'manager', name: 'Nadia Salah', email: 'nadia@kashier.io', init: 'NS', role: 'Sales Manager', tier: 'Sales Manager' },
-    ops: { key: 'ops', name: 'Omar Nabil', email: 'omar@kashier.io', init: 'ON', role: 'POS Operations', tier: 'POS Operations' },
     uw: { key: 'uw', name: 'Layla Hassan', email: 'layla@kashier.io', init: 'LH', role: 'Underwriting', tier: 'Underwriting' },
     head: { key: 'head', name: 'Karim Zaki', email: 'karim@kashier.io', init: 'KZ', role: 'Head of Sales', tier: 'Head of Sales' }
   };
@@ -630,9 +629,8 @@
           sent.forEach(id => log(`${re ? 'resubmitted' : 'submitted'} the ${label(id)} case`, 'send', `${S.cases[id].caseId} · ${S.cases[id].status}`, id));
           log(add ? 'requested new services' : re ? 'resubmitted the returned cases with revised rates' : 'submitted the application', 'send', `Application ID ${S.appId} · ${sent.length} case${sent.length === 1 ? '' : 's'}: ${sent.map(label).join(', ')}${S.submitComment ? ' · Comment: ' + S.submitComment : ''}`);
           if (!re && !add) { addKybCase(); addPayoutCase(); }
-          if (!re && !add && S.payouts.length && !PC()) sendPayoutLink(false);
           if (add) { S.adding = false; delete S.addSnap; S.step = 0; }
-          api.close(); scrollTo(0, 0); rerender(); toast(add ? `${sent.length} service${sent.length === 1 ? '' : 's'} requested` : re ? 'Application resubmitted' : S.payouts.length ? 'Application submitted. The merchant got a link to confirm the payout details.' : 'Application submitted');
+          api.close(); scrollTo(0, 0); rerender(); toast(add ? `${sent.length} service${sent.length === 1 ? '' : 's'} requested` : re ? 'Application resubmitted' : S.payouts.length ? 'Application submitted. The merchant gets the payout confirmation link once Underwriting approves the payout method.' : 'Application submitted');
         };
       } });
   }
@@ -865,18 +863,18 @@ ${docNo(n)}
   const PC = () => S.payoutConfirm || null;
   const payList = () => { const dl = r => `<dl class="dl dl-s">${r}</dl>`; return `<div class="pm-list">${S.payouts.map((p, i) => `<div class="pm"><div class="pm-h"><b>${p.id === S.primary ? 'Primary payout method' : esc(p.name || 'Payout method ' + (i + 1))}</b><span class="tag info">${p.type === 'bank' ? 'Bank Account' : 'E-Wallet'}</span>${p.id === S.primary ? '<span class="tag ok">Primary</span>' : ''}</div>${dl((p.id !== S.primary && p.name ? `<dt>Method name</dt><dd>${esc(p.name)}</dd>` : '') + (p.type === 'bank' ? `<dt>Bank name</dt><dd>${esc(p.bank)}</dd><dt>Branch</dt><dd>${esc(p.branch)}</dd><dt>Account holder</dt><dd>${esc(p.holder)}</dd><dt>Account number</dt><dd dir="ltr" class="num">${esc(p.acct)}</dd>` : `<dt>Wallet provider</dt><dd>${esc(p.provider)}</dd><dt>Mobile number</dt><dd dir="ltr" class="num">${esc(p.mobile)}</dd><dt>Wallet holder</dt><dd>${esc(p.wholder)}</dd>`))}</div>`).join('')}</div>`; };
   const maskPhone = ph => { const m = String(ph || '').trim().match(/^(\+\d{1,3})?.*?(\d{4})$/); return m ? (m[1] ? m[1] + ' ' : '') + '••• ' + m[2] : String(ph || ''); };
-  function sendPayoutLink(resend) {
+  function sendPayoutLink(resend, by) {
     if (!S.payouts.length) return;
     const tok = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 8);
-    S.payoutConfirm = { status: 'pending', token: tok, otp: String(Math.floor(100000 + Math.random() * 900000)), sentAt: nowStr(), sentBy: ME.name, email: S.merchant.email, phone: S.merchant.phone, ids: S.payouts.map(p => p.id) };
-    log(`${resend ? 'resent' : 'sent'} the payout confirmation link to the merchant`, 'send', `Email ${S.merchant.email} · SMS ${S.merchant.phone}`);
+    S.payoutConfirm = { status: 'pending', token: tok, otp: String(Math.floor(100000 + Math.random() * 900000)), sentAt: nowStr(), sentBy: by || ME.name, email: S.merchant.email, phone: S.merchant.phone, ids: S.payouts.map(p => p.id) };
+    log(`${resend ? 'resent' : 'sent'} the payout confirmation link to the merchant${by ? ' automatically, as Underwriting approved the payout method' : ''}`, 'send', `Email ${S.merchant.email} · SMS ${S.merchant.phone}`);
   }
   const payLinkUrl = () => PC() ? `${SAD}payout-confirm.html?app=${encodeURIComponent(S.appId)}&t=${encodeURIComponent(PC().token)}` : '';
   const payTag = () => !S.payouts.length ? '' : !PC() ? '<span class="tag">Not confirmed</span>' : PC().status === 'confirmed' ? '<span class="tag ok">Confirmed by the merchant</span>' : '<span class="tag req">Waiting for the merchant</span>';
   function payConfirmHTML() {
     if (!S.payouts.length) return '';
     const c = PC(), sales = canEditApp();
-    const txt = !c ? 'The merchant hasn\'t been asked to confirm these details yet.'
+    const txt = !c ? 'The confirmation link is sent to the merchant automatically once Underwriting approves the payout method.'
       : c.status === 'confirmed' ? `The merchant confirmed these details on ${esc(c.at)} with the one-time code sent to ${esc(maskPhone(c.phone))}.`
       : `A confirmation link was sent on ${esc(c.sentAt)} to ${esc(c.email)} and by SMS to ${esc(maskPhone(c.phone))}. The merchant opens it and confirms with a one-time code sent to their phone.`;
     const acts = c && c.status === 'confirmed' ? '' : `${sales ? `<button type="button" class="btn btn-outline btn-sm" data-act="sendPayLink">${icon('send', 'ic')}${c ? 'Resend link' : 'Send confirmation link'}</button>` : ''}${c ? `<a class="link-btn" href="${esc(payLinkUrl())}" target="_blank" rel="noopener">Open the merchant's page${icon('ext', 'ic-14')}</a>` : ''}`;
@@ -1209,7 +1207,6 @@ ${docNo(n)}
     const prev = { S, ME };
     S = Object.assign(blankState(), JSON.parse(JSON.stringify(st))); ME = ROLES[o.role] || ROLES.uw;
     const isKyc = (S.kyc || []).some(k => k.key === lid), isUpd = (S.updates || []).some(u => u.key === lid), isTerm = (S.terms || []).some(t => t.key === lid);
-    if (isTerm) ME = ROLES.ops;   // a terminals case is acted on by POS Operations
     if (!isKyc && !isUpd && !isTerm && !S.svc[lid]) { S = prev.S; ME = prev.ME; return false; }
     ext = { canAct: o.canAct !== false, done() { S = prev.S; ME = prev.ME; ext = null; if (o.onClose) o.onClose(); } };
     if (isTerm) openTermCase(termByKey(lid)); else if (isKyc) openKycCase(kycById(lid)); else if (isUpd) openUpdCase(updById(lid)); else openCase(lid);
@@ -1283,7 +1280,7 @@ ${docNo(n)}
   const isUW = () => ME.key === 'uw';
   /* Underwriting reviews and decides (status, approve, reject) but never edits the application's data or its active services. */
   const canEditApp = () => !isUW() && !hostRO;
-  function kycApprove(k) { if (!k.isNew && k.proposed) applyKyc(k); k.status = 'Approved'; k.decision = { by: ME.name, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('approved the KYC update', 'check', 'The changes are now on the application', k.key); toast(`${k.caseId} approved. The changes are applied.`); }
+  function kycApprove(k) { if (!k.isNew && k.proposed) applyKyc(k); k.status = 'Approved'; k.decision = { by: ME.name, at: nowStr() }; k.since = new Date(CLOCK).toISOString(); log('approved the KYC update', 'check', 'The changes are now on the application', k.key); if (isPayCase(k) && S.payouts.length && !PC()) { sendPayoutLink(false, 'System'); toast(`${k.caseId} approved. The payout confirmation link was sent to the merchant.`); } else toast(`${k.caseId} approved. The changes are applied.`); }
   function kycReject(k) {
     modal({ title: 'Reject this KYC update?', sub: `${esc(k.caseId)} · ${k.changes.length} requested change${k.changes.length === 1 ? '' : 's'}.`,
       body: `<div class="fld"><label for="krc">Decision comment</label><textarea class="inp" id="krc" placeholder="What does the salesperson need to fix?"></textarea><span class="hint">The salesperson sees this when the case comes back to them.</span></div>`,
@@ -1303,7 +1300,7 @@ ${docNo(n)}
     return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${r.comment ? `<p>${linkCases(r.comment)}</p>` : ''}<p class="rj-h">Edit the details and resubmit, or cancel the update.</p></div></div>`;
   }
   /* POS terminals are not part of a POS method. They are requested on their own and follow their own flow as a separate type of case,
-     reviewed by POS Operations. They are required when a POS method is requested for the first time on the application. */
+     reviewed by the Underwriting team. They are required when a POS method is requested for the first time on the application. */
   const TERM_TYPES = ['Smart POS', 'Mobile POS (mPOS)', 'Countertop POS'];
   const TERM_ACTIVE = ['Pending Review', 'Approved'];
   const termByKey = key => S.terms.find(t => t.key === key);
@@ -1328,7 +1325,7 @@ ${docNo(n)}
   function openTermsRequest({ title, existing, label: btn, save }) {
     const R = { qty: existing ? existing.qty : '', type: existing ? existing.type || '' : '', note: existing ? existing.note || '' : '' }; let api, tried = false;
     const draw = () => {
-      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>Terminals are not part of the POS method. They are reviewed by POS Operations as a separate case, with their own status.</p></div>${termFormHTML(R, tried && !termReqOk(R) ? 'Enter the number of terminals (1 or more)' : '')}`;
+      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>Terminals are not part of the POS method. They are reviewed by the Underwriting team as a separate case, with their own status.</p></div>${termFormHTML(R, tried && !termReqOk(R) ? 'Enter the number of terminals (1 or more)' : '')}`;
       api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-tm="cancel">Cancel</button><button type="button" class="btn btn-primary" data-tm="save">${btn}</button>`;
       api.foot.querySelector('[data-tm=cancel]').onclick = () => api.close();
       api.foot.querySelector('[data-tm=save]').onclick = () => { tried = true; if (!termReqOk(R)) { draw(); return; } api.close(true); save({ qty: +R.qty, type: R.type, note: String(R.note || '').trim() }); };
@@ -1348,12 +1345,11 @@ ${docNo(n)}
       <p>${r ? `${r.qty} terminal${r.qty === 1 ? '' : 's'}${r.type ? ' · ' + esc(r.type) : ''}. They become their own case when the application is submitted.` : 'Terminals are requested separately from the POS methods. Request them to continue.'}</p>
       <div class="fa">${r ? `<button type="button" class="btn btn-outline btn-sm" data-act="termReq">Change</button><button type="button" class="btn btn-ghost btn-sm" data-act="termRm">Remove</button>` : `<button type="button" class="btn btn-primary btn-sm" data-act="termReq">${icon('plus', 'ic')}Request terminals</button>`}</div></div>`;
   }
-  const termRejectBox = t => { const r = t.reject || {}; return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by POS Operations</b>${r.comment ? `<p>${esc(r.comment)}</p>` : ''}<p class="rj-h">Change the request and resubmit, or cancel it.</p></div></div>`; };
+  const termRejectBox = t => { const r = t.reject || {}; return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${r.comment ? `<p>${esc(r.comment)}</p>` : ''}<p class="rj-h">Change the request and resubmit, or cancel it.</p></div></div>`; };
   function termRow(t) {
-    const ops = ME.key === 'ops', open = t.status === 'Pending Review', rej = t.status === 'Rejected';
+    const uw = isUW(), rej = t.status === 'Rejected';
     const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openTerm" data-id="${esc(t.key)}">View case${icon('right', 'ic mirror')}</button>`;
-    const acts = open && ops ? `<button type="button" class="btn btn-outline-danger btn-sm" data-act="termReject" data-id="${esc(t.key)}">Reject</button><button type="button" class="btn btn-primary btn-sm" data-act="termApprove" data-id="${esc(t.key)}">${icon('tick', 'ic', 2)}Approve</button>${view}`
-      : rej && !ops ? `<button type="button" class="btn btn-primary btn-sm" data-act="termFix" data-id="${esc(t.key)}">Edit and resubmit</button>${view}` : view;
+    const acts = rej && !uw ? `<button type="button" class="btn btn-primary btn-sm" data-act="termFix" data-id="${esc(t.key)}">Edit and resubmit</button>${view}` : view;
     return `<div class="crow ${t.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(t.caseId)}</span><span class="tag info">TERMINALS</span><b>${esc(termName(t))}</b>${termChip(t)}</div>${rej ? termRejectBox(t) : ''}</div><div class="crow-a">${acts}</div></div>`;
   }
   function termApprove(t) { t.status = 'Approved'; t.decision = { by: ME.name, at: nowStr() }; t.since = new Date(CLOCK).toISOString(); log('approved the terminals request', 'check', `${t.qty} terminal${t.qty === 1 ? '' : 's'} will be prepared for delivery`, t.key); toast(`${t.caseId} approved`); }
@@ -1365,7 +1361,7 @@ ${docNo(n)}
         const x = api.el.querySelector('#trc'), y = api.el.querySelector('[data-y]');
         x.oninput = () => { y.disabled = !x.value.trim(); };
         api.el.querySelector('[data-n]').onclick = api.close;
-        y.onclick = () => { const c = x.value.trim(); t.status = 'Rejected'; t.reject = { by: ME.name, role: ME.role, comment: c, at: nowStr() }; t.since = new Date(CLOCK).toISOString(); log('rejected the terminals request', 'xcircle', c, t.key); api.close(); rerender(); toast(`${t.caseId} rejected`); };
+        y.onclick = () => { const c = x.value.trim(); t.status = 'Rejected'; t.reject = { by: ME.name, role: 'Underwriting', comment: c, at: nowStr() }; t.since = new Date(CLOCK).toISOString(); log('rejected the terminals request', 'xcircle', c, t.key); api.close(); rerender(); toast(`${t.caseId} rejected`); };
       } });
   }
   function termCancel(t) { confirmBox({ title: 'Cancel this terminals request?', body: `${esc(t.caseId)} is canceled and no terminals are prepared.`, ok: 'Cancel request', danger: true }).then(ok => { if (!ok) return; t.status = 'Canceled'; log('canceled the terminals request', 'x', '', t.key); rerender(); toast(`${t.caseId} canceled`); }); }
@@ -1374,11 +1370,11 @@ ${docNo(n)}
     const key = t0.key;
     const draw = () => {
       const t = termByKey(key); if (!t) { caseDr.api.close(true); return; }
-      const ops = ME.key === 'ops', open = t.status === 'Pending Review', rej = t.status === 'Rejected', tab = caseDr.tab;
-      const note = open ? 'Waiting for POS Operations. This case has its own flow, separate from the POS methods.' : t.status === 'Approved' ? 'Approved by POS Operations. The terminals are prepared for delivery.' : t.status === 'Canceled' ? 'Canceled. No terminals are prepared.' : 'Returned to the salesperson.';
-      const acts = open && ops ? `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="treject">Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd="tapprove">${icon('tick', 'ic', 2)}Approve</button>` : (open || rej) && !ops ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="tcancel">Cancel request</button>' : '';
+      const uw = isUW(), act = uwCanAct(), open = t.status === 'Pending Review', rej = t.status === 'Rejected', tab = caseDr.tab;
+      const note = open ? 'Waiting for the Underwriting team. This case has its own flow, separate from the POS methods.' : t.status === 'Approved' ? 'Approved by the Underwriting team. The terminals are prepared for delivery.' : t.status === 'Canceled' ? 'Canceled. No terminals are prepared.' : 'Returned to the salesperson.';
+      const acts = open && act ? `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="treject">Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd="tapprove">${icon('tick', 'ic', 2)}Approve</button>` : (open || rej) && !uw ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="tcancel">Cancel request</button>' : '';
       caseDr.api.setTitle('POS terminals request', `${esc(t.caseId)} · ${esc(S.merchant.name)}`);
-      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${termChip(t)}<span class="cid">${esc(t.caseId)}</span><span class="tag info">TERMINALS</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? termRejectBox(t) + (ops ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="tfix">Edit and resubmit</button></div>') : ''}</div>
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${termChip(t)}<span class="cid">${esc(t.caseId)}</span><span class="tag info">TERMINALS</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? termRejectBox(t) + (uw ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="tfix">Edit and resubmit</button></div>') : ''}</div>
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
         ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Request</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(t.caseId)}</dd><dt>Type</dt><dd>POS terminals</dd><dt>Number of terminals</dt><dd>${t.qty}</dd><dt>Terminal type</dt><dd>${esc(t.type || 'Not set')}</dd>${t.note ? `<dt>Notes</dt><dd>${esc(t.note)}</dd>` : ''}<dt>Application</dt><dd>${appLink()}</dd><dt>Requested by</dt><dd>${esc(t.by)} (${esc(t.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(t.at))}</dd>${t.decision ? `<dt>Approved by</dt><dd>${esc(t.decision.by)} · ${esc(whenStr(t.decision.at))}</dd>` : ''}</dl></section>`}`;
       const b = caseDr.api.body;
@@ -1680,7 +1676,7 @@ ${docNo(n)}
   }
 
   /* ---------- Presets (prototype only) ---------- */
-  function submitDemo() { if (hasCh('POS') && !hasTermCase()) { const r = stagedTerm() || { qty: 3, type: 'Smart POS', note: '' }; const t = createTermCase(r); S.termReq = null; S.terminals = ''; t.by = 'Aya Muhammed'; t.role = 'Salesperson'; t.at = '09/06/2026, 05:20:02 PM'; if (S.log[0] && S.log[0].id === t.key) S.log[0].t = t.at; } if (S.payouts.length && !S.payoutConfirm) sendPayoutLink(false); setTimeout(() => { if (S.appId) { addKybCase(); addPayoutCase(); save(); rerender(); } }); if (!S.comments.length) S.comments = [{ id: 1, who: 'Aya Muhammed', role: 'Salesperson', init: 'AM', t: '09/06/2026, 05:22:00 PM', text: 'The merchant wants to go live before Black Friday. Rates are justified in the submission.' }, { id: 2, who: 'Nadia Salah', role: 'Sales Manager', init: 'NS', t: '09/07/2026, 10:05:00 AM', text: 'Approved the card rates. Waiting on the wallet decision from the Head of Sales.' }]; if (!S.mid) S.mid = (new URLSearchParams(location.search).get('mid')) || 'MID-10200-100'; S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
+  function submitDemo() { if (hasCh('POS') && !hasTermCase()) { const r = stagedTerm() || { qty: 3, type: 'Smart POS', note: '' }; const t = createTermCase(r); S.termReq = null; S.terminals = ''; t.by = 'Aya Muhammed'; t.role = 'Salesperson'; t.at = '09/06/2026, 05:20:02 PM'; if (S.log[0] && S.log[0].id === t.key) S.log[0].t = t.at; } setTimeout(() => { if (S.appId) { addKybCase(); addPayoutCase(); save(); rerender(); } }); if (!S.comments.length) S.comments = [{ id: 1, who: 'Aya Muhammed', role: 'Salesperson', init: 'AM', t: '09/06/2026, 05:22:00 PM', text: 'The merchant wants to go live before Black Friday. Rates are justified in the submission.' }, { id: 2, who: 'Nadia Salah', role: 'Sales Manager', init: 'NS', t: '09/07/2026, 10:05:00 AM', text: 'Approved the card rates. Waiting on the wallet decision from the Head of Sales.' }]; if (!S.mid) S.mid = (new URLSearchParams(location.search).get('mid')) || 'MID-10200-100'; S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
   function rejectDemo(target) {
     const fl = flagged(), wid = (fl.find(f => f.id === (target || 'Online Wallet')) || fl[0]).id, ws = fl.filter(f => f.id === wid), b = target ? null : fl.find(f => f.id !== wid);
     if (b) S.decisions[b.key] = { decision: 'approved', by: 'Nadia Salah', role: 'Sales Manager', comment: '', rate: b.sel.rate, fee: b.sel.fee, at: '09/07/2026, 10:02:00 AM' };
@@ -1750,7 +1746,7 @@ ${docNo(n)}
     editGeneral: () => { if (canEditApp()) openEditGeneral(); return false; },
     termReq: () => { openTermsRequest({ title: 'Request POS terminals', existing: stagedTerm(), label: 'Save request', save: r => { S.termReq = r; S.terminals = ''; log(`requested ${r.qty} POS terminal${r.qty === 1 ? '' : 's'}`, 'device'); rerender(); } }); return false; },
     termRm: () => { S.termReq = null; S.terminals = ''; },
-    termNew: () => { openTermsRequest({ title: 'Request POS terminals', label: 'Send for review', save: r => { const t = createTermCase(r); rerender(); toast(`Sent to POS Operations as ${t.caseId}`); } }); return false; },
+    termNew: () => { openTermsRequest({ title: 'Request POS terminals', label: 'Send for review', save: r => { const t = createTermCase(r); rerender(); toast(`Sent to Underwriting as ${t.caseId}`); } }); return false; },
     openTerm: d => { const t = termByKey(d.id); t && openTermCase(t); return false; },
     termApprove: d => { const t = termByKey(d.id); t && termApprove(t); },
     termReject: d => { const t = termByKey(d.id); t && termReject(t); return false; },
@@ -1921,8 +1917,8 @@ ${docNo(n)}
     /* Terminals are their own case: already approved in the sample applications opened from the list, unless ?terms=pending or ?terms=rejected is given. */
     (S.terms || []).forEach(t => {
       const m = qs.get('terms');
-      if (m === 'rejected') { t.status = 'Rejected'; t.reject = { by: 'Omar Nabil', role: 'POS Operations', comment: 'The branch address is missing. Add where the terminals are delivered.', at: '09/08/2026, 11:00:00 AM' }; }
-      else if (m !== 'pending' && t.status === 'Pending Review' && (qs.get('cases') || qs.get('status'))) { t.status = 'Approved'; t.decision = { by: 'Omar Nabil', at: '09/08/2026, 11:00:00 AM' }; }
+      if (m === 'rejected') { t.status = 'Rejected'; t.reject = { by: 'Rana Adel', role: 'Underwriting', comment: 'The branch address is missing. Add where the terminals are delivered.', at: '09/08/2026, 11:00:00 AM' }; }
+      else if (m !== 'pending' && t.status === 'Pending Review' && (qs.get('cases') || qs.get('status'))) { t.status = 'Approved'; t.decision = { by: 'Rana Adel', at: '09/08/2026, 11:00:00 AM' }; }
     });
     if (qs.get('as') && ROLES[qs.get('as')]) { S.viewAs = qs.get('as'); ME = ROLES[S.viewAs]; const v = document.getElementById('viewAs'); if (v) v.value = S.viewAs; }
   }

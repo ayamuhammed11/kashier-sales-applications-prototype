@@ -228,7 +228,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
   function caseUrl(id) {
     const c = U.get(id); if (!c) return '';
     const me = Cases.user(), i = id.indexOf('::');
-    return 'sales-applications/application.html?app=' + encodeURIComponent(id.slice(0, i)) + '&case=' + encodeURIComponent(id.slice(i + 2)) + '&as=' + (c.type === 'terminals' ? 'ops' : 'uw') + (me.canReassign || c.assignee === me.name ? '' : '&ro=1');
+    return 'sales-applications/application.html?app=' + encodeURIComponent(id.slice(0, i)) + '&case=' + encodeURIComponent(id.slice(i + 2)) + '&as=uw' + (me.canReassign || c.assignee === me.name ? '' : '&ro=1');
   }
   function openCase(href) {
     const m = /^sales-case\.html\?id=(.+)$/.exec(href || ''); if (!m) return false;

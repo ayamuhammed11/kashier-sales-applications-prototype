@@ -123,11 +123,11 @@ window.UW = (function () {
         reject: k.st === 'Rejected' ? { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: k.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: k.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
       app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'sent a KYC update to Underwriting', ic: 'send', detail: changes.map(x => x.label + ': ' + (x.from == null || x.from === '' ? 'Not set' : x.from) + ' → ' + (x.to == null || x.to === '' ? 'Not set' : x.to)).join('; '), id: key });
     });
-    /* POS terminals are requested on their own: a separate case, reviewed by POS Operations. An application with a POS service has one. */
+    /* POS terminals are requested on their own: a separate case, reviewed by the Underwriting agents like every other case. An application with a POS service has one. */
     (m.terms || (app.order.some(id => chOf(id) === 'POS') ? [{ st: 'Approved', qty: 2, h: 90 }] : [])).forEach((t, i) => {
       const key = 'term:' + (i + 1);
       app.terms.push({ n: i + 1, key: key, caseId: 'CASE-' + (++c), status: t.st, qty: t.qty, type: t.type || 'Smart POS', note: t.note || '', by: m.by, role: 'Salesperson', at: '10/19/2026, 10:00:00 AM', since: iso(t.h || 20),
-        reject: t.st === 'Rejected' ? { by: 'Omar Nabil', role: 'POS Operations', comment: t.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: t.st === 'Approved' ? { by: 'Omar Nabil', at: '10/20/2026, 09:10:00 AM' } : undefined });
+        reject: t.st === 'Rejected' ? { by: 'Rana Adel', role: 'Underwriting', comment: t.why, at: '10/20/2026, 11:30:00 AM' } : undefined, decision: t.st === 'Approved' ? { by: 'Rana Adel', at: '10/20/2026, 09:10:00 AM' } : undefined });
       app.log.unshift({ t: '10/19/2026, 10:00:00 AM', who: m.by, text: 'requested ' + t.qty + ' POS terminals', ic: 'device', id: key });
     });
     app.nextCase = c + 1;
@@ -222,7 +222,7 @@ window.UW = (function () {
   ];
   /* Demo data saved in a visitor's browser by an older version lacks newer fields (MID, pricing detail, new applications), so it is
      reseeded when the version changes. Decisions made on the demo applications are lost when that happens. */
-  const DEMO_VER = 22;
+  const DEMO_VER = 23;
   function seedDemo(force) {
     const cur = j(DEMO_KEY);
     if (!force && cur && cur.__v === DEMO_VER) return;
@@ -261,7 +261,7 @@ window.UW = (function () {
   function autoAssign() {
     const all = readLocal(); let n = all.__rr || 0, changed = false;
     const give = (s, id, status) => { const k = keyOf(s, id); if (status !== 'Underwriting Review' || (all[k] && all[k].assignee)) return; all[k] = Object.assign(blank(), all[k] || {}, { assignee: C.TEAM[n++ % C.TEAM.length] }); changed = true; };
-    states().forEach(s => { s.order.forEach(id => s.cases[id] && give(s, id, s.cases[id].status)); (s.kyc || []).forEach(x => give(s, x.key, x.status)); (s.updates || []).forEach(x => give(s, x.key, x.status)); });
+    states().forEach(s => { s.order.forEach(id => s.cases[id] && give(s, id, s.cases[id].status)); (s.kyc || []).forEach(x => give(s, x.key, x.status)); (s.updates || []).forEach(x => give(s, x.key, x.status)); (s.terms || []).forEach(x => give(s, x.key, x.status === 'Pending Review' ? 'Underwriting Review' : x.status)); });
     if (changed) { all.__rr = n; writeLocal(all); }
   }
   const canSee = c => !c.assignee || C.user().canReassign || c.assignee === C.user().name;
@@ -295,7 +295,7 @@ window.UW = (function () {
       changes: x.changes || [], submittedBy: x.by || s.submittedBy, submittedAt: x.at || s.submittedAt, terminals: s.terminals || '', submitComment: '', since: new Date(since).toISOString(), hours: hours,
       sla: open ? SLA['Underwriting Review'] : 0, late: open && hours > SLA['Underwriting Review'], reject: x.reject || null, decision: x.decision || null, assignee: l.assignee, local: l };
   }
-  /* A POS terminals request: the number of terminals for the merchant's POS services, reviewed by POS Operations. Approving prepares them for delivery. */
+  /* A POS terminals request: the number of terminals for the merchant's POS services, reviewed by the Underwriting agents. Approving prepares them for delivery. */
   const TERM_SLA = 48;
   function buildTerm(s, x) {
     const k = keyOf(s, x.key), l = local(k), since = x.since ? Date.parse(x.since) : CLOCK, hours = Math.max(0, (CLOCK - since) / 36e5), open = x.status === 'Pending Review';
@@ -307,7 +307,7 @@ window.UW = (function () {
   function decideTerm(c, to, comment) {
     const s = stateFor(c.appId), x = s && termOf(s, c); if (!x) return false;
     if (to === 'Approved') { x.status = 'Approved'; x.decision = { by: C.user().name, at: nowStr() }; delete x.reject; addLog(s, x.key, 'approved the terminals request', 'check', x.qty + ' terminals will be prepared for delivery'); }
-    else { x.status = 'Rejected'; x.reject = { by: C.user().name, role: 'POS Operations', comment: comment, at: nowStr() }; delete x.decision; addLog(s, x.key, 'rejected the terminals request', 'xcircle', comment); }
+    else { x.status = 'Rejected'; x.reject = { by: C.user().name, role: 'Underwriting', comment: comment, at: nowStr() }; delete x.decision; addLog(s, x.key, 'rejected the terminals request', 'xcircle', comment); }
     x.since = new Date(CLOCK).toISOString(); save(s); return true;
   }
   function all() {
@@ -385,12 +385,20 @@ window.UW = (function () {
   }
   /* Application case: approving applies the requested changes to the application, as the sales prototype does. */
   const kycOf = (s, c) => (s.kyc || []).filter(x => x.key === c.sid)[0];
+  /* The merchant's payout confirmation link goes out by default once Underwriting approves the payout method. */
+  function sendPayLink(s, k) {
+    if (kycKind(k) !== 'payout' || s.payoutConfirm || !(s.payouts || []).length) return;
+    const rnd = () => Math.random().toString(36).slice(2, 10);
+    s.payoutConfirm = { status: 'pending', token: rnd() + rnd().slice(0, 6), otp: String(Math.floor(100000 + Math.random() * 900000)), sentAt: nowStr(), sentBy: 'System', email: s.merchant.email, phone: s.merchant.phone, ids: s.payouts.map(p => p.id) };
+    addLog(s, k.key, 'sent the payout confirmation link to the merchant automatically, as Underwriting approved the payout method', 'send', 'Email ' + s.merchant.email + ' · SMS ' + s.merchant.phone);
+  }
   function approveKyc(c) {
     const s = stateFor(c.appId), k = s && kycOf(s, c); if (!k) return false; const P = k.proposed;
     // A new application's details are already on the application; only a change has anything to apply.
     if (!k.isNew) { s.merchant.name = P.name; s.merchant.email = P.email; s.merchant.phone = P.phone; s.industry = P.industry; s.owner = P.owner;
       s.storeImage = P.storeImage; s.payouts = P.payouts.map(p => Object.assign({}, p)); s.primary = P.primary; s.nextPayout = Math.max(s.nextPayout, P.nextPayout); if (P.legal) s.legal = Object.assign({}, s.legal || {}, P.legal); }
     k.status = 'Approved'; k.decision = { by: C.user().name, at: nowStr() }; k.since = new Date(CLOCK).toISOString();
+    sendPayLink(s, k);
     addLog(s, k.key, k.isNew ? 'approved the application details' : 'approved the KYC update', 'check', k.isNew ? 'The submitted business details and payout method are confirmed' : 'The changes are now on the application'); save(s); return true;
   }
   function rejectKyc(c, comment) {
