@@ -200,8 +200,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
     const head = `<div class="sl-hd" aria-hidden="true"><span>Service</span><span>Model</span><span>Institution</span><span>Rates</span><span>Status</span><span></span></div>`;
     const groups = SA.CHANNELS.map(ch => {
       const ids = shownIds().filter(id => SA.chOf(id) === ch); if (!ids.length) return '';
-      const term = ch === 'POS' ? (/^\d+$/.test(String(S.terminals).trim()) && +S.terminals >= 1 ? `<span class="term">${icon('device', 'ic')}${esc(S.terminals)} terminal${+S.terminals === 1 ? '' : 's'}</span>` : `<span class="term miss">${icon('warn', 'ic-14')}Number of terminals missing</span>`) + `<button type="button" class="link-btn" data-act="terms">${/^\d+$/.test(String(S.terminals).trim()) ? 'Change' : 'Add'}</button>` : '';
-      return `<div class="sl-gh"><b>${ch} services · ${ids.length}</b><span class="sp"></span>${term}</div>${head}${ids.map(id => {
+      return `<div class="sl-gh"><b>${ch} services · ${ids.length}</b><span class="sp"></span></div>${head}${ids.map(id => {
         const c = S.svc[id], banks = c.lines.map(l => l.bank).filter(Boolean);
         return `<div class="sl-r" id="row-${id.replace(/\W/g, '')}"><div class="nm"><b>${esc(SA.nmOf(id))}</b><span>${esc(SA.SVC_HINT[SA.nmOf(id)])}</span></div>
           <div><span class="k">Model · </span>${c.model}</div>
@@ -211,7 +210,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
           <div class="acts"><button type="button" class="btn btn-outline btn-sm" data-act="editSvc" data-id="${esc(id)}" aria-label="Edit ${esc(SA.label(id))}">Edit</button><button type="button" class="icon-btn" data-act="rmSvc" data-id="${esc(id)}" aria-label="Remove ${esc(SA.label(id))}">${icon('trash', 'ic')}</button></div></div>`;
       }).join('')}`;
     }).join('');
-    return `<div class="sl">${groups}</div><p class="hint" style="margin:0">Any rate below the published rate needs approval. You'll be asked for a justification before you can continue.</p>`;
+    return `<div class="sl">${groups}</div>${SA.termsBlock()}<p class="hint" style="margin:0">Any rate below the published rate needs approval. You'll be asked for a justification before you can continue.</p>`;
   }
 
   /* ---------- Services: add / edit drawer ---------- */
@@ -273,13 +272,13 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
     const ico = { Card: 'card', 'Bank Installments': 'card', Wallet: 'wallet', Instapay: 'send' }[SA.nmOf(id)] || 'banknotes';
     return `${dr.mode === 'add' ? `<div class="svc-sum"><span class="ico">${icon(ico, 'ic-20')}</span><span class="tt"><b>${esc(SA.nmOf(id))}</b><span>${SA.chOf(id)} · ${esc(SA.SVC_HINT[SA.nmOf(id)])}</span></span><button type="button" class="btn btn-outline btn-sm" data-act="dBack">Change service</button></div>` : ''}
       <div class="grid2"><div class="fld"><label for="dm">Model</label>${SA.modelSelect(id).replace('<select ', '<select id="dm" ')}</div>
-      ${SA.chOf(id) === 'POS' ? `<div class="fld"><label for="term">Number of Terminals</label><input class="inp" id="term" data-term inputmode="numeric" value="${esc(S.terminals)}" placeholder="e.g. 2"><span class="hint">For all POS services on this application. Whole number, 1 or more.</span></div>` : ''}</div>
+      </div>
       <div class="dsec"><span class="sub-h">${SA.needsBank(id) ? 'Financial institution and pricing' : 'Pricing'}</span>${c.lines.map((l, li) => lineHTML(id, li)).join('')}${SA.canAddInst(id) ? `<button type="button" class="link-btn" data-act="addInst" data-id="${esc(id)}" style="align-self:flex-start">${icon('plus', 'ic')}Add institution</button>` : ''}</div>
       ${SA.isCard(id) ? `<div class="dsec"><span class="sub-h">Card options</span>${SA.cardOptions(id)}</div>` : ''}`;
   }
   function drawFoot() {
     if (!dr.id) return `<span class="sp hint">Pick a service to continue.</span><button type="button" class="btn btn-outline" data-act="dCancel">Cancel</button>`;
-    const st = SA.svcState(dr.id), posMiss = SA.chOf(dr.id) === 'POS' && !(/^\d+$/.test(String(SA.S.terminals).trim()) && +SA.S.terminals >= 1);
+    const st = SA.svcState(dr.id), posMiss = false;
     const msg = st.issues.length ? `${st.issues[0]}. You can finish this later.` : posMiss ? 'Enter the number of terminals. You can finish this later.' : st.flags.length ? `${st.flags.length} rate${st.flags.length > 1 ? 's' : ''} below published. You'll add a justification when you continue` : 'Ready';
     return `<span class="sp hint">${esc(msg)}</span><button type="button" class="btn btn-outline" data-act="dCancel">Cancel</button><button type="button" class="btn btn-primary" data-act="dSave">${dr.flow ? 'Next' : dr.mode === 'add' ? 'Add service' : 'Save changes'}</button>`;
   }
@@ -376,7 +375,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
       dCancel: () => { dr.api.close(); return false; },
       dSave: () => { const id = dr.id, add = dr.mode === 'add';
         if (dr.flow) {
-          const st = SA.svcState(id), posMiss = SA.chOf(id) === 'POS' && !(/^\d+$/.test(String(SA.S.terminals).trim()) && +SA.S.terminals >= 1);
+          const st = SA.svcState(id), posMiss = false;
           if (!st.ready || posMiss) { SA.toast('Finish the service and its rates first'); return false; }
           dr.saved = true; dr.api.close(true); setTimeout(() => SA.openServiceSetup(id, 2)); return false;
         }
@@ -398,7 +397,7 @@ if (!/\.github\.io$/.test(location.hostname)) document.write(['nbe-defaults', 'n
       const stepOf = { services: 0, terminals: 0, documents: 1, payout: 2, contracts: 3 };
       if (t.startsWith('svc:') || stepOf[t] != null) { SA.S.step = t.startsWith('svc:') ? 0 : stepOf[t]; SA.rerender(); }
       if (t.startsWith('svc:')) { document.getElementById('row-' + t.slice(4).replace(/\W/g, ''))?.scrollIntoView({ block: 'center' }); return openSvcDrawer('edit', t.slice(4)); }
-      if (t === 'terminals') { const b = document.querySelector('[data-act=terms]'); if (b) { b.scrollIntoView({ block: 'center' }); b.click(); } return; }
+      if (t === 'terminals') { const b = document.querySelector('[data-act=termReq]'); if (b) { b.scrollIntoView({ block: 'center' }); b.click(); } return; }
       if (t === 'checklist') { document.querySelector('[data-act=checklist]')?.click(); return; }
       const el = document.getElementById(stepOf[t] != null ? 's-setup' : 's-' + t);
       if (!el) return;

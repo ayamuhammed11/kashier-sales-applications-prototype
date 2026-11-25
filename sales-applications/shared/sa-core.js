@@ -139,6 +139,7 @@
   const ROLES = {
     sales: { key: 'sales', name: 'Aya Muhammed', email: 'aya@kashier.io', init: 'AM', role: 'Salesperson' },
     manager: { key: 'manager', name: 'Nadia Salah', email: 'nadia@kashier.io', init: 'NS', role: 'Sales Manager', tier: 'Sales Manager' },
+    ops: { key: 'ops', name: 'Omar Nabil', email: 'omar@kashier.io', init: 'ON', role: 'POS Operations', tier: 'POS Operations' },
     uw: { key: 'uw', name: 'Layla Hassan', email: 'layla@kashier.io', init: 'LH', role: 'Underwriting', tier: 'Underwriting' },
     head: { key: 'head', name: 'Karim Zaki', email: 'karim@kashier.io', init: 'KZ', role: 'Head of Sales', tier: 'Head of Sales' }
   };
@@ -148,7 +149,7 @@
   function blankLine() { return { bank: '', adv: false, rates: {}, rule: null, custom: false }; }
   function blankState() {
     return {
-      cases: {}, kyc: [], updates: [], nextCase: 1, fixing: false, mid: '', comments: [], commentDraft: '', appId: '', submittedAt: '', submitComment: '', cancelComment: '',
+      cases: {}, kyc: [], updates: [], terms: [], termReq: null, nextCase: 1, fixing: false, mid: '', comments: [], commentDraft: '', appId: '', submittedAt: '', submitComment: '', cancelComment: '',
       merchant: { name: 'Delta Pharma Group', email: 'nourhan@deltapharma.eg', phone: '+20 111 234 5678' },
       entity: 'Registered Business', industry: 'Healthcare / Pharmacy', activities: ['Healthcare / Pharmacy'], owner: '',
       svc: {}, order: [], terminals: '',
@@ -246,11 +247,11 @@
   const submitted = () => !!S.appId;
   const hasRejectedCase = () => S.order.some(id => caseStatus(id) === 'Rejected');
   /* The application's status is derived from its cases: New, Has Rejected Cases, Has Pending Cases or Cases Completed. */
-  const PENDING_CASE = ['Waiting Rate Approval', 'Underwriting Review', 'Bank Submission'];
+  const PENDING_CASE = ['Waiting Rate Approval', 'Underwriting Review', 'Bank Submission', 'Pending Review'];
   const APP_CHIP = { New: 'info', 'Has Pending Cases': 'warn', 'Has Rejected Cases': 'bad', 'Cases Completed': 'ok' };
   function appStatus() {
     if (!submitted()) return 'New';
-    const st = S.order.map(caseStatus).concat(S.kyc.map(k => k.status));
+    const st = S.order.map(caseStatus).concat(S.kyc.map(k => k.status), (S.terms || []).map(t => t.status));
     if (st.includes('Rejected')) return 'Has Rejected Cases';
     if (st.some(x => PENDING_CASE.includes(x))) return 'Has Pending Cases';
     return 'Cases Completed';
@@ -331,7 +332,7 @@
     if (!ids.length) out.push({ m: S.adding ? 'Add at least one new service' : 'Add at least one service', target: 'services' });
     ids.forEach(id => svcIssues(id).forEach(m => out.push({ m: `${label(id)}: ${m.charAt(0).toLowerCase() + m.slice(1)}`, target: 'svc:' + id })));
     flagged().filter(f => rejectedStill(f) && caseStatus(f.id) === 'Rejected' && !S.adding).forEach(f => out.push({ m: `${label(f.id)}: change the rejected rate (${f.t.label})`, target: 'svc:' + f.id }));
-    if (hasCh('POS') && !(parseInt(S.terminals, 10) >= 1 && /^\d+$/.test(String(S.terminals).trim()))) out.push({ m: 'Enter the number of POS terminals (1 or more)', target: 'terminals' });
+    if (hasCh('POS') && !hasTermCase() && !stagedTerm()) out.push({ m: 'Request the POS terminals', target: 'terminals' });
     return out;
   }
   function requiredDocs() {
@@ -624,7 +625,7 @@
           if (!S.appId) S.appId = 'APP-' + String(Math.floor(10000000 + Math.random() * 89999999));
           S.submittedBy = ME.name;
           S.submittedAt = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-          const sent = S.order.filter(id => (add ? ['New'] : ['New', 'Rejected']).includes(caseStatus(id)));
+          const sent = S.order.filter(id => (add ? ['New'] : ['New', 'Rejected']).includes(caseStatus(id))); if (hasCh('POS')) flushTermReq();
           sent.forEach(id => setCase(id, caseRoute(id), { reject: null })); S.fixing = false;
           sent.forEach(id => log(`${re ? 'resubmitted' : 'submitted'} the ${label(id)} case`, 'send', `${S.cases[id].caseId} · ${S.cases[id].status}`, id));
           log(add ? 'requested new services' : re ? 'resubmitted the returned cases with revised rates' : 'submitted the application', 'send', `Application ID ${S.appId} · ${sent.length} case${sent.length === 1 ? '' : 's'}: ${sent.map(label).join(', ')}${S.submitComment ? ' · Comment: ' + S.submitComment : ''}`);
@@ -658,11 +659,11 @@
      The services already submitted are not shown or changed; submitting sends only the new ones, each as its own case. */
   const newIds = () => S.order.filter(id => caseStatus(id) === 'New');
   function startAdding() {
-    S.addSnap = JSON.stringify({ svc: S.svc, order: S.order, docs: S.docs, reqContracts: S.reqContracts, contracts: S.contracts, just: S.just, terminals: S.terminals, websites: S.websites, storeImage: S.storeImage, logN: S.log.length });
+    S.addSnap = JSON.stringify({ svc: S.svc, order: S.order, docs: S.docs, reqContracts: S.reqContracts, contracts: S.contracts, just: S.just, terminals: S.terminals, termReq: S.termReq, websites: S.websites, storeImage: S.storeImage, logN: S.log.length });
     S.adding = true; S.step = 0;
   }
   function cancelAdding() {
-    if (S.addSnap) { const o = JSON.parse(S.addSnap); ['svc', 'order', 'docs', 'reqContracts', 'contracts', 'just', 'terminals', 'websites', 'storeImage'].forEach(k => { S[k] = o[k]; }); S.log.splice(0, Math.max(0, S.log.length - o.logN)); }
+    if (S.addSnap) { const o = JSON.parse(S.addSnap); ['svc', 'order', 'docs', 'reqContracts', 'contracts', 'just', 'terminals', 'termReq', 'websites', 'storeImage'].forEach(k => { S[k] = o[k]; }); S.log.splice(0, Math.max(0, S.log.length - o.logN)); }
     S.adding = false; delete S.addSnap; S.step = 0;
   }
   const whenStr = t => { const d = new Date(t); return isNaN(d) ? t : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
@@ -943,12 +944,12 @@ ${docNo(n)}
     log(`added service: ${nmOf(id)} (${chOf(id)})`, 'plus', '', id);
   }
   function removeService(id, { quiet = false } = {}) {
-    const snap = JSON.stringify({ c: S.svc[id], just: S.just, terminals: S.terminals });
+    const snap = JSON.stringify({ c: S.svc[id], just: S.just, terminals: S.terminals, termReq: S.termReq });
     delete S.svc[id]; delete S.cases[id]; S.order = S.order.filter(x => x !== id);
     Object.keys(S.just).forEach(k => { if (k.startsWith(id + '::')) delete S.just[k]; });
-    if (!hasCh('POS')) S.terminals = '';
+    if (!hasCh('POS') && !S.appId) { S.terminals = ''; S.termReq = null; }
     log(`removed service: ${nmOf(id)} (${chOf(id)})`, 'x', '', id);
-    if (!quiet) toast(`${label(id)} removed and its values cleared`, () => { const o = JSON.parse(snap); S.svc[id] = o.c; S.order.push(id); S.order.sort((a, b) => SERVICES.indexOf(a) - SERVICES.indexOf(b)); S.just = o.just; S.terminals = o.terminals; rerender(); });
+    if (!quiet) toast(`${label(id)} removed and its values cleared`, () => { const o = JSON.parse(snap); S.svc[id] = o.c; S.order.push(id); S.order.sort((a, b) => SERVICES.indexOf(a) - SERVICES.indexOf(b)); S.just = o.just; S.terminals = o.terminals; S.termReq = o.termReq; rerender(); });
   }
 
   /* ---------- Read-only view (submitted / canceled) ---------- */
@@ -1232,7 +1233,7 @@ ${docNo(n)}
         <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${caseDr.tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${caseDr.tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === id || !e.id).length}</span></button></div>
         ${caseDr.tab === 'log' ? `<section class="cd-s">${caseLogHTML(id)}</section>` : `${trackOf(id) ? `<section class="cd-s"><h3 class="sub-h">Progress</h3>${trackOf(id)}</section>` : ''}
         <section class="cd-s"><h3 class="sub-h">Service details</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(c.caseId || '')}</dd><dt>Service</dt><dd>${esc(nmOf(id))} · ${esc(SVC_HINT[nmOf(id)])}</dd><dt>Channel</dt><dd>${chOf(id)}</dd><dt>Model</dt><dd>${esc(svc.model)}</dd>
-          ${needsBank(id) ? `<dt>Financial institution</dt><dd>${banks.length ? banks.map(esc).join(', ') : 'Not chosen'}</dd>` : ''}${chOf(id) === 'POS' ? `<dt>POS terminals</dt><dd>${esc(S.terminals || 'Not set')}</dd>` : ''}
+          ${needsBank(id) ? `<dt>Financial institution</dt><dd>${banks.length ? banks.map(esc).join(', ') : 'Not chosen'}</dd>` : ''}
           ${isCard(id) ? `<dt>Currencies and operations</dt><dd>${esc(optsSummary(id))}</dd>` : ''}${svc.notes && svc.notes.trim() ? `<dt>Notes</dt><dd>${esc(svc.notes)}</dd>` : ''}
           ${isApprover() && waitHours(id) != null ? `<dt>Waiting time</dt><dd>${fmtWait(waitHours(id))} in ${esc(st)}${isLate(id) ? ' · <b class="late-t">Late</b>' : ''}</dd>` : ''}<dt>Submitted</dt><dd>${esc(S.submittedAt)} by ${esc(S.submittedBy || 'Aya Muhammed')}</dd><dt>Application</dt><dd>${appLink()}</dd>${S.submitComment ? `<dt>Submit comment</dt><dd>${esc(S.submitComment)}</dd>` : ''}
           ${uc ? `<dt>Assigned to</dt><dd>${canPick ? `<select class="sel" data-cd-assign aria-label="Assigned to" style="max-width:240px">${Cases.TEAM.map(n => `<option ${n === uc.assignee ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>` : esc(uc.assignee || 'Not assigned')}</dd>` : ''}</dl></section>
@@ -1297,6 +1298,94 @@ ${docNo(n)}
   function kycRejectBox(k) {
     const r = k.reject || {};
     return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by the Underwriting team</b>${r.comment ? `<p>${linkCases(r.comment)}</p>` : ''}<p class="rj-h">Edit the details and resubmit, or cancel the update.</p></div></div>`;
+  }
+  /* POS terminals are not part of a POS method. They are requested on their own and follow their own flow as a separate type of case,
+     reviewed by POS Operations. They are required when a POS method is requested for the first time on the application. */
+  const TERM_TYPES = ['Smart POS', 'Mobile POS (mPOS)', 'Countertop POS'];
+  const TERM_ACTIVE = ['Pending Review', 'Approved'];
+  const termByKey = key => S.terms.find(t => t.key === key);
+  const stagedTerm = () => S.termReq || (/^\d+$/.test(String(S.terminals).trim()) && +S.terminals >= 1 ? { qty: +S.terminals, type: '', note: '' } : null);
+  const hasTermCase = () => S.terms.some(t => TERM_ACTIVE.includes(t.status));
+  const needTermStep = id => chOf(id) === 'POS' && !hasTermCase();
+  const termTotal = () => S.terms.filter(t => TERM_ACTIVE.includes(t.status)).reduce((n, t) => n + t.qty, 0);
+  const termChip = t => `<span class="sc ${{ 'Pending Review': 'warn', Approved: 'ok', Rejected: 'bad', Canceled: 'neu' }[t.status] || 'neu'}">${esc(t.status)}</span>`;
+  const termName = t => `POS terminals · ${t.qty}`;
+  function createTermCase(req) {
+    const n = S.terms.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+    const t = { n, key: 'term:' + n, caseId: 'CASE-' + String(S.nextCase++).padStart(3, '0'), status: 'Pending Review', qty: req.qty, type: req.type || '', note: req.note || '', by: ME.name, role: ME.role, at: nowStr(), since: new Date(CLOCK).toISOString() };
+    S.terms.push(t); log(`requested ${t.qty} POS terminal${t.qty === 1 ? '' : 's'}`, 'device', [t.type, t.note].filter(Boolean).join(' · '), t.key);
+    return t;
+  }
+  function flushTermReq() { const r = stagedTerm(); if (r && !hasTermCase()) createTermCase(r); S.termReq = null; S.terminals = ''; }
+  /* The request form: number of terminals (required), terminal type, notes. */
+  const termFormHTML = (r, err) => `<div class="fld"><label for="tmQty">Number of terminals</label><input class="inp ${err ? 'err' : ''}" id="tmQty" data-tm="qty" inputmode="numeric" value="${esc(r.qty || '')}" placeholder="e.g. 2"><span class="hint">Whole number, 1 or more.</span>${err ? `<span class="ferr">${icon('warn', 'ic-14')}${err}</span>` : ''}</div>
+    <div class="fld"><label for="tmType">Terminal type <span class="opt">(optional)</span></label><select class="sel ${r.type ? '' : 'is-empty'}" id="tmType" data-tm="type"><option value="">Select terminal type</option>${TERM_TYPES.map(x => `<option ${r.type === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+    <div class="fld"><label for="tmNote">Notes <span class="opt">(optional)</span></label><textarea class="inp" id="tmNote" data-tm="note" placeholder="Delivery location, branch, or anything Operations should know">${esc(r.note || '')}</textarea></div>`;
+  const termReqOk = r => /^\d+$/.test(String(r.qty).trim()) && +r.qty >= 1;
+  function openTermsRequest({ title, existing, label: btn, save }) {
+    const R = { qty: existing ? existing.qty : '', type: existing ? existing.type || '' : '', note: existing ? existing.note || '' : '' }; let api, tried = false;
+    const draw = () => {
+      api.body.innerHTML = `<div class="note">${icon('info', 'ic')}<p>Terminals are not part of the POS method. They are reviewed by POS Operations as a separate case, with their own status.</p></div>${termFormHTML(R, tried && !termReqOk(R) ? 'Enter the number of terminals (1 or more)' : '')}`;
+      api.foot.innerHTML = `<span class="sp"></span><button type="button" class="btn btn-outline" data-tm="cancel">Cancel</button><button type="button" class="btn btn-primary" data-tm="save">${btn}</button>`;
+      api.foot.querySelector('[data-tm=cancel]').onclick = () => api.close();
+      api.foot.querySelector('[data-tm=save]').onclick = () => { tried = true; if (!termReqOk(R)) { draw(); return; } api.close(true); save({ qty: +R.qty, type: R.type, note: String(R.note || '').trim() }); };
+    };
+    drawer({ size: 'md', title, sub: esc(S.merchant.name),
+      render(a) {
+        api = a; draw();
+        a.body.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.tm; if (k && e.target.tagName !== 'SELECT') R[k] = e.target.value; });
+        a.body.addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.tm; if (k && e.target.tagName === 'SELECT') { R[k] = e.target.value; draw(); } });
+      } });
+  }
+  /* In the application form (before the first submission): the staged request, required once a POS method is chosen. */
+  function termsBlock() {
+    if (!hasCh('POS') || hasTermCase()) return '';
+    const r = stagedTerm();
+    return `<div class="tblock ${r ? '' : 'miss'}" id="term"><div class="tb-t"><b>POS terminals</b><span class="tag ${r ? 'ok' : 'req'}">${r ? 'Requested' : 'Required'}</span></div>
+      <p>${r ? `${r.qty} terminal${r.qty === 1 ? '' : 's'}${r.type ? ' · ' + esc(r.type) : ''}. They become their own case when the application is submitted.` : 'Terminals are requested separately from the POS methods. Request them to continue.'}</p>
+      <div class="fa">${r ? `<button type="button" class="btn btn-outline btn-sm" data-act="termReq">Change</button><button type="button" class="btn btn-ghost btn-sm" data-act="termRm">Remove</button>` : `<button type="button" class="btn btn-primary btn-sm" data-act="termReq">${icon('plus', 'ic')}Request terminals</button>`}</div></div>`;
+  }
+  const termRejectBox = t => { const r = t.reject || {}; return `<div class="rj-box">${icon('xcircle', 'ic-16')}<div><b>Rejected by POS Operations</b>${r.comment ? `<p>${esc(r.comment)}</p>` : ''}<p class="rj-h">Change the request and resubmit, or cancel it.</p></div></div>`; };
+  function termRow(t) {
+    const ops = ME.key === 'ops', open = t.status === 'Pending Review', rej = t.status === 'Rejected';
+    const view = `<button type="button" class="btn btn-outline btn-sm" data-act="openTerm" data-id="${esc(t.key)}">View case${icon('right', 'ic mirror')}</button>`;
+    const acts = open && ops ? `<button type="button" class="btn btn-outline-danger btn-sm" data-act="termReject" data-id="${esc(t.key)}">Reject</button><button type="button" class="btn btn-primary btn-sm" data-act="termApprove" data-id="${esc(t.key)}">${icon('tick', 'ic', 2)}Approve</button>${view}`
+      : rej && !ops ? `<button type="button" class="btn btn-primary btn-sm" data-act="termFix" data-id="${esc(t.key)}">Edit and resubmit</button>${view}` : view;
+    return `<div class="crow ${t.status === 'Canceled' ? 'cx' : ''}"><div class="crow-m"><div class="crow-t"><span class="cid">${esc(t.caseId)}</span><span class="tag info">TERMINALS</span><b>${esc(termName(t))}</b>${termChip(t)}</div>${rej ? termRejectBox(t) : ''}</div><div class="crow-a">${acts}</div></div>`;
+  }
+  function termApprove(t) { t.status = 'Approved'; t.decision = { by: ME.name, at: nowStr() }; t.since = new Date(CLOCK).toISOString(); log('approved the terminals request', 'check', `${t.qty} terminal${t.qty === 1 ? '' : 's'} will be prepared for delivery`, t.key); toast(`${t.caseId} approved`); }
+  function termReject(t) {
+    modal({ title: 'Reject this terminals request?', sub: `${esc(t.caseId)} · ${esc(termName(t))}`,
+      body: `<div class="fld"><label for="trc">Decision comment</label><textarea class="inp" id="trc" placeholder="What does the salesperson need to change?"></textarea><span class="hint">The salesperson sees this when the case comes back to them.</span></div>`,
+      foot: `<button type="button" class="btn btn-outline" data-n>Cancel</button><button type="button" class="btn btn-danger" data-y disabled>Reject</button>`,
+      bind(api) {
+        const x = api.el.querySelector('#trc'), y = api.el.querySelector('[data-y]');
+        x.oninput = () => { y.disabled = !x.value.trim(); };
+        api.el.querySelector('[data-n]').onclick = api.close;
+        y.onclick = () => { const c = x.value.trim(); t.status = 'Rejected'; t.reject = { by: ME.name, role: ME.role, comment: c, at: nowStr() }; t.since = new Date(CLOCK).toISOString(); log('rejected the terminals request', 'xcircle', c, t.key); api.close(); rerender(); toast(`${t.caseId} rejected`); };
+      } });
+  }
+  function termCancel(t) { confirmBox({ title: 'Cancel this terminals request?', body: `${esc(t.caseId)} is canceled and no terminals are prepared.`, ok: 'Cancel request', danger: true }).then(ok => { if (!ok) return; t.status = 'Canceled'; log('canceled the terminals request', 'x', '', t.key); rerender(); toast(`${t.caseId} canceled`); }); }
+  function termFix(t) { openTermsRequest({ title: 'Edit and resubmit the terminals request', existing: t, label: 'Resubmit for review', save: r => { Object.assign(t, r, { status: 'Pending Review', reject: null, since: new Date(CLOCK).toISOString() }); log('resubmitted the terminals request', 'send', `${t.qty} terminal${t.qty === 1 ? '' : 's'}`, t.key); rerender(); toast(`${t.caseId} resubmitted`); } }); }
+  function openTermCase(t0) {
+    const key = t0.key;
+    const draw = () => {
+      const t = termByKey(key); if (!t) { caseDr.api.close(true); return; }
+      const ops = ME.key === 'ops', open = t.status === 'Pending Review', rej = t.status === 'Rejected', tab = caseDr.tab;
+      const note = open ? 'Waiting for POS Operations. This case has its own flow, separate from the POS methods.' : t.status === 'Approved' ? 'Approved by POS Operations. The terminals are prepared for delivery.' : t.status === 'Canceled' ? 'Canceled. No terminals are prepared.' : 'Returned to the salesperson.';
+      const acts = open && ops ? `<button type="button" class="btn btn-outline-danger btn-sm" data-cd="treject">Reject</button><button type="button" class="btn btn-primary btn-sm" data-cd="tapprove">${icon('tick', 'ic', 2)}Approve</button>` : (open || rej) && !ops ? '<button type="button" class="btn btn-outline-danger btn-sm" data-cd="tcancel">Cancel request</button>' : '';
+      caseDr.api.setTitle('POS terminals request', `${esc(t.caseId)} · ${esc(S.merchant.name)}`);
+      caseDr.api.body.innerHTML = `<div class="cd-top"><div class="cd-st">${termChip(t)}<span class="cid">${esc(t.caseId)}</span><span class="tag info">TERMINALS</span><span class="sp"></span>${acts}</div><p class="case-n">${note}</p>${rej ? termRejectBox(t) + (ops ? '' : '<div><button type="button" class="btn btn-primary btn-sm" data-cd="tfix">Edit and resubmit</button></div>') : ''}</div>
+        <div class="cd-tabs" role="tablist" aria-label="Case sections"><button type="button" role="tab" aria-selected="${tab === 'details'}" data-cdt="details">Details</button><button type="button" role="tab" aria-selected="${tab === 'log'}" data-cdt="log">Activity log<span class="c">${S.log.filter(e => e.id === key || !e.id).length}</span></button></div>
+        ${tab === 'log' ? `<section class="cd-s">${caseLogHTML(key)}</section>` : `<section class="cd-s"><h3 class="sub-h">Request</h3><dl class="dl"><dt>Case ID</dt><dd>${esc(t.caseId)}</dd><dt>Type</dt><dd>POS terminals</dd><dt>Number of terminals</dt><dd>${t.qty}</dd><dt>Terminal type</dt><dd>${esc(t.type || 'Not set')}</dd>${t.note ? `<dt>Notes</dt><dd>${esc(t.note)}</dd>` : ''}<dt>Application</dt><dd>${appLink()}</dd><dt>Requested by</dt><dd>${esc(t.by)} (${esc(t.role)})</dd><dt>Requested on</dt><dd>${esc(whenStr(t.at))}</dd>${t.decision ? `<dt>Approved by</dt><dd>${esc(t.decision.by)} · ${esc(whenStr(t.decision.at))}</dd>` : ''}</dl></section>`}`;
+      const b = caseDr.api.body;
+      b.querySelectorAll('[data-cdt]').forEach(x => { x.onclick = () => { caseDr.tab = x.dataset.cdt; draw(); b.scrollTop = 0; }; });
+      const on = (sel, fn) => { const x = b.querySelector(sel); if (x) x.onclick = fn; };
+      on('[data-cd=tapprove]', () => { termApprove(t); rerender(); }); on('[data-cd=treject]', () => termReject(t)); on('[data-cd=tcancel]', () => termCancel(t));
+      on('[data-cd=tfix]', () => { caseDr.api.close(true); termFix(t); });
+    };
+    caseDr = { draw, tab: 'details' };
+    drawer({ size: 'case', title: 'POS terminals request', onClose: closedDr, render(api) { caseDr.api = api; draw(); } });
   }
   function kycRow(k) {
     const uw = isUW(), open = k.status === 'Underwriting Review', rej = k.status === 'Rejected';
@@ -1563,14 +1652,14 @@ ${docNo(n)}
   function readOnlyView() {
     const head = profileHead(true);
     const live = S.order.filter(id => caseStatus(id) === 'Live'), canceled = S.order.filter(id => caseStatus(id) === 'Canceled');
-    const pending = S.order.filter(id => !['Live', 'Canceled', 'New'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const kycPending = S.kyc.filter(k => ['Underwriting Review', 'Rejected'].includes(k.status)), kycDone = S.kyc.filter(k => !['Underwriting Review', 'Rejected'].includes(k.status)), updPending = (S.updates || []).filter(updOpen), updDone = (S.updates || []).filter(u => !updOpen(u)), pendingN = pending.filter(id => caseStatus(id) !== 'New').length + kycPending.length + updPending.length;
+    const pending = S.order.filter(id => !['Live', 'Canceled', 'New'].includes(caseStatus(id))); if (isApprover()) pending.sort((a, b) => (waitHours(b) || 0) - (waitHours(a) || 0)); const kycPending = S.kyc.filter(k => ['Underwriting Review', 'Rejected'].includes(k.status)), kycDone = S.kyc.filter(k => !['Underwriting Review', 'Rejected'].includes(k.status)), updPending = (S.updates || []).filter(updOpen), updDone = (S.updates || []).filter(u => !updOpen(u)), termPending = (S.terms || []).filter(t => ['Pending Review', 'Rejected'].includes(t.status)), termDone = (S.terms || []).filter(t => !['Pending Review', 'Rejected'].includes(t.status)), pendingN = pending.filter(id => caseStatus(id) !== 'New').length + kycPending.length + updPending.length + termPending.length;
     const allCanceled = S.order.length > 0 && !pending.length && !live.length && !S.kyc.some(k => k.status !== 'Canceled');
     const banner = allCanceled ? `<div class="banner">${icon('info', 'ic-20')}<div><b>Every case on this application is canceled</b><p>No onboarding action is open. Reopen a case below, or request a new service to continue.</p></div></div>` : '';
     /* Active services: the live cases. Just the service and its full log, no detail view. */
     const activeSvc = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Active services</h2><p>Services that are live for the merchant, by channel.</p></div></div>${live.length ? CHANNELS.map(ch => { const ids = live.filter(id => chOf(id) === ch); return ids.length ? `<div class="ch-g"><div class="ch-h"><span class="ch-ic" aria-hidden="true">${icon(ch === 'Online' ? 'globe' : 'tablet', 'ic-16')}</span><b>${ch}</b><span class="cnt">${ids.length}</span></div><div class="crows">${ids.map(id => `<div class="crow"><div class="crow-m"><div class="crow-t"><b>${esc(nmOf(id))}</b><span class="sc ok">Active</span></div></div><div class="crow-a">${canEditLive() ? `<button type="button" class="btn btn-outline btn-sm" data-act="editLive" data-id="${esc(id)}" aria-label="Edit ${esc(label(id))}">${icon('pencil', 'ic')}Edit service</button>` : ''}<button type="button" class="btn btn-outline btn-sm" data-act="svcLogs" data-id="${esc(id)}" aria-label="View logs for ${esc(label(id))}">View logs</button></div></div>`).join('')}</div></div>` : ''; }).join('') : '<p class="hint" style="margin:0">No active services yet. A service appears here once its case goes live.</p>'}</section>`;
-    const noPend = !pending.length && !kycPending.length && !updPending.length, noOther = !canceled.length && !kycDone.length && !updDone.length;
-    const casesMsg = !S.order.length && !S.kyc.length ? 'No cases yet.' : noPend && noOther ? 'No pending cases. Every case is live.' : noPend ? 'No pending cases.' : '';
-    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div></div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}</div>` : ''}</section>`;
+    const noPend = !pending.length && !kycPending.length && !updPending.length && !termPending.length, noOther = !canceled.length && !kycDone.length && !updDone.length && !termDone.length;
+    const casesMsg = !S.order.length && !S.kyc.length && !(S.terms || []).length ? 'No cases yet.' : noPend && noOther ? 'No pending cases. Every case is live.' : noPend ? 'No pending cases.' : '';
+    const cases = `<section class="card sec"><div class="sec-h"><div class="tt"><h2>Cases <span class="cnt" title="Pending cases">${pendingN}</span></h2><p>Each pending service is its own case with its own status. Open one to see its details and activity log.</p></div>${hasCh('POS') ? `<button type="button" class="btn btn-outline" data-act="termNew">${icon('device', 'ic')}Request terminals</button>` : ''}</div>${casesMsg ? `<p class="hint" style="margin:0">${casesMsg}</p>` : ''}${pending.length + canceled.length + S.kyc.length + (S.updates || []).length + (S.terms || []).length ? `<div class="crows">${pending.map(caseRow).join('')}${updPending.map(updRow).join('')}${kycPending.map(kycRow).join('')}${termPending.map(termRow).join('')}${canceled.map(caseRow).join('')}${updDone.map(updRow).join('')}${kycDone.map(kycRow).join('')}${termDone.map(termRow).join('')}</div>` : ''}</section>`;
     const docs = [...requiredDocs().keys()].filter(docDone);
     const dl = rows => `<dl class="dl dl-s">${rows}</dl>`;
     const frow = (lbl, file, thumb) => `<div class="frow"><div class="fi-w">${thumb ? `<span class="fthumb" aria-hidden="true">${icon('photo', 'ic-24')}</span>` : ''}<div class="fi"><b>${esc(lbl)}</b><span class="muted">${esc(file)}</span></div></div><div class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(file)}" data-l="${esc(lbl)}">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(file)}">${icon('download', 'ic')}Download</button></div></div>`;
@@ -1579,7 +1668,7 @@ ${docNo(n)}
        A contract of a service that is no longer on the application is not shown. Contracts added manually are always shown. */
     const conRows = requiredContracts().filter(r => S.reqContracts[r.label]).map(r => frow(r.label, S.reqContracts[r.label])).concat(S.contracts.filter(c => c.file).map(c => frow(c.label || 'Contract', c.file)));
     const info = `<div class="prof-info">
-      <section class="card sec prof-wide"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${esc(S.terminals)}</dd>` : ''}${S.websites.map(x => x.trim()).filter(Boolean).length ? `<dt>Website / social media</dt><dd class="wl">${S.websites.map(x => x.trim()).filter(Boolean).map(u => `<a href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" dir="ltr">${esc(u)}${icon('ext', 'ic-14')}</a>`).join('')}</dd>` : ''}${hasCh('POS') && S.storeImage ? `<dt>Store image</dt><dd><div class="st-row"><span class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(S.storeImage)}" data-l="Store image">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(S.storeImage)}">${icon('download', 'ic')}Download</button></span></div></dd>` : ''}`)}</section>
+      <section class="card sec prof-wide"><h2 class="sub-h">Business details</h2>${dl(`<dt>Business name</dt><dd>${esc(S.merchant.name)}</dd><dt>Merchant type</dt><dd>${esc(S.entity)}</dd><dt>Industry</dt><dd>${esc(S.industry)}</dd><dt>Activities</dt><dd>${S.activities.map(esc).join(', ')}</dd><dt>Owner nationality</dt><dd>${esc(S.owner || 'Not set')}</dd>${hasCh('POS') ? `<dt>POS terminals</dt><dd>${termTotal() ? termTotal() + ' requested' : 'Not requested'}</dd>` : ''}${S.websites.map(x => x.trim()).filter(Boolean).length ? `<dt>Website / social media</dt><dd class="wl">${S.websites.map(x => x.trim()).filter(Boolean).map(u => `<a href="${esc(/^https?:\/\//i.test(u) ? u : 'https://' + u)}" target="_blank" rel="noopener" dir="ltr">${esc(u)}${icon('ext', 'ic-14')}</a>`).join('')}</dd>` : ''}${hasCh('POS') && S.storeImage ? `<dt>Store image</dt><dd><div class="st-row"><span class="fa"><button type="button" class="btn btn-outline btn-sm" data-act="viewFile" data-f="${esc(S.storeImage)}" data-l="Store image">${icon('eye', 'ic')}View</button><button type="button" class="btn btn-outline btn-sm" data-act="dlFile" data-f="${esc(S.storeImage)}">${icon('download', 'ic')}Download</button></span></div></dd>` : ''}`)}</section>
       ${legalCard()}
       <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Documents</h2>${docRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="docs" data-n="${docRows.length}">${icon('download', 'ic')}Download all (${docRows.length})</button>` : ''}</div>${docRows.length ? `<div class="frows">${docRows.join('')}</div>` : '<p class="hint" style="margin:0">None uploaded.</p>'}</section>
       <section class="card sec prof-wide"><div class="sub-hr"><h2 class="sub-h">Contracts</h2>${conRows.length ? `<button type="button" class="btn btn-outline btn-sm" data-act="dlAll" data-k="contracts" data-n="${conRows.length}">${icon('download', 'ic')}Download all (${conRows.length})</button>` : ''}</div>${conRows.length ? `<div class="frows">${conRows.join('')}</div>` : '<p class="hint" style="margin:0">None attached.</p>'}</section>
@@ -1588,7 +1677,7 @@ ${docNo(n)}
   }
 
   /* ---------- Presets (prototype only) ---------- */
-  function submitDemo() { if (S.payouts.length && !S.payoutConfirm) sendPayoutLink(false); setTimeout(() => { if (S.appId) { addKybCase(); addPayoutCase(); save(); rerender(); } }); if (!S.comments.length) S.comments = [{ id: 1, who: 'Aya Muhammed', role: 'Salesperson', init: 'AM', t: '09/06/2026, 05:22:00 PM', text: 'The merchant wants to go live before Black Friday. Rates are justified in the submission.' }, { id: 2, who: 'Nadia Salah', role: 'Sales Manager', init: 'NS', t: '09/07/2026, 10:05:00 AM', text: 'Approved the card rates. Waiting on the wallet decision from the Head of Sales.' }]; if (!S.mid) S.mid = (new URLSearchParams(location.search).get('mid')) || 'MID-10200-100'; S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
+  function submitDemo() { if (hasCh('POS') && !hasTermCase()) { const r = stagedTerm() || { qty: 3, type: 'Smart POS', note: '' }; const t = createTermCase(r); S.termReq = null; S.terminals = ''; t.by = 'Aya Muhammed'; t.role = 'Salesperson'; t.at = '09/06/2026, 05:20:02 PM'; if (S.log[0] && S.log[0].id === t.key) S.log[0].t = t.at; } if (S.payouts.length && !S.payoutConfirm) sendPayoutLink(false); setTimeout(() => { if (S.appId) { addKybCase(); addPayoutCase(); save(); rerender(); } }); if (!S.comments.length) S.comments = [{ id: 1, who: 'Aya Muhammed', role: 'Salesperson', init: 'AM', t: '09/06/2026, 05:22:00 PM', text: 'The merchant wants to go live before Black Friday. Rates are justified in the submission.' }, { id: 2, who: 'Nadia Salah', role: 'Sales Manager', init: 'NS', t: '09/07/2026, 10:05:00 AM', text: 'Approved the card rates. Waiting on the wallet decision from the Head of Sales.' }]; if (!S.mid) S.mid = (new URLSearchParams(location.search).get('mid')) || 'MID-10200-100'; S.log.forEach(e => { if (e.t.slice(0, 10) === nowStr().slice(0, 10)) e.t = '09/02/2026, 09:00:00 AM'; }); S.appId = 'APP-24081306'; S.submittedAt = '06 Sept 2026'; S.submittedBy = 'Aya Muhammed'; S.submitComment = 'Two rates below published, both justified. The merchant wants to go live before Black Friday.'; S.order.forEach(id => { setCase(id, caseRoute(id)); S.log.unshift({ t: '09/06/2026, 05:20:01 PM', who: 'Aya Muhammed', text: `submitted the ${label(id)} case`, ic: 'send', detail: `${S.cases[id].caseId} · ${S.cases[id].status}`, id }); }); S.log.unshift({ t: '09/06/2026, 05:20:00 PM', who: 'Aya Muhammed', text: 'submitted the application', ic: 'send', detail: 'Application ID APP-24081306' }); }
   function rejectDemo(target) {
     const fl = flagged(), wid = (fl.find(f => f.id === (target || 'Online Wallet')) || fl[0]).id, ws = fl.filter(f => f.id === wid), b = target ? null : fl.find(f => f.id !== wid);
     if (b) S.decisions[b.key] = { decision: 'approved', by: 'Nadia Salah', role: 'Sales Manager', comment: '', rate: b.sel.rate, fee: b.sel.fee, at: '09/07/2026, 10:02:00 AM' };
@@ -1656,6 +1745,13 @@ ${docNo(n)}
     cancelAdd: () => { confirmBox({ title: 'Cancel this service request?', body: newIds().length ? `${newIds().map(label).map(esc).join(', ')} won't be requested.` : 'Nothing is requested.', ok: 'Cancel request', danger: true }).then(ok => { if (ok) { cancelAdding(); rerender(); scrollTo(0, 0); } }); return false; },
     sendPayLink: () => { if (!canEditApp() || !S.payouts.length) return false; const again = !!PC(); sendPayoutLink(again); rerender(); toast(again ? 'Link sent again to the merchant' : 'Confirmation link sent to the merchant'); return false; },
     editGeneral: () => { if (canEditApp()) openEditGeneral(); return false; },
+    termReq: () => { openTermsRequest({ title: 'Request POS terminals', existing: stagedTerm(), label: 'Save request', save: r => { S.termReq = r; S.terminals = ''; log(`requested ${r.qty} POS terminal${r.qty === 1 ? '' : 's'}`, 'device'); rerender(); } }); return false; },
+    termRm: () => { S.termReq = null; S.terminals = ''; },
+    termNew: () => { openTermsRequest({ title: 'Request POS terminals', label: 'Send for review', save: r => { const t = createTermCase(r); rerender(); toast(`Sent to POS Operations as ${t.caseId}`); } }); return false; },
+    openTerm: d => { const t = termByKey(d.id); t && openTermCase(t); return false; },
+    termApprove: d => { const t = termByKey(d.id); t && termApprove(t); },
+    termReject: d => { const t = termByKey(d.id); t && termReject(t); return false; },
+    termFix: d => { const t = termByKey(d.id); t && termFix(t); return false; },
     openKyc: d => { const k = kycById(d.id); k && openKycCase(k); return false; },
     openUpd: d => { const u = updById(d.id); u && openUpdCase(u); return false; },
     caseRef: d => { openCaseRef(d.c); return false; },
@@ -1720,7 +1816,7 @@ ${docNo(n)}
       const f = ACT[b.dataset.act] || (V.act && V.act[b.dataset.act]); if (!f) return;
       e.preventDefault();
       const keep = f(b.dataset, b);
-      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'openKyc', 'openUpd', 'editLive', 'caseRef', 'sendPayLink', 'reqSvc', 'cancelAdd', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
+      if (!['logs', 'cancel', 'reopen', 'submit', 'submitCase', 'svcDocs', 'openCase', 'termNew', 'termReq', 'openTerm', 'termReject', 'termFix', 'openKyc', 'openUpd', 'editLive', 'caseRef', 'sendPayLink', 'reqSvc', 'cancelAdd', 'kycReject', 'kycFix', 'editGeneral', 'dlAll', 'viewFile', 'dlFile', 'svcLogs', 'justify', 'acts', 'pricing', 'goto'].includes(b.dataset.act) && keep !== false) rerender();
     });
     document.addEventListener('change', e => {
       const el = e.target; const k = el.dataset && el.dataset.actChange; if (!k) return;
@@ -1819,6 +1915,12 @@ ${docNo(n)}
       mk('Rejected', P => { P.owner = 'Foreign Owner'; }, { reject: { source: 'uw', by: 'Underwriting team', role: 'Underwriting', comment: 'Owner nationality does not match the National ID on file.', at: '10/18/2026, 11:30:00 AM' } }, 60);
       mk('Approved', P => { P.websites = ['www.deltapharma.eg', 'www.deltapharma.com']; }, { decision: { by: 'Rana Adel', at: '10/17/2026, 09:10:00 AM' } }, 100);
     }
+    /* Terminals are their own case: already approved in the sample applications opened from the list, unless ?terms=pending or ?terms=rejected is given. */
+    (S.terms || []).forEach(t => {
+      const m = qs.get('terms');
+      if (m === 'rejected') { t.status = 'Rejected'; t.reject = { by: 'Omar Nabil', role: 'POS Operations', comment: 'The branch address is missing. Add where the terminals are delivered.', at: '09/08/2026, 11:00:00 AM' }; }
+      else if (m !== 'pending' && t.status === 'Pending Review' && (qs.get('cases') || qs.get('status'))) { t.status = 'Approved'; t.decision = { by: 'Omar Nabil', at: '09/08/2026, 11:00:00 AM' }; }
+    });
     if (qs.get('as') && ROLES[qs.get('as')]) { S.viewAs = qs.get('as'); ME = ROLES[S.viewAs]; const v = document.getElementById('viewAs'); if (v) v.value = S.viewAs; }
   }
   function mount(variant, variants) {
@@ -1838,7 +1940,7 @@ ${docNo(n)}
     get S() { return S; }, reload: load, mount, navIcon, rerender, soft, toast, icon, esc, fmtN, label, chOf, nmOf, isCard, needsBank, multiBank,
     CHANNELS, SVC_NAMES, SVC_HINT, SERVICES, BANKS, tiersFor, verdict, verdictHTML, flagged, pubText, rateText, sortedRules, bestRule, applyRule, ruleRate,
     servicesIssues, svcIssues, svcState, lineIssues, documentsIssues, payoutsIssues, contractsIssues, checklist, openItems, hasCh,
-    commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, canEditApp, newIds, startAdding, merchantFields, legalFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
+    termsBlock, commentsSection, draftHead, appStatus, appChip, headTop, headActions, caseChip, caseStatus, hasRejectedCase, submitted, isEdit, canEditApp, newIds, startAdding, merchantFields, legalFields, criteriaFields, documentsSection, payoutSection, contractsSection, checklistHTML,
     cardOptions, optsSummary, modelSelect, bankSelect, canAddInst, moneyInputs, moneyParts, sourceHTML, pricingBtnHTML, pricingMissing, openPricing, openJustify, continueFromServices,
     openServiceSetup, beginSetup, cancelSetup, stepperHTML, addService, removeService, readOnlyView, returnedBanner, popover, closePop, drawer, modal, confirmBox, log, openSubmit, openCaseIn, statusBtn, statusMenu, get ME() { return ME; }
   };

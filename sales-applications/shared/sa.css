@@ -597,3 +597,9 @@ body.locked { overflow: hidden; }
 .drawer.case .track li b { font-size: 11.5px; line-height: 1.3; overflow-wrap: break-word; }
 .drawer.case .track li .hint { font-size: 11px; }
 
+
+/* POS terminals: a request of its own, separate from the POS methods. */
+.tblock { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); }
+.tblock.miss { border-color: var(--mango-60, #FBAF1F); background: var(--mango-10, #FFF8E8); }
+.tblock .tb-t { display: flex; align-items: center; gap: 8px 12px; }
+.tblock p { margin: 0; font-size: 13px; color: var(--cadet-base); }
